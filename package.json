@@ -1,0 +1,7 @@
+{
+  "name": "a2i-monorepo",
+  "private": true,
+  "dependencies": {
+    "next": "^16.0.7"
+  }
+}
