@@ -9,6 +9,7 @@ visual builders, chat interfaces, and coding agents.
 
 | Directory | Project | Role in A2I |
 | --------- | ------- | ----------- |
+| [`a2i-core/`](a2i-core/) | **A2I Core** | The platform's own brain: a self-hosted AI server that runs open-weight models 100% locally (llama.cpp) with an OpenAI-compatible API, built-in chat UI, and local document retrieval — no external AI APIs needed. |
 | [`dify/`](dify/) | Dify | LLM application platform: agentic workflows, RAG pipelines, model management, and app orchestration with a web UI and Flask API backend. |
 | [`flowise/`](flowise/) | Flowise | Visual drag-and-drop builder for LLM flows and agents (Node.js/TypeScript). |
 | [`vane/`](vane/) | Vane | Next.js chat interface for talking to AI models. |
@@ -54,6 +55,19 @@ visual builders, chat interfaces, and coding agents.
 - **Model resources**: `glm-5/` documents and demonstrates the GLM-5 model.
 - **Self-improvement**: `sweep/` can act on issues in this repo to keep the
   platform evolving.
+
+## Run it fully offline — no external AI APIs
+
+`a2i-core/` makes the whole platform self-sufficient: it serves open-weight
+models locally through an OpenAI-compatible endpoint
+(`http://127.0.0.1:8990/v1`), which Dify, Flowise, Vane, and the AI SDK can
+all use as their model provider. See [`a2i-core/README.md`](a2i-core/README.md).
+
+```bash
+cd a2i-core
+./download-model.sh   # one-time download of open model weights
+./run.sh              # chat at http://127.0.0.1:8990
+```
 
 ## Getting started
 
