@@ -92,7 +92,7 @@ def list_models() -> dict[str, object]:
     }
 
 
-@app.post("/v1/chat/completions")
+@app.post("/v1/chat/completions", response_model=None)
 def chat_completions(body: dict) -> JSONResponse | StreamingResponse:
     messages: list[ChatMessage] = body.get("messages", [])
     max_tokens: int = body.get("max_tokens") or 512
