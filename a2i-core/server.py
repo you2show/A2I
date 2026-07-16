@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Iterator, TypedDict
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from llama_cpp import Llama
 
@@ -53,6 +54,15 @@ class AppState:
 
 state = AppState()
 app = FastAPI(title="A2I Core", version="1.0.0")
+
+# Allow browser front ends (e.g. the a2i-web page hosted on Vercel) to call
+# this server directly from the user's browser.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def build_messages(messages: list[ChatMessage]) -> list[ChatMessage]:
