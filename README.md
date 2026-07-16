@@ -1,14 +1,20 @@
-# A2I — Unified AI Platform
+# A2I — All-in-One AI
 
-A2I brings together several powerful open-source AI projects into a single
-monorepo, forming one integrated platform that covers the full stack of
-building, running, and using AI applications — from models and SDKs to
+A2I ប្រមូលខួរក្បាល AI ច្រើនចូលគ្នាជាកន្លែងតែមួយ — an all-in-one AI that
+gathers many AI brains into one platform: in-browser models, self-hosted
+models, and any OpenAI-compatible endpoint, with a mode that asks all
+brains together and combines their answers into one.
+
+This monorepo contains everything: the web app (`a2i-web/`), the
+self-hosted engine (`a2i-core/`), and the full stack of open-source AI
+projects that power and extend the platform — from models and SDKs to
 visual builders, chat interfaces, and coding agents.
 
 ## Components
 
 | Directory | Project | Role in A2I |
 | --------- | ------- | ----------- |
+| [`a2i-web/`](a2i-web/) | **A2I Web** | The all-in-one AI app (deployed on Vercel): chat with in-browser models (WebGPU, no server), your A2I Core, Ollama/LM Studio, or any OpenAI-compatible brain — including a 🧩 mode that asks every brain at once and combines their answers. |
 | [`a2i-core/`](a2i-core/) | **A2I Core** | The platform's own brain: a self-hosted AI server that runs open-weight models 100% locally (llama.cpp) with an OpenAI-compatible API, built-in chat UI, and local document retrieval — no external AI APIs needed. |
 | [`dify/`](dify/) | Dify | LLM application platform: agentic workflows, RAG pipelines, model management, and app orchestration with a web UI and Flask API backend. |
 | [`flowise/`](flowise/) | Flowise | Visual drag-and-drop builder for LLM flows and agents (Node.js/TypeScript). |
