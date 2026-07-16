@@ -77,6 +77,9 @@
     <option value="Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 Coder 1.5B (code, ~1GB)</option>
   </select>
   <input id="server-url" placeholder="http://127.0.0.1:8990 (OpenAI-compatible URL)">
+  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer">
+    <input type="checkbox" id="wiki-toggle" checked> 🌐 Wikipedia
+  </label>
   <progress id="progress" max="1" value="0" hidden></progress>
 </div>
 <div id="log">
@@ -139,16 +142,75 @@ function searchKnowledge(query, topK = 3) {
     .filter((s) => s.score > 0).map((s) => s.c);
 }
 
-// Returns a copy of `messages` with retrieved context injected into the
-// system prompt, based on the latest user message.
-function withKnowledge(messages) {
+// ---- Wikipedia grounding (idea from vane's search researcher) ----------
+
+const wikiToggle = $('wiki-toggle');
+wikiToggle.checked = localStorage.getItem('a2i-wiki') !== 'off';
+wikiToggle.addEventListener('change', () =>
+  localStorage.setItem('a2i-wiki', wikiToggle.checked ? 'on' : 'off'));
+
+async function searchWikipedia(query) {
+  if (!wikiToggle.checked) return [];
+  const langs = /[ក-៿]/.test(query) ? ['km', 'en'] : ['en'];
+  const results = [];
+  for (const lang of langs) {
+    try {
+      const url = `https://${lang}.wikipedia.org/w/api.php?action=query` +
+        `&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=2` +
+        `&prop=extracts&exintro&explaintext&format=json&origin=*`;
+      const data = await (await fetch(url, { signal: AbortSignal.timeout(5000) })).json();
+      for (const page of Object.values(data?.query?.pages || {})) {
+        if (page.extract) {
+          results.push({
+            source: `Wikipedia (${lang}): ${page.title}`,
+            text: page.extract.slice(0, 1200),
+          });
+        }
+      }
+      if (results.length) break; // prefer the first language that has results
+    } catch { /* offline or blocked — answer without Wikipedia */ }
+  }
+  return results.slice(0, 2);
+}
+
+// ---- Calculator tool (idea from ai-sdk tools) ---------------------------
+// Small local models are unreliable at arithmetic; compute exact results
+// for them and pass the result as context.
+
+function calculate(query) {
+  const match = query.match(/[-+]?[\d.,]+(?:\s*[-+*/×÷^]\s*[-+]?[\d.,()]+)+/);
+  if (!match) return null;
+  const expr = match[0].replaceAll(',', '').replaceAll('×', '*')
+    .replaceAll('÷', '/').replaceAll('^', '**');
+  if (!/^[\d\s+\-*/().]+$/.test(expr.replaceAll('**', ''))) return null;
+  try {
+    const value = Function(`"use strict"; return (${expr});`)();
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+    return `${match[0].trim()} = ${value}`;
+  } catch {
+    return null;
+  }
+}
+
+// Returns a copy of `messages` with retrieved context (local knowledge,
+// Wikipedia extracts, exact calculator results) injected into the system
+// prompt, based on the latest user message.
+async function withKnowledge(messages) {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   if (!lastUser) return messages;
-  const hits = searchKnowledge(lastUser.content);
-  if (!hits.length) return messages;
-  const context = hits.map((h) => `[${h.source}]\n${h.text}`).join('\n\n');
+  const parts = [];
+  const calc = calculate(lastUser.content);
+  if (calc) parts.push('[Calculator — exact result, trust this]\n' + calc);
+  for (const h of searchKnowledge(lastUser.content)) {
+    parts.push(`[${h.source}]\n${h.text}`);
+  }
+  for (const w of await searchWikipedia(lastUser.content)) {
+    parts.push(`[${w.source}]\n${w.text}`);
+  }
+  if (!parts.length) return messages;
   return [
-    { role: 'system', content: SYSTEM_PROMPT + '\n\nContext documents:\n' + context },
+    { role: 'system',
+      content: SYSTEM_PROMPT + '\n\nContext documents:\n' + parts.join('\n\n') },
     ...messages.filter((m) => m.role !== 'system'),
   ];
 }
@@ -465,7 +527,7 @@ form.addEventListener('submit', async (e) => {
   addMsg('user', text);
   history.push({ role: 'user', content: text });
   const mode = engineSel.value;
-  const messages = withKnowledge(history);
+  const messages = await withKnowledge(history);
   try {
     let answer;
     if (mode === 'all') {
