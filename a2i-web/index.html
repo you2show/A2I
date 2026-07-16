@@ -100,8 +100,74 @@ const log = $('log'), form = $('form'), input = $('input'), send = $('send');
 const engineSel = $('engine'), modelSel = $('model'), serverUrl = $('server-url');
 const statusEl = $('status'), dot = $('dot'), progress = $('progress');
 const SYSTEM_PROMPT =
-  'You are A2I, a helpful all-in-one AI assistant. Answer clearly and accurately.';
+  'You are A2I, a helpful all-in-one AI assistant. Answer clearly and accurately. ' +
+  'If context documents are provided, ground your answer in them.';
 const history = [{ role: 'system', content: SYSTEM_PROMPT }];
+
+// ---- Knowledge base (files in knowledge/, listed in knowledge/index.json) --
+
+const knowledgeChunks = []; // { source, text, terms: Map<term, count> }
+const docFreq = new Map();
+
+const tokenize = (text) => (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []);
+
+function addKnowledgeDoc(source, text) {
+  const SIZE = 800, OVERLAP = 100;
+  for (let start = 0; start < text.length; start += SIZE - OVERLAP) {
+    const chunkText = text.slice(start, start + SIZE).trim();
+    if (!chunkText) continue;
+    const terms = new Map();
+    for (const t of tokenize(chunkText)) terms.set(t, (terms.get(t) || 0) + 1);
+    for (const t of terms.keys()) docFreq.set(t, (docFreq.get(t) || 0) + 1);
+    knowledgeChunks.push({ source, text: chunkText, terms });
+  }
+}
+
+function searchKnowledge(query, topK = 3) {
+  const qTerms = new Map();
+  for (const t of tokenize(query)) qTerms.set(t, (qTerms.get(t) || 0) + 1);
+  if (!qTerms.size || !knowledgeChunks.length) return [];
+  const idf = (t) => Math.log((1 + knowledgeChunks.length) / (1 + (docFreq.get(t) || 0))) + 1;
+  const scored = knowledgeChunks.map((c) => {
+    let dot = 0;
+    for (const [t, q] of qTerms) if (c.terms.has(t)) dot += q * idf(t) * c.terms.get(t) * idf(t);
+    let norm = 0;
+    for (const [t, n] of c.terms) norm += (n * idf(t)) ** 2;
+    return { c, score: norm ? dot / Math.sqrt(norm) : 0 };
+  });
+  return scored.sort((a, b) => b.score - a.score).slice(0, topK)
+    .filter((s) => s.score > 0).map((s) => s.c);
+}
+
+// Returns a copy of `messages` with retrieved context injected into the
+// system prompt, based on the latest user message.
+function withKnowledge(messages) {
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  if (!lastUser) return messages;
+  const hits = searchKnowledge(lastUser.content);
+  if (!hits.length) return messages;
+  const context = hits.map((h) => `[${h.source}]\n${h.text}`).join('\n\n');
+  return [
+    { role: 'system', content: SYSTEM_PROMPT + '\n\nContext documents:\n' + context },
+    ...messages.filter((m) => m.role !== 'system'),
+  ];
+}
+
+async function loadKnowledge() {
+  try {
+    const files = await (await fetch('knowledge/index.json')).json();
+    for (const name of files) {
+      try {
+        addKnowledgeDoc(name, await (await fetch('knowledge/' + name)).text());
+      } catch { /* skip unreadable file */ }
+    }
+    if (knowledgeChunks.length) {
+      addMsg('note',
+        `📚 ${knowledgeChunks.length} knowledge chunks loaded — ` +
+        'A2I ឆ្លើយដោយផ្អែកលើឯកសារក្នុង knowledge/ ផងដែរ');
+    }
+  } catch { /* no knowledge folder — fine */ }
+}
 
 let webllmEngine = null, loadedModel = null;
 
@@ -345,18 +411,18 @@ async function askServer(brain, messages, onDelta) {
 
 // ---- All brains together ----------------------------------------------
 
-async function askAllBrains(question) {
+async function askAllBrains(question, messages) {
   const results = [];
   const tasks = serverBrains.map((brain) => {
     const div = addMsg('ai', '…', '🖥️ ' + brain.name);
-    return askServer(brain, history, (t) => div.update(t))
+    return askServer(brain, messages, (t) => div.update(t))
       .then((answer) => results.push({ name: brain.name, answer, brain }))
       .catch((err) => div.update('⚠ ' + err.message));
   });
   if (loadedModel && webllmEngine) {
     const div = addMsg('ai', '…', '🧠 ' + loadedModel);
     tasks.push(
-      askBrowser(history, (t) => div.update(t))
+      askBrowser(messages, (t) => div.update(t))
         .then((answer) => results.push({ name: 'In-browser ' + loadedModel, answer, brain: null }))
         .catch((err) => div.update('⚠ ' + err.message)));
   }
@@ -399,17 +465,18 @@ form.addEventListener('submit', async (e) => {
   addMsg('user', text);
   history.push({ role: 'user', content: text });
   const mode = engineSel.value;
+  const messages = withKnowledge(history);
   try {
     let answer;
     if (mode === 'all') {
-      answer = await askAllBrains(text);
+      answer = await askAllBrains(text, messages);
     } else if (mode === 'browser') {
       const aiDiv = addMsg('ai', '…', '🧠 In-browser AI');
-      answer = await askBrowser(history, (t) => aiDiv.update(t));
+      answer = await askBrowser(messages, (t) => aiDiv.update(t));
     } else {
       const brain = currentServerBrain();
       const aiDiv = addMsg('ai', '…', '🖥️ ' + (brain?.name || 'server'));
-      answer = await askServer(brain, history, (t) => aiDiv.update(t));
+      answer = await askServer(brain, messages, (t) => aiDiv.update(t));
     }
     history.push({ role: 'assistant', content: answer });
   } catch (err) {
@@ -424,6 +491,7 @@ form.addEventListener('submit', async (e) => {
 
 rebuildEngineSelect('browser');
 refreshBar();
+loadKnowledge();
 </script>
 </body>
 </html>

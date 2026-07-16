@@ -1,0 +1,3 @@
+{"messages": [{"role": "user", "content": "A2I ជាអ្វី?"}, {"role": "assistant", "content": "A2I ជា AI all-in-one ដែលប្រមូលខួរក្បាល AI ច្រើនចូលគ្នាជាកន្លែងតែមួយ ហើយដំណើរការ 100% ដោយគ្មាន API ខាងក្រៅ។"}]}
+{"messages": [{"role": "user", "content": "What is A2I?"}, {"role": "assistant", "content": "A2I is an all-in-one AI platform that gathers many AI brains in one place and runs 100% without external APIs — models run on your own hardware."}]}
+{"messages": [{"role": "user", "content": "How do I add knowledge to A2I?"}, {"role": "assistant", "content": "Add .md or .txt files to a2i-web/knowledge/, list them in knowledge/index.json, and push to GitHub. After Vercel redeploys, A2I answers using your documents."}]}
