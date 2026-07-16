@@ -160,11 +160,13 @@ modelSel.addEventListener('change', () => { loadedModel = null; refreshBar(); })
 function refreshBar() {
   const mode = engineSel.value;
   const brain = currentServerBrain();
-  modelSel.style.display = mode === 'browser' ? 'inline-block' : 'none';
+  modelSel.style.display = mode === 'browser' && navigator.gpu ? 'inline-block' : 'none';
   serverUrl.style.display = brain ? 'inline-block' : 'none';
   if (brain) serverUrl.value = brain.url;
   if (mode === 'browser') {
-    setStatus(loadedModel ? `ready: ${loadedModel}` : 'model loads on first message', !!loadedModel);
+    setStatus(loadedModel ? `ready: ${loadedModel}`
+      : navigator.gpu ? 'model loads on first message'
+      : 'no GPU — CPU mode will load on first message', !!loadedModel);
   } else if (mode === 'all') {
     setStatus(`will ask ${serverBrains.length + (loadedModel ? 1 : 0)}+ brains and combine`);
   } else if (brain) {
@@ -212,48 +214,99 @@ async function loadWebLLM() {
     '(Could not load the AI library.) ' + lastError.message);
 }
 
-async function ensureBrowserEngine() {
-  const model = modelSel.value;
-  if (webllmEngine && loadedModel === model) return webllmEngine;
-  if (!navigator.gpu) {
-    throw new Error(
-      'Browser នេះមិនមាន WebGPU ទេ — សូមប្រើ Chrome ឬ Edge លើកុំព្យូទ័រ ' +
-      'ឬជ្រើសខួរក្បាល server វិញ។ (This browser has no WebGPU.)');
-  }
+// CPU fallback model (GGUF) for devices without WebGPU. Users can override
+// it by setting localStorage 'a2i-cpu-model-url' to any GGUF URL.
+const CPU_MODEL_URL =
+  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
+const CPU_MODEL_NAME = 'Qwen2.5 0.5B (CPU)';
+
+async function loadGpuEngine(model) {
   setStatus('loading AI library…');
   const webllm = await loadWebLLM();
   setStatus('downloading model (one time)…');
   progress.hidden = false;
+  const engine = await webllm.CreateMLCEngine(model, {
+    initProgressCallback: (p) => {
+      progress.value = p.progress || 0;
+      setStatus(p.text.slice(0, 60));
+    },
+  });
+  progress.hidden = true;
+  return {
+    kind: 'gpu',
+    async ask(messages, onDelta, maxTokens = 1024) {
+      const chunks = await engine.chat.completions.create({
+        messages, stream: true, max_tokens: maxTokens,
+      });
+      let answer = '';
+      for await (const chunk of chunks) {
+        answer += chunk.choices?.[0]?.delta?.content || '';
+        onDelta(answer);
+      }
+      return answer;
+    },
+  };
+}
+
+async function loadCpuEngine() {
+  setStatus('គ្មាន GPU — ប្រើ CPU វិញ / no GPU, using CPU mode…');
+  const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
+  const wllama = new Wllama(
+    { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
+  const url = localStorage.getItem('a2i-cpu-model-url') || CPU_MODEL_URL;
+  progress.hidden = false;
+  await wllama.loadModelFromUrl(url, {
+    n_ctx: 2048,
+    progressCallback: ({ loaded, total }) => {
+      progress.value = total ? loaded / total : 0;
+      setStatus(`CPU mode — downloading model ${Math.round(100 * (loaded / (total || 1)))}%`);
+    },
+  });
+  progress.hidden = true;
+  return {
+    kind: 'cpu',
+    ask(messages, onDelta, maxTokens = 1024) {
+      return new Promise((resolve, reject) => {
+        let answer = '';
+        wllama.createChatCompletion({
+          messages,
+          stream: true,
+          // CPU inference is slower, keep answers shorter to stay responsive
+          max_tokens: Math.min(maxTokens, 300),
+          onData: (chunk) => {
+            const delta =
+              chunk?.choices?.[0]?.delta?.content ?? chunk?.currentText ?? '';
+            if (chunk?.currentText !== undefined) answer = chunk.currentText;
+            else answer += delta;
+            onDelta(answer);
+          },
+        }).then(() => resolve(answer), reject);
+      });
+    },
+  };
+}
+
+async function ensureBrowserEngine() {
+  const model = navigator.gpu ? modelSel.value : CPU_MODEL_NAME;
+  if (webllmEngine && loadedModel === model) return webllmEngine;
   try {
-    webllmEngine = await webllm.CreateMLCEngine(model, {
-      initProgressCallback: (p) => {
-        progress.value = p.progress || 0;
-        setStatus(p.text.slice(0, 60));
-      },
-    });
+    webllmEngine = navigator.gpu
+      ? await loadGpuEngine(model)
+      : await loadCpuEngine();
   } catch (err) {
     progress.hidden = true;
     throw new Error(
-      'ការទាញ model បរាជ័យ — សូមព្យាយាមម្តងទៀត ឬជ្រើស model តូចជាង។ ' +
-      '(Model download failed.) ' + err.message);
+      'ការទាញ model បរាជ័យ — សូមព្យាយាមម្តងទៀត ឬពិនិត្យអ៊ីនធឺណិត។ ' +
+      '(Model load failed.) ' + err.message);
   }
-  progress.hidden = true;
   loadedModel = model;
-  setStatus(`ready: ${model}`, true);
+  setStatus(`ready: ${model}` + (webllmEngine.kind === 'cpu' ? ' — CPU mode, slower' : ''), true);
   return webllmEngine;
 }
 
 async function askBrowser(messages, onDelta) {
   const engine = await ensureBrowserEngine();
-  const chunks = await engine.chat.completions.create({
-    messages, stream: true, max_tokens: 1024,
-  });
-  let answer = '';
-  for await (const chunk of chunks) {
-    answer += chunk.choices?.[0]?.delta?.content || '';
-    onDelta(answer);
-  }
-  return answer;
+  return engine.ask(messages, onDelta);
 }
 
 // ---- Server brains ----------------------------------------------------
