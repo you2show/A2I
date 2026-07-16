@@ -69,8 +69,8 @@
     <option value="server">🖥️ My A2I Core server</option>
   </select>
   <select id="model">
-    <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Qwen2.5 0.5B (fast, ~400MB)</option>
-    <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC" selected>Qwen2.5 1.5B (good, ~1GB)</option>
+    <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC" selected>Qwen2.5 0.5B (fast, ~400MB)</option>
+    <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 1.5B (good, ~1GB)</option>
     <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (smart, ~2GB)</option>
   </select>
   <input id="server-url" placeholder="http://127.0.0.1:8990 (A2I Core URL)">
@@ -104,8 +104,8 @@ serverUrl.addEventListener('change', () => localStorage.setItem('a2i-server-url'
 
 function refreshBar() {
   const browser = engineSel.value === 'browser';
-  modelSel.style.display = browser ? '' : 'none';
-  serverUrl.style.display = browser ? 'none' : '';
+  modelSel.style.display = browser ? 'inline-block' : 'none';
+  serverUrl.style.display = browser ? 'none' : 'inline-block';
   setStatus(browser ? (loadedModel ? `ready: ${loadedModel}` : 'model not loaded yet')
                     : 'will call your A2I Core server', !!loadedModel && browser);
 }
@@ -126,23 +126,53 @@ function addMsg(cls, text) {
   return div;
 }
 
+async function loadWebLLM() {
+  // The library is served from this site itself (vendor/), so it loads even
+  // when third-party CDNs are unreachable; CDNs are only a fallback.
+  const sources = [
+    new URL('vendor/web-llm.mjs', location.href).href,
+    'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm',
+    'https://esm.sh/@mlc-ai/web-llm',
+  ];
+  let lastError = null;
+  for (const src of sources) {
+    try {
+      return await import(src);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw new Error(
+    'មិនអាចទាញ AI library បានទេ — សូមពិនិត្យអ៊ីនធឺណិត រួចព្យាយាមម្តងទៀត។ ' +
+    '(Could not load the AI library — check your connection and retry.) ' +
+    lastError.message);
+}
+
 async function ensureBrowserEngine() {
   const model = modelSel.value;
   if (webllmEngine && loadedModel === model) return webllmEngine;
   if (!navigator.gpu) {
     throw new Error(
-      'This browser has no WebGPU. Use Chrome/Edge on a computer, ' +
-      'or switch Engine to "My A2I Core server".');
+      'Browser នេះមិនមាន WebGPU ទេ — សូមប្រើ Chrome ឬ Edge លើកុំព្យូទ័រ ' +
+      'ឬប្តូរ Engine ទៅ "My A2I Core server"។ (This browser has no WebGPU.)');
   }
+  setStatus('loading AI library…');
+  const webllm = await loadWebLLM();
   setStatus('downloading model (one time)…');
   progress.hidden = false;
-  const webllm = await import('https://esm.run/@mlc-ai/web-llm');
-  webllmEngine = await webllm.CreateMLCEngine(model, {
-    initProgressCallback: (p) => {
-      progress.value = p.progress || 0;
-      setStatus(p.text.slice(0, 60));
-    },
-  });
+  try {
+    webllmEngine = await webllm.CreateMLCEngine(model, {
+      initProgressCallback: (p) => {
+        progress.value = p.progress || 0;
+        setStatus(p.text.slice(0, 60));
+      },
+    });
+  } catch (err) {
+    progress.hidden = true;
+    throw new Error(
+      'ការទាញ model បរាជ័យ — សូមព្យាយាមម្តងទៀត ឬជ្រើស model តូចជាង។ ' +
+      '(Model download failed — retry or pick a smaller model.) ' + err.message);
+  }
   progress.hidden = true;
   loadedModel = model;
   setStatus(`ready: ${model}`, true);
@@ -165,11 +195,19 @@ async function askBrowser(aiDiv) {
 
 async function askServer(aiDiv) {
   const base = serverUrl.value.trim().replace(/\/+$/, '');
-  const res = await fetch(base + '/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: history, stream: true, max_tokens: 1024 }),
-  });
+  let res;
+  try {
+    res = await fetch(base + '/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: history, stream: true, max_tokens: 1024 }),
+    });
+  } catch {
+    throw new Error(
+      `មិនអាចភ្ជាប់ទៅ ${base} បានទេ។ A2I Core server ត្រូវតែកំពុងរត់លើកុំព្យូទ័រនេះ ` +
+      '(cd a2i-core && ./run.sh) ឬបញ្ចូល URL server របស់អ្នកឱ្យត្រឹមត្រូវ។ ' +
+      `(Could not reach ${base} — make sure A2I Core is running, or use the in-browser engine.)`);
+  }
   if (!res.ok) throw new Error(`server returned ${res.status}`);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
