@@ -162,6 +162,7 @@
   <nav id="chat-list"></nav>
   <div class="side-foot">
     <button id="theme-btn">🌓 Theme</button>
+    <button id="repair-btn" title="Clear the downloaded model cache and reload — use if loading is stuck">🔄 ជួសជុល · Fix</button>
   </div>
 </aside>
 
@@ -222,6 +223,37 @@ applyTheme(localStorage.getItem('a2i-theme') ||
   (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 $('theme-btn').addEventListener('click', () =>
   applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+
+// ---- Repair: clear a corrupt/partial model cache and reload ------------
+// A model download interrupted by a broken GPU or a dropped connection can
+// leave a partial file in CacheStorage / IndexedDB / OPFS that makes the
+// next load hang. This clears model caches (keeping saved chats) and reloads.
+async function repairModelCache() {
+  const btn = $('repair-btn');
+  btn.textContent = '⏳ …';
+  try {
+    if (window.caches) {
+      for (const k of await caches.keys()) await caches.delete(k);
+    }
+  } catch { /* ignore */ }
+  try {
+    if (indexedDB.databases) {
+      for (const db of await indexedDB.databases()) {
+        if (db.name) indexedDB.deleteDatabase(db.name);
+      }
+    }
+  } catch { /* ignore */ }
+  try {
+    const root = await navigator.storage?.getDirectory?.();
+    if (root) {
+      for await (const name of root.keys()) {
+        await root.removeEntry(name, { recursive: true }).catch(() => {});
+      }
+    }
+  } catch { /* ignore */ }
+  location.reload();
+}
+$('repair-btn').addEventListener('click', repairModelCache);
 
 // ---- Sidebar / conversations -------------------------------------------
 
@@ -677,18 +709,40 @@ const CPU_MODEL_URL =
   'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
 const CPU_MODEL_NAME = 'Qwen2.5 0.5B (CPU)';
 
+// Turns an infinite hang into a clear, recoverable error: rejects if the
+// wrapped work makes no progress for `ms`. Call `ping()` on each sign of
+// life (e.g. a download-progress event).
+function stallGuard(ms) {
+  let timer, rejectFn;
+  const promise = new Promise((_, reject) => { rejectFn = reject; });
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => rejectFn(new Error(
+      'ការទាញ model គាំង (គ្មានចលនា ' + Math.round(ms / 1000) + ' វិនាទី) — ' +
+      'សូមចុច "🔄 ជួសជុល" ក្នុង sidebar រួចព្យាយាមម្តងទៀត។ ' +
+      '(Download stalled — click "🔄 Fix" in the sidebar, then retry.)')), ms);
+  };
+  arm();
+  return { signal: promise, ping: arm, clear: () => clearTimeout(timer) };
+}
+
 async function loadGpuEngine(model) {
   setStatus('loading AI library…');
   const webllm = await loadWebLLM();
   setStatus('downloading model (one time)…');
   progress.hidden = false;
-  const engine = await webllm.CreateMLCEngine(model, {
-    initProgressCallback: (p) => {
-      progress.value = p.progress || 0;
-      const pct = Math.round((p.progress || 0) * 100);
-      setStatus(`⬇ ទាញ AI model ${pct}% (ម្តងគត់) · downloading ${pct}% (one-time)`);
-    },
-  });
+  const watch = stallGuard(60000);
+  const engine = await Promise.race([
+    watch.signal,
+    webllm.CreateMLCEngine(model, {
+      initProgressCallback: (p) => {
+        watch.ping();
+        progress.value = p.progress || 0;
+        const pct = Math.round((p.progress || 0) * 100);
+        setStatus(`⬇ ទាញ AI model ${pct}% (ម្តងគត់) · downloading ${pct}% (one-time)`);
+      },
+    }),
+  ]).finally(() => watch.clear());
   progress.hidden = true;
   return {
     kind: 'gpu',
@@ -715,21 +769,26 @@ async function loadCpuEngine() {
     { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
   const url = localStorage.getItem('a2i-cpu-model-url') || CPU_MODEL_URL;
   progress.hidden = false;
-  await wllama.loadModelFromUrl(url, {
-    // Generous window (KV cache for a 0.5B model is tiny) so the trimmed
-    // prompt — including Khmer, which uses more tokens per character —
-    // always fits with room for the answer.
-    n_ctx: 8192,
-    // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
-    // which would hit the same broken GPU we are falling back FROM.
-    n_gpu_layers: 0,
-    progressCallback: ({ loaded, total }) => {
-      progress.value = total ? loaded / total : 0;
-      const pct = Math.round(100 * (loaded / (total || 1)));
-      const mb = Math.round(loaded / 1048576);
-      setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
-    },
-  });
+  const watch = stallGuard(60000);
+  await Promise.race([
+    watch.signal,
+    wllama.loadModelFromUrl(url, {
+      // Generous window (KV cache for a 0.5B model is tiny) so the trimmed
+      // prompt — including Khmer, which uses more tokens per character —
+      // always fits with room for the answer.
+      n_ctx: 8192,
+      // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
+      // which would hit the same broken GPU we are falling back FROM.
+      n_gpu_layers: 0,
+      progressCallback: ({ loaded, total }) => {
+        watch.ping();
+        progress.value = total ? loaded / total : 0;
+        const pct = Math.round(100 * (loaded / (total || 1)));
+        const mb = Math.round(loaded / 1048576);
+        setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
+      },
+    }),
+  ]).finally(() => watch.clear());
   progress.hidden = true;
   return {
     kind: 'cpu',
