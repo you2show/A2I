@@ -600,7 +600,9 @@ serverUrl.addEventListener('change', () => {
     checkBrains();
   }
 });
-modelSel.addEventListener('change', () => { loadedModel = null; refreshBar(); });
+modelSel.addEventListener('change', () => {
+  loadedModel = null; webllmEngine = null; refreshBar();
+});
 
 function refreshBar() {
   const mode = engineSel.value;
@@ -682,7 +684,7 @@ async function loadGpuEngine(model) {
 }
 
 async function loadCpuEngine() {
-  setStatus('គ្មាន GPU — ប្រើ CPU វិញ / no GPU, using CPU mode…');
+  setStatus('ប្រើ CPU / using CPU mode…');
   const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
   const wllama = new Wllama(
     { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
@@ -690,6 +692,9 @@ async function loadCpuEngine() {
   progress.hidden = false;
   await wllama.loadModelFromUrl(url, {
     n_ctx: 2048,
+    // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
+    // which would hit the same broken GPU we are falling back FROM.
+    n_gpu_layers: 0,
     progressCallback: ({ loaded, total }) => {
       progress.value = total ? loaded / total : 0;
       const pct = Math.round(100 * (loaded / (total || 1)));
@@ -724,30 +729,43 @@ async function loadCpuEngine() {
 }
 
 async function ensureBrowserEngine() {
-  const model = navigator.gpu ? modelSel.value : CPU_MODEL_NAME;
-  if (webllmEngine && loadedModel === model) return webllmEngine;
-  let lastError = null;
+  if (webllmEngine) return webllmEngine;
+  const errors = [];
+
+  // 1. Try the GPU engine when a WebGPU adapter is advertised. The adapter
+  //    can exist yet fail at device creation (e.g. DXGI_ERROR_DEVICE_REMOVED
+  //    on a weak/broken Windows GPU), so a failure here must NOT be fatal —
+  //    we fall through to the CPU engine.
+  if (navigator.gpu) {
+    try {
+      webllmEngine = await loadGpuEngine(modelSel.value);
+      loadedModel = modelSel.value;
+      setStatus(`ready: ${modelSel.value}`, true);
+      return webllmEngine;
+    } catch (err) {
+      progress.hidden = true;
+      errors.push('GPU: ' + err.message);
+      setStatus('GPU មិនដំណើរការ — ប្តូរទៅ CPU ស្វ័យប្រវត្តិ / GPU failed, switching to CPU…');
+    }
+  }
+
+  // 2. CPU engine (wllama, WebAssembly). Works on any device; one retry.
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      webllmEngine = navigator.gpu
-        ? await loadGpuEngine(model)
-        : await loadCpuEngine();
-      lastError = null;
-      break;
+      webllmEngine = await loadCpuEngine();
+      loadedModel = CPU_MODEL_NAME;
+      setStatus(`ready: ${CPU_MODEL_NAME} — CPU mode, slower`, true);
+      return webllmEngine;
     } catch (err) {
-      lastError = err;
       progress.hidden = true;
+      errors.push('CPU attempt ' + attempt + ': ' + err.message);
       if (attempt < 2) setStatus('ការទាញបរាជ័យ — ព្យាយាមម្តងទៀត / retrying…');
     }
   }
-  if (lastError) {
-    throw new Error(
-      'ការទាញ model បរាជ័យ (ព្យាយាម ២ ដងហើយ) — សូមពិនិត្យអ៊ីនធឺណិត រួចផ្ញើសារម្តងទៀត។ ' +
-      '(Model load failed after 2 attempts.) ' + lastError.message);
-  }
-  loadedModel = model;
-  setStatus(`ready: ${model}` + (webllmEngine.kind === 'cpu' ? ' — CPU mode, slower' : ''), true);
-  return webllmEngine;
+
+  throw new Error(
+    'ការទាញ AI បរាជ័យ — សូមពិនិត្យអ៊ីនធឺណិត រួចផ្ញើសារម្តងទៀត។ ' +
+    '(Could not start any in-browser engine.) ' + errors.join(' | '));
 }
 
 async function askBrowser(messages, onDelta, signal) {
