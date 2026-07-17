@@ -604,11 +604,13 @@ function rebuildEngineSelect(selected) {
     o.value = value; o.textContent = label;
     engineSel.appendChild(o);
   };
+  if (cloudAvailable) add('cloud', '☁️ A2I Cloud (fast, no download)');
   add('browser', '🧠 In-browser AI (no server, no API)');
   serverBrains.forEach((b, i) => add('server:' + i, '🖥️ ' + b.name + brainStatusLabel(b)));
   add('all', '🧩 All brains together / ខួរក្បាលទាំងអស់រួមគ្នា');
   add('add', '➕ Add brain (Ollama, LM Studio, any URL)…');
-  engineSel.value = selected || 'browser';
+  // Default to Cloud when available (fast, no download); else in-browser.
+  engineSel.value = selected || (cloudAvailable ? 'cloud' : 'browser');
 }
 
 async function checkBrains() {
@@ -667,7 +669,9 @@ function refreshBar() {
   modelSel.style.display = mode === 'browser' && navigator.gpu ? 'inline-block' : 'none';
   serverUrl.style.display = brain ? 'inline-block' : 'none';
   if (brain) serverUrl.value = brain.url;
-  if (mode === 'browser') {
+  if (mode === 'cloud') {
+    setStatus('☁️ A2I Cloud — fast, no download', true);
+  } else if (mode === 'browser') {
     setStatus(loadedModel ? `ready: ${loadedModel}`
       : navigator.gpu ? 'model loads on first message'
       : 'no GPU — CPU mode will load on first message', !!loadedModel);
@@ -860,6 +864,69 @@ async function askBrowser(messages, onDelta, signal) {
   return engine.ask(messages, onDelta, signal);
 }
 
+// ---- Streaming helpers -------------------------------------------------
+
+// Parse an OpenAI-style SSE stream, calling onDelta with the growing answer.
+async function readSSE(res, onDelta, signal) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let answer = '', buffer = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+        try {
+          const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content;
+          if (delta) { answer += delta; onDelta(answer); }
+        } catch { /* ignore keep-alive / partial lines */ }
+      }
+    }
+  } catch (err) {
+    if (!signal?.aborted) throw err;
+  }
+  return answer;
+}
+
+// ---- A2I Cloud (Vercel serverless proxy → hosted model) ----------------
+
+let cloudAvailable = false;
+
+async function checkCloud() {
+  try {
+    const res = await fetch('/api/chat', { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const info = await res.json();
+      cloudAvailable = !!info.configured;
+    }
+  } catch { cloudAvailable = false; }
+}
+
+async function askCloud(messages, onDelta, signal) {
+  let res;
+  try {
+    res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, max_tokens: 1024 }),
+      signal,
+    });
+  } catch (err) {
+    if (signal?.aborted) return '';
+    throw new Error('មិនអាចភ្ជាប់ A2I Cloud បានទេ។ (Could not reach A2I Cloud.)');
+  }
+  if (res.status === 503) {
+    const info = await res.json().catch(() => ({}));
+    throw new Error(info.message || 'A2I Cloud is not configured yet.');
+  }
+  if (!res.ok) throw new Error(`A2I Cloud error ${res.status}`);
+  return readSSE(res, onDelta, signal);
+}
+
 // ---- Server brains -----------------------------------------------------
 
 async function askServer(brain, messages, onDelta, signal) {
@@ -878,26 +945,7 @@ async function askServer(brain, messages, onDelta, signal) {
       `(Could not reach ${brain.name}.)`);
   }
   if (!res.ok) throw new Error(`${brain.name} returned ${res.status}`);
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let answer = '', buffer = '';
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
-        const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content;
-        if (delta) { answer += delta; onDelta(answer); }
-      }
-    }
-  } catch (err) {
-    if (!signal?.aborted) throw err;
-  }
-  return answer;
+  return readSSE(res, onDelta, signal);
 }
 
 // ---- All brains together -----------------------------------------------
@@ -911,6 +959,13 @@ async function askAllBrains(question, messages, signal) {
       .then((answer) => results.push({ name: brain.name, answer, brain }))
       .catch((err) => div.update('⚠ ' + err.message));
   });
+  if (cloudAvailable) {
+    const div = addMsg('ai', '…', '☁️ A2I Cloud');
+    tasks.push(
+      askCloud(messages, (t) => div.update(t), signal)
+        .then((answer) => results.push({ name: 'A2I Cloud', answer, brain: null, cloud: true }))
+        .catch((err) => div.update('⚠ ' + err.message)));
+  }
   if (loadedModel && webllmEngine) {
     const div = addMsg('ai', '…', '🧠 ' + loadedModel);
     tasks.push(
@@ -938,10 +993,18 @@ async function askAllBrains(question, messages, signal) {
     },
   ];
   const div = addMsg('ai combined', '…', '🧩 A2I combined / ចម្លើយរួម');
+  // Pick a combiner: prefer Cloud, then in-browser, then any server brain.
   const serverResult = results.find((r) => r.brain);
-  const combined = webllmEngine && loadedModel
-    ? await askBrowser(combineMessages, (t) => div.update(t), signal)
-    : await askServer(serverResult.brain, combineMessages, (t) => div.update(t), signal);
+  let combined;
+  if (cloudAvailable) {
+    combined = await askCloud(combineMessages, (t) => div.update(t), signal);
+  } else if (webllmEngine && loadedModel) {
+    combined = await askBrowser(combineMessages, (t) => div.update(t), signal);
+  } else if (serverResult) {
+    combined = await askServer(serverResult.brain, combineMessages, (t) => div.update(t), signal);
+  } else {
+    combined = results.map((r) => r.answer).join('\n\n');
+  }
   return combined;
 }
 
@@ -980,7 +1043,10 @@ async function generate() {
 
   try {
     let answer;
-    if (mode === 'all') {
+    if (mode === 'cloud') {
+      const aiDiv = addMsg('ai', '…', '☁️ A2I Cloud');
+      answer = await askCloud(messages, (t) => aiDiv.update(t), signal);
+    } else if (mode === 'all') {
       answer = await askAllBrains(question, messages, signal);
     } else if (mode === 'browser') {
       const aiDiv = addMsg('ai', '…', '🧠 In-browser AI');
@@ -1047,12 +1113,21 @@ input.addEventListener('input', () => {
 
 // ---- Init --------------------------------------------------------------
 
-rebuildEngineSelect('browser');
+rebuildEngineSelect(null);
 refreshBar();
 renderChat();
 renderChatList();
 loadKnowledge();
 checkBrains();
+// Detect A2I Cloud; if configured, make it the default engine.
+checkCloud().then(() => {
+  if (cloudAvailable && engineSel.value === 'browser') {
+    rebuildEngineSelect('cloud');
+    refreshBar();
+  } else {
+    rebuildEngineSelect(engineSel.value);
+  }
+});
 </script>
 </body>
 </html>
