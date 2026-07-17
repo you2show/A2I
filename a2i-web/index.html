@@ -6,110 +6,408 @@
 <title>A2I — All-in-One AI</title>
 <style>
   :root {
-    --bg: #0f1117; --panel: #1a1d27; --text: #e8eaf0;
-    --muted: #9aa0b0; --accent: #6c8cff; --user: #2a3350; --border: rgba(128,128,128,.2);
+    --bg: #f4f3ee; --panel: #ffffff; --side: #ece9e0; --text: #1f1e1b;
+    --muted: #77746b; --accent: #c96442; --accent-soft: #f3e2d9;
+    --user: #e8e4d8; --border: #dedacd; --code-bg: #f0ede4;
+    --shadow: 0 4px 24px rgba(60, 50, 30, .08);
   }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #f5f6fa; --panel: #ffffff; --text: #1a1d27;
-      --muted: #6b7180; --accent: #3b5bdb; --user: #e3e9ff; --border: rgba(0,0,0,.12);
-    }
+  [data-theme="dark"] {
+    --bg: #262624; --panel: #30302e; --side: #1f1e1d; --text: #e8e6de;
+    --muted: #9a978d; --accent: #d97757; --accent-soft: #453730;
+    --user: #3a3a37; --border: #44423d; --code-bg: #1d1c1a;
+    --shadow: 0 4px 24px rgba(0, 0, 0, .35);
   }
   * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
   body {
-    font-family: system-ui, -apple-system, "Noto Sans Khmer", sans-serif;
-    background: var(--bg); color: var(--text);
-    display: flex; flex-direction: column; height: 100dvh;
+    font-family: ui-sans-serif, system-ui, "Segoe UI", "Noto Sans Khmer", sans-serif;
+    background: var(--bg); color: var(--text); display: flex; height: 100dvh;
+    transition: background .25s, color .25s;
   }
-  header {
-    padding: .8rem 1.2rem; background: var(--panel); border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  button { font-family: inherit; }
+
+  /* ---- Sidebar ---- */
+  aside {
+    width: 264px; flex-shrink: 0; background: var(--side); display: flex;
+    flex-direction: column; border-right: 1px solid var(--border);
+    transition: transform .25s; z-index: 30;
   }
-  header .dot { width: 10px; height: 10px; border-radius: 50%; background: #f0b429; }
-  header .dot.ready { background: #3ecf8e; }
-  header h1 { font-size: 1rem; font-weight: 600; }
-  #status { color: var(--muted); font-size: .78rem; margin-left: auto; }
-  #engine-bar {
-    display: flex; gap: .5rem; padding: .55rem 1.2rem; background: var(--panel);
-    border-bottom: 1px solid var(--border); align-items: center; flex-wrap: wrap; font-size: .85rem;
+  .brand {
+    display: flex; align-items: center; gap: .55rem; padding: 1.1rem 1.2rem .8rem;
+    font-weight: 700; font-size: 1.05rem; letter-spacing: .02em;
   }
+  .brand .logo {
+    width: 30px; height: 30px; border-radius: 9px; background: var(--accent);
+    color: #fff; display: grid; place-items: center; font-size: .95rem; font-weight: 800;
+  }
+  #new-chat {
+    margin: .3rem 1rem .8rem; padding: .6rem .9rem; border: 1px solid var(--border);
+    border-radius: 12px; background: var(--panel); color: var(--text); cursor: pointer;
+    font-size: .9rem; text-align: left; transition: border-color .15s;
+  }
+  #new-chat:hover { border-color: var(--accent); }
+  #chat-list { flex: 1; overflow-y: auto; padding: 0 .6rem .6rem; }
+  .chat-item {
+    display: flex; align-items: center; gap: .4rem; width: 100%; padding: .55rem .7rem;
+    margin-bottom: 2px; border: 0; border-radius: 10px; background: transparent;
+    color: var(--text); cursor: pointer; font-size: .85rem; text-align: left;
+  }
+  .chat-item:hover, .chat-item.active { background: var(--user); }
+  .chat-item .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-item .del { opacity: 0; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: .85rem; }
+  .chat-item:hover .del { opacity: 1; }
+  .side-foot { padding: .8rem 1rem; border-top: 1px solid var(--border); display: flex; gap: .5rem; }
+  .side-foot button {
+    flex: 1; padding: .5rem; border: 1px solid var(--border); border-radius: 10px;
+    background: transparent; color: var(--text); cursor: pointer; font-size: .82rem;
+  }
+
+  /* ---- Main ---- */
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #topbar {
+    display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
+    padding: .6rem .9rem; border-bottom: 1px solid var(--border); background: var(--bg);
+    font-size: .84rem;
+  }
+  #menu-btn { display: none; border: 0; background: none; color: var(--text); font-size: 1.2rem; cursor: pointer; }
   select, #server-url {
-    padding: .35rem .6rem; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--bg); color: var(--text); font-size: .85rem; max-width: 100%;
+    padding: .4rem .6rem; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: .84rem; max-width: 100%;
   }
-  #server-url { flex: 1; min-width: 12rem; display: none; }
-  #log { flex: 1; overflow-y: auto; padding: 1.2rem; display: flex; flex-direction: column; gap: .8rem; }
-  .msg { max-width: 46rem; padding: .7rem 1rem; border-radius: 12px; line-height: 1.55; white-space: pre-wrap; word-wrap: break-word; }
-  .user { background: var(--user); align-self: flex-end; }
-  .ai { background: var(--panel); align-self: flex-start; border: 1px solid var(--border); }
-  .ai.combined { border-color: var(--accent); }
-  .brain-label { font-size: .72rem; color: var(--muted); margin-bottom: .25rem; font-weight: 600; }
-  .note { color: var(--muted); font-size: .82rem; align-self: center; text-align: center; max-width: 40rem; }
-  form { display: flex; gap: .6rem; padding: 1rem 1.2rem; background: var(--panel); border-top: 1px solid var(--border); }
-  input#input {
-    flex: 1; padding: .7rem 1rem; border-radius: 10px; font-size: 1rem;
-    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  #server-url { flex: 1; min-width: 11rem; display: none; }
+  #topbar label.wiki { display: flex; align-items: center; gap: .3rem; cursor: pointer; color: var(--muted); }
+  #status-wrap { margin-left: auto; display: flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .78rem; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #e0b23e; }
+  .dot.ready { background: #3ecf8e; }
+  progress { width: 8rem; accent-color: var(--accent); }
+
+  /* ---- Chat ---- */
+  #log { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+  .col { max-width: 46rem; margin: 0 auto; padding: 1.4rem 1.1rem 0; display: flex; flex-direction: column; gap: 1.1rem; }
+  .msg { line-height: 1.65; word-wrap: break-word; font-size: .96rem; }
+  .msg.user {
+    align-self: flex-end; max-width: 85%; background: var(--user);
+    padding: .65rem 1rem; border-radius: 16px 16px 4px 16px; white-space: pre-wrap;
   }
-  button {
-    padding: .7rem 1.3rem; border: 0; border-radius: 10px; font-size: 1rem;
-    background: var(--accent); color: #fff; cursor: pointer;
+  .msg.ai { align-self: stretch; position: relative; padding-right: 2rem; }
+  .msg.ai.combined { border-left: 3px solid var(--accent); padding-left: .8rem; }
+  .brain-label { font-size: .72rem; color: var(--accent); margin-bottom: .3rem; font-weight: 700; letter-spacing: .03em; }
+  .copy-btn {
+    position: absolute; top: 0; right: 0; border: 0; background: none; color: var(--muted);
+    cursor: pointer; font-size: .85rem; opacity: 0; transition: opacity .15s;
   }
-  button:disabled { opacity: .5; cursor: wait; }
-  progress { width: 10rem; }
+  .msg.ai:hover .copy-btn { opacity: 1; }
+  .note { color: var(--muted); font-size: .8rem; align-self: center; text-align: center; max-width: 38rem; }
+  .md p { margin: 0 0 .6em; } .md p:last-child { margin-bottom: 0; }
+  .md h2, .md h3, .md h4 { margin: .8em 0 .4em; }
+  .md ul, .md ol { margin: 0 0 .6em; padding-left: 1.3em; }
+  .md code { background: var(--code-bg); padding: .12em .4em; border-radius: 6px; font-size: .88em; }
+  .md pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: .9rem 1rem; overflow-x: auto; margin: .4em 0 .8em;
+  }
+  .md pre code { background: none; padding: 0; font-size: .85em; }
+
+  /* ---- Welcome ---- */
+  #welcome { text-align: center; padding: 3.5rem 1rem 1rem; }
+  #welcome .logo-big {
+    width: 54px; height: 54px; border-radius: 16px; background: var(--accent); color: #fff;
+    display: grid; place-items: center; font-size: 1.6rem; font-weight: 800; margin: 0 auto 1rem;
+  }
+  #welcome h2 { font-size: 1.5rem; margin-bottom: .4rem; }
+  #welcome p { color: var(--muted); font-size: .9rem; margin-bottom: 1.6rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; max-width: 34rem; margin: 0 auto; }
+  .chip {
+    padding: .6rem 1rem; border: 1px solid var(--border); border-radius: 14px;
+    background: var(--panel); color: var(--text); cursor: pointer; font-size: .85rem;
+    transition: border-color .15s, transform .1s;
+  }
+  .chip:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+  /* ---- Composer ---- */
+  #composer-wrap { padding: .8rem 1.1rem 1.1rem; }
+  #composer {
+    max-width: 46rem; margin: 0 auto; display: flex; align-items: flex-end; gap: .5rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 20px;
+    padding: .55rem .55rem .55rem 1.1rem; box-shadow: var(--shadow);
+  }
+  #composer:focus-within { border-color: var(--accent); }
+  #input {
+    flex: 1; border: 0; outline: 0; background: none; color: var(--text); resize: none;
+    font-family: inherit; font-size: .98rem; line-height: 1.5; max-height: 10rem; padding: .35rem 0;
+  }
+  .icon-btn {
+    width: 38px; height: 38px; flex-shrink: 0; border: 0; border-radius: 12px;
+    display: grid; place-items: center; cursor: pointer; font-size: 1.05rem;
+    background: var(--accent); color: #fff; transition: opacity .15s;
+  }
+  .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .icon-btn.ghost { background: transparent; color: var(--muted); }
+  .icon-btn.ghost:hover { color: var(--accent); }
+  #stop { background: #b3403f; display: none; }
+  .footnote { text-align: center; color: var(--muted); font-size: .72rem; margin-top: .5rem; }
+
+  /* ---- Mobile ---- */
+  @media (max-width: 768px) {
+    aside { position: fixed; inset: 0 auto 0 0; transform: translateX(-100%); }
+    aside.open { transform: translateX(0); box-shadow: var(--shadow); }
+    #menu-btn { display: block; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="dot" id="dot"></div>
-  <h1>A2I — All-in-One AI</h1>
-  <span id="status">ready</span>
-</header>
-<div id="engine-bar">
-  <label for="engine">ខួរក្បាល / Brain:</label>
-  <select id="engine"></select>
-  <select id="model">
-    <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC" selected>Qwen2.5 0.5B (fast, ~400MB)</option>
-    <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 1.5B (good, ~1GB)</option>
-    <option value="Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen2.5 3B (smart, ~2GB)</option>
-    <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (~800MB)</option>
-    <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (~2GB)</option>
-    <option value="Phi-3.5-mini-instruct-q4f16_1-MLC">Phi 3.5 mini (~2.3GB)</option>
-    <option value="Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 Coder 1.5B (code, ~1GB)</option>
-  </select>
-  <input id="server-url" placeholder="http://127.0.0.1:8990 (OpenAI-compatible URL)">
-  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer">
-    <input type="checkbox" id="wiki-toggle" checked> 🌐 Wikipedia
-  </label>
-  <progress id="progress" max="1" value="0" hidden></progress>
-</div>
-<div id="log">
-  <div class="note">
-    A2I ប្រមូលខួរក្បាល AI ច្រើនចូលគ្នា៖ model ក្នុង browser (គ្មាន server), A2I Core
-    លើកុំព្យូទ័រអ្នក, Ollama/LM Studio ឬ endpoint ណាក៏បាន — ហើយ mode 🧩 សួរទាំងអស់រួមគ្នា
-    រួចបូកចម្លើយជាមួយ។<br>
-    A2I gathers many AI brains in one place: in-browser models (no server),
-    your A2I Core, Ollama/LM Studio, or any OpenAI-compatible endpoint — and a
-    🧩 mode that asks them all and combines the answers.
+<aside id="sidebar">
+  <div class="brand"><div class="logo">A2</div> A2I <span style="color:var(--muted);font-weight:400;font-size:.75rem">All-in-One AI</span></div>
+  <button id="new-chat">＋ ជជែកថ្មី · New chat</button>
+  <nav id="chat-list"></nav>
+  <div class="side-foot">
+    <button id="theme-btn">🌓 Theme</button>
   </div>
-</div>
-<form id="form">
-  <input id="input" placeholder="Ask anything… / សួរអ្វីក៏បាន…" autocomplete="off" autofocus>
-  <button id="send" type="submit">Send</button>
-</form>
+</aside>
+
+<main>
+  <div id="topbar">
+    <button id="menu-btn">☰</button>
+    <select id="engine"></select>
+    <select id="model">
+      <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC" selected>Qwen2.5 0.5B (fast, ~400MB)</option>
+      <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 1.5B (good, ~1GB)</option>
+      <option value="Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen2.5 3B (smart, ~2GB)</option>
+      <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (~800MB)</option>
+      <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (~2GB)</option>
+      <option value="Phi-3.5-mini-instruct-q4f16_1-MLC">Phi 3.5 mini (~2.3GB)</option>
+      <option value="Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 Coder 1.5B (code, ~1GB)</option>
+    </select>
+    <input id="server-url" placeholder="http://127.0.0.1:8990 (OpenAI-compatible URL)">
+    <label class="wiki"><input type="checkbox" id="wiki-toggle" checked> 🌐 Wikipedia</label>
+    <div id="status-wrap">
+      <progress id="progress" max="1" value="0" hidden></progress>
+      <span id="status">ready</span>
+      <div class="dot" id="dot"></div>
+    </div>
+  </div>
+
+  <div id="log"><div class="col" id="col"></div></div>
+
+  <div id="composer-wrap">
+    <form id="form">
+      <div id="composer">
+        <textarea id="input" rows="1" placeholder="សួរអ្វីក៏បាន… Ask anything…"></textarea>
+        <button type="button" id="regen" class="icon-btn ghost" title="Regenerate / បង្កើតចម្លើយម្តងទៀត" style="display:none">↻</button>
+        <button type="button" id="stop" class="icon-btn" title="Stop / បញ្ឈប់">■</button>
+        <button type="submit" id="send" class="icon-btn" title="Send / ផ្ញើ">➤</button>
+      </div>
+    </form>
+    <div class="footnote">A2I រត់ក្នុងឧបករណ៍អ្នកផ្ទាល់ — គ្មាន API ខាងក្រៅ · runs on your own device, no external AI APIs</div>
+  </div>
+</main>
 
 <script type="module">
 const $ = (id) => document.getElementById(id);
-const log = $('log'), form = $('form'), input = $('input'), send = $('send');
+const log = $('log'), col = $('col'), form = $('form'), input = $('input');
+const send = $('send'), stopBtn = $('stop'), regenBtn = $('regen');
 const engineSel = $('engine'), modelSel = $('model'), serverUrl = $('server-url');
 const statusEl = $('status'), dot = $('dot'), progress = $('progress');
 const SYSTEM_PROMPT =
   'You are A2I, a helpful all-in-one AI assistant. Answer clearly and accurately. ' +
   'If context documents are provided, ground your answer in them.';
-const history = [{ role: 'system', content: SYSTEM_PROMPT }];
+
+// ---- Theme -------------------------------------------------------------
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem('a2i-theme', theme);
+}
+applyTheme(localStorage.getItem('a2i-theme') ||
+  (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+$('theme-btn').addEventListener('click', () =>
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+
+// ---- Sidebar / conversations -------------------------------------------
+
+const sidebar = $('sidebar');
+$('menu-btn').addEventListener('click', () => sidebar.classList.toggle('open'));
+
+let chats = [];
+try { chats = JSON.parse(localStorage.getItem('a2i-chats') || '[]'); } catch { chats = []; }
+let currentId = null;
+let history = [{ role: 'system', content: SYSTEM_PROMPT }];
+
+const saveChats = () =>
+  localStorage.setItem('a2i-chats', JSON.stringify(chats.slice(0, 50)));
+
+function renderChatList() {
+  const list = $('chat-list');
+  list.innerHTML = '';
+  for (const chat of chats) {
+    const item = document.createElement('button');
+    item.className = 'chat-item' + (chat.id === currentId ? ' active' : '');
+    const title = document.createElement('span');
+    title.className = 't';
+    title.textContent = chat.title || 'ជជែក / Chat';
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = '✕';
+    del.title = 'Delete';
+    del.addEventListener('click', (e) => { e.stopPropagation(); deleteChat(chat.id); });
+    item.append(title, del);
+    item.addEventListener('click', () => openChat(chat.id));
+    list.appendChild(item);
+  }
+}
+
+function persistChat() {
+  if (history.filter((m) => m.role !== 'system').length === 0) return;
+  if (!currentId) {
+    currentId = Date.now().toString(36);
+    chats.unshift({ id: currentId, title: '', messages: [] });
+  }
+  const chat = chats.find((c) => c.id === currentId);
+  chat.messages = history;
+  chat.title = (history.find((m) => m.role === 'user')?.content || 'Chat').slice(0, 42);
+  chat.updated = Date.now();
+  saveChats();
+  renderChatList();
+}
+
+function newChat() {
+  currentId = null;
+  history = [{ role: 'system', content: SYSTEM_PROMPT }];
+  renderChat();
+  renderChatList();
+  input.focus();
+}
+$('new-chat').addEventListener('click', newChat);
+
+function openChat(id) {
+  const chat = chats.find((c) => c.id === id);
+  if (!chat) return;
+  currentId = id;
+  history = chat.messages;
+  renderChat();
+  renderChatList();
+  sidebar.classList.remove('open');
+}
+
+function deleteChat(id) {
+  chats = chats.filter((c) => c.id !== id);
+  saveChats();
+  if (currentId === id) newChat(); else renderChatList();
+}
+
+// ---- Markdown (safe, dependency-free) ----------------------------------
+
+const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+function renderMarkdown(src) {
+  const blocks = [];
+  src = src.replace(/```(\w*)\n?([\s\S]*?)(```|$)/g, (m, lang, code) => {
+    blocks.push(code);
+    return '\u0000' + (blocks.length - 1) + '\u0000';
+  });
+  let html = escapeHtml(src)
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/^#### (.*)$/gm, '<h4>$1</h4>')
+    .replace(/^### (.*)$/gm, '<h4>$1</h4>')
+    .replace(/^## (.*)$/gm, '<h3>$1</h3>')
+    .replace(/^# (.*)$/gm, '<h2>$1</h2>')
+    .replace(/^\s*[-*•] (.*)$/gm, '<li>$1</li>')
+    .replace(/^\s*\d+\. (.*)$/gm, '<li>$1</li>');
+  html = html.replace(/(?:<li>[\s\S]*?<\/li>\n?)+/g, (m) => '<ul>' + m + '</ul>');
+  html = '<p>' + html.replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+  return html.replace(/\u0000(\d+)\u0000/g,
+    (m, i) => `<pre><code>${escapeHtml(blocks[+i])}</code></pre>`);
+}
+
+// ---- Chat rendering ----------------------------------------------------
+
+function showWelcome() {
+  col.innerHTML = `
+    <div id="welcome">
+      <div class="logo-big">A2</div>
+      <h2>ជម្រាបសួរ! ខ្ញុំជា A2I</h2>
+      <p>AI ផ្ទាល់ខ្លួនរបស់អ្នក — រត់ក្នុងឧបករណ៍អ្នក គ្មាន API ខាងក្រៅ<br>
+         Your personal all-in-one AI — private, on your device</p>
+      <div class="chips"></div>
+    </div>`;
+  const chips = col.querySelector('.chips');
+  for (const text of [
+    'ប្រាប់ខ្ញុំអំពីប្រវត្តិអង្គរវត្ត',
+    'What is 127 × 49?',
+    'Write a short poem about Cambodia',
+    'តើ AI ដំណើរការយ៉ាងដូចម្តេច?',
+  ]) {
+    const chip = document.createElement('button');
+    chip.className = 'chip';
+    chip.textContent = text;
+    chip.addEventListener('click', () => { input.value = text; form.requestSubmit(); });
+    chips.appendChild(chip);
+  }
+}
+
+function addMsg(cls, text, label) {
+  const welcome = $('welcome');
+  if (welcome) welcome.remove();
+  const div = document.createElement('div');
+  if (cls === 'note') {
+    div.className = 'note';
+    div.textContent = text;
+    div.update = () => {};
+  } else if (cls === 'user') {
+    div.className = 'msg user';
+    div.textContent = text;
+    div.update = () => {};
+  } else {
+    div.className = 'msg ' + cls;
+    if (label) {
+      const l = document.createElement('div');
+      l.className = 'brain-label';
+      l.textContent = label;
+      div.appendChild(l);
+    }
+    const body = document.createElement('div');
+    body.className = 'md';
+    div.appendChild(body);
+    const copy = document.createElement('button');
+    copy.className = 'copy-btn';
+    copy.textContent = '⧉';
+    copy.title = 'Copy';
+    div.appendChild(copy);
+    let raw = text;
+    copy.addEventListener('click', () => {
+      navigator.clipboard?.writeText(raw);
+      copy.textContent = '✓';
+      setTimeout(() => { copy.textContent = '⧉'; }, 1200);
+    });
+    div.update = (t) => {
+      raw = t;
+      body.innerHTML = renderMarkdown(t);
+      log.scrollTop = log.scrollHeight;
+    };
+    div.update(text);
+  }
+  col.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+function renderChat() {
+  col.innerHTML = '';
+  const msgs = history.filter((m) => m.role !== 'system');
+  if (!msgs.length) { showWelcome(); regenBtn.style.display = 'none'; return; }
+  for (const m of msgs) {
+    if (m.role === 'user') addMsg('user', m.content);
+    else addMsg('ai', m.content, '🧠 A2I');
+  }
+  regenBtn.style.display =
+    msgs.at(-1)?.role === 'assistant' ? 'grid' : 'none';
+}
 
 // ---- Knowledge base (files in knowledge/, listed in knowledge/index.json) --
 
-const knowledgeChunks = []; // { source, text, terms: Map<term, count> }
+const knowledgeChunks = [];
 const docFreq = new Map();
 
 const tokenize = (text) => (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []);
@@ -132,14 +430,25 @@ function searchKnowledge(query, topK = 3) {
   if (!qTerms.size || !knowledgeChunks.length) return [];
   const idf = (t) => Math.log((1 + knowledgeChunks.length) / (1 + (docFreq.get(t) || 0))) + 1;
   const scored = knowledgeChunks.map((c) => {
-    let dot = 0;
-    for (const [t, q] of qTerms) if (c.terms.has(t)) dot += q * idf(t) * c.terms.get(t) * idf(t);
+    let dotp = 0;
+    for (const [t, q] of qTerms) if (c.terms.has(t)) dotp += q * idf(t) * c.terms.get(t) * idf(t);
     let norm = 0;
     for (const [t, n] of c.terms) norm += (n * idf(t)) ** 2;
-    return { c, score: norm ? dot / Math.sqrt(norm) : 0 };
+    return { c, score: norm ? dotp / Math.sqrt(norm) : 0 };
   });
   return scored.sort((a, b) => b.score - a.score).slice(0, topK)
     .filter((s) => s.score > 0).map((s) => s.c);
+}
+
+async function loadKnowledge() {
+  try {
+    const files = await (await fetch('knowledge/index.json')).json();
+    for (const name of files) {
+      try {
+        addKnowledgeDoc(name, await (await fetch('knowledge/' + name)).text());
+      } catch { /* skip unreadable file */ }
+    }
+  } catch { /* no knowledge folder — fine */ }
 }
 
 // ---- Wikipedia grounding (idea from vane's search researcher) ----------
@@ -167,15 +476,13 @@ async function searchWikipedia(query) {
           });
         }
       }
-      if (results.length) break; // prefer the first language that has results
+      if (results.length) break;
     } catch { /* offline or blocked — answer without Wikipedia */ }
   }
   return results.slice(0, 2);
 }
 
 // ---- Calculator tool (idea from ai-sdk tools) ---------------------------
-// Small local models are unreliable at arithmetic; compute exact results
-// for them and pass the result as context.
 
 function calculate(query) {
   const match = query.match(/[-+]?[\d.,]+(?:\s*[-+*/×÷^]\s*[-+]?[\d.,()]+)+/);
@@ -192,9 +499,6 @@ function calculate(query) {
   }
 }
 
-// Returns a copy of `messages` with retrieved context (local knowledge,
-// Wikipedia extracts, exact calculator results) injected into the system
-// prompt, based on the latest user message.
 async function withKnowledge(messages) {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   if (!lastUser) return messages;
@@ -215,25 +519,10 @@ async function withKnowledge(messages) {
   ];
 }
 
-async function loadKnowledge() {
-  try {
-    const files = await (await fetch('knowledge/index.json')).json();
-    for (const name of files) {
-      try {
-        addKnowledgeDoc(name, await (await fetch('knowledge/' + name)).text());
-      } catch { /* skip unreadable file */ }
-    }
-    if (knowledgeChunks.length) {
-      addMsg('note',
-        `📚 ${knowledgeChunks.length} knowledge chunks loaded — ` +
-        'A2I ឆ្លើយដោយផ្អែកលើឯកសារក្នុង knowledge/ ផងដែរ');
-    }
-  } catch { /* no knowledge folder — fine */ }
-}
+// ---- Brains ------------------------------------------------------------
 
 let webllmEngine = null, loadedModel = null;
-
-// ---- Brains -----------------------------------------------------------
+let currentAbort = null;
 
 function loadServerBrains() {
   try {
@@ -245,6 +534,12 @@ function loadServerBrains() {
 let serverBrains = loadServerBrains();
 const saveBrains = () => localStorage.setItem('a2i-brains', JSON.stringify(serverBrains));
 
+function brainStatusLabel(brain) {
+  if (brain.online === true) return ' ✅';
+  if (brain.online === false) return ' (offline ❌)';
+  return '';
+}
+
 function rebuildEngineSelect(selected) {
   engineSel.innerHTML = '';
   const add = (value, label) => {
@@ -253,11 +548,27 @@ function rebuildEngineSelect(selected) {
     engineSel.appendChild(o);
   };
   add('browser', '🧠 In-browser AI (no server, no API)');
-  serverBrains.forEach((b, i) => add('server:' + i, '🖥️ ' + b.name));
+  serverBrains.forEach((b, i) => add('server:' + i, '🖥️ ' + b.name + brainStatusLabel(b)));
   add('all', '🧩 All brains together / ខួរក្បាលទាំងអស់រួមគ្នា');
   add('add', '➕ Add brain (Ollama, LM Studio, any URL)…');
   engineSel.value = selected || 'browser';
 }
+
+async function checkBrains() {
+  await Promise.all(serverBrains.map(async (brain) => {
+    try {
+      const res = await fetch(brain.url + '/v1/models',
+        { signal: AbortSignal.timeout(2500) });
+      brain.online = res.ok;
+    } catch {
+      brain.online = false;
+    }
+  }));
+  const current = engineSel.value;
+  if (current !== 'add') rebuildEngineSelect(current);
+  refreshBar();
+}
+setInterval(checkBrains, 30000);
 
 engineSel.addEventListener('change', () => {
   if (engineSel.value === 'add') {
@@ -267,6 +578,7 @@ engineSel.addEventListener('change', () => {
       serverBrains.push({ name: name.trim(), url: url.trim().replace(/\/+$/, '') });
       saveBrains();
       rebuildEngineSelect('server:' + (serverBrains.length - 1));
+      checkBrains();
     } else {
       rebuildEngineSelect('browser');
     }
@@ -281,7 +593,12 @@ function currentServerBrain() {
 
 serverUrl.addEventListener('change', () => {
   const brain = currentServerBrain();
-  if (brain) { brain.url = serverUrl.value.trim().replace(/\/+$/, ''); saveBrains(); }
+  if (brain) {
+    brain.url = serverUrl.value.trim().replace(/\/+$/, '');
+    brain.online = undefined;
+    saveBrains();
+    checkBrains();
+  }
 });
 modelSel.addEventListener('change', () => { loadedModel = null; refreshBar(); });
 
@@ -302,30 +619,17 @@ function refreshBar() {
   }
 }
 
+// When a model is loading, `loadingReporter` (set by the send flow) mirrors
+// progress into the visible chat bubble so it never looks frozen.
+let loadingReporter = null;
+
 function setStatus(text, ready = false) {
   statusEl.textContent = text;
   dot.classList.toggle('ready', ready);
+  if (loadingReporter) loadingReporter(text);
 }
 
-function addMsg(cls, text, label) {
-  const div = document.createElement('div');
-  div.className = cls === 'note' ? 'note' : 'msg ' + cls;
-  if (label) {
-    const l = document.createElement('div');
-    l.className = 'brain-label';
-    l.textContent = label;
-    div.appendChild(l);
-  }
-  const body = document.createElement('span');
-  body.textContent = text;
-  div.appendChild(body);
-  div.update = (t) => { body.textContent = t; log.scrollTop = log.scrollHeight; };
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-  return div;
-}
-
-// ---- In-browser brain -------------------------------------------------
+// ---- In-browser brain --------------------------------------------------
 
 async function loadWebLLM() {
   const sources = [
@@ -342,8 +646,6 @@ async function loadWebLLM() {
     '(Could not load the AI library.) ' + lastError.message);
 }
 
-// CPU fallback model (GGUF) for devices without WebGPU. Users can override
-// it by setting localStorage 'a2i-cpu-model-url' to any GGUF URL.
 const CPU_MODEL_URL =
   'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
 const CPU_MODEL_NAME = 'Qwen2.5 0.5B (CPU)';
@@ -356,18 +658,21 @@ async function loadGpuEngine(model) {
   const engine = await webllm.CreateMLCEngine(model, {
     initProgressCallback: (p) => {
       progress.value = p.progress || 0;
-      setStatus(p.text.slice(0, 60));
+      const pct = Math.round((p.progress || 0) * 100);
+      setStatus(`⬇ ទាញ AI model ${pct}% (ម្តងគត់) · downloading ${pct}% (one-time)`);
     },
   });
   progress.hidden = true;
   return {
     kind: 'gpu',
-    async ask(messages, onDelta, maxTokens = 1024) {
+    stop: () => engine.interruptGenerate?.(),
+    async ask(messages, onDelta, signal, maxTokens = 1024) {
       const chunks = await engine.chat.completions.create({
         messages, stream: true, max_tokens: maxTokens,
       });
       let answer = '';
       for await (const chunk of chunks) {
+        if (signal?.aborted) { this.stop(); break; }
         answer += chunk.choices?.[0]?.delta?.content || '';
         onDelta(answer);
       }
@@ -387,19 +692,22 @@ async function loadCpuEngine() {
     n_ctx: 2048,
     progressCallback: ({ loaded, total }) => {
       progress.value = total ? loaded / total : 0;
-      setStatus(`CPU mode — downloading model ${Math.round(100 * (loaded / (total || 1)))}%`);
+      const pct = Math.round(100 * (loaded / (total || 1)));
+      const mb = Math.round(loaded / 1048576);
+      setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
     },
   });
   progress.hidden = true;
   return {
     kind: 'cpu',
-    ask(messages, onDelta, maxTokens = 1024) {
+    stop: () => {},
+    ask(messages, onDelta, signal, maxTokens = 1024) {
       return new Promise((resolve, reject) => {
         let answer = '';
         wllama.createChatCompletion({
           messages,
           stream: true,
-          // CPU inference is slower, keep answers shorter to stay responsive
+          abortSignal: signal,
           max_tokens: Math.min(maxTokens, 300),
           onData: (chunk) => {
             const delta =
@@ -408,7 +716,8 @@ async function loadCpuEngine() {
             else answer += delta;
             onDelta(answer);
           },
-        }).then(() => resolve(answer), reject);
+        }).then(() => resolve(answer),
+          (err) => signal?.aborted ? resolve(answer) : reject(err));
       });
     },
   };
@@ -417,37 +726,48 @@ async function loadCpuEngine() {
 async function ensureBrowserEngine() {
   const model = navigator.gpu ? modelSel.value : CPU_MODEL_NAME;
   if (webllmEngine && loadedModel === model) return webllmEngine;
-  try {
-    webllmEngine = navigator.gpu
-      ? await loadGpuEngine(model)
-      : await loadCpuEngine();
-  } catch (err) {
-    progress.hidden = true;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      webllmEngine = navigator.gpu
+        ? await loadGpuEngine(model)
+        : await loadCpuEngine();
+      lastError = null;
+      break;
+    } catch (err) {
+      lastError = err;
+      progress.hidden = true;
+      if (attempt < 2) setStatus('ការទាញបរាជ័យ — ព្យាយាមម្តងទៀត / retrying…');
+    }
+  }
+  if (lastError) {
     throw new Error(
-      'ការទាញ model បរាជ័យ — សូមព្យាយាមម្តងទៀត ឬពិនិត្យអ៊ីនធឺណិត។ ' +
-      '(Model load failed.) ' + err.message);
+      'ការទាញ model បរាជ័យ (ព្យាយាម ២ ដងហើយ) — សូមពិនិត្យអ៊ីនធឺណិត រួចផ្ញើសារម្តងទៀត។ ' +
+      '(Model load failed after 2 attempts.) ' + lastError.message);
   }
   loadedModel = model;
   setStatus(`ready: ${model}` + (webllmEngine.kind === 'cpu' ? ' — CPU mode, slower' : ''), true);
   return webllmEngine;
 }
 
-async function askBrowser(messages, onDelta) {
+async function askBrowser(messages, onDelta, signal) {
   const engine = await ensureBrowserEngine();
-  return engine.ask(messages, onDelta);
+  return engine.ask(messages, onDelta, signal);
 }
 
-// ---- Server brains ----------------------------------------------------
+// ---- Server brains -----------------------------------------------------
 
-async function askServer(brain, messages, onDelta) {
+async function askServer(brain, messages, onDelta, signal) {
   let res;
   try {
     res = await fetch(brain.url + '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages, stream: true, max_tokens: 1024 }),
+      signal,
     });
-  } catch {
+  } catch (err) {
+    if (signal?.aborted) return '';
     throw new Error(
       `មិនអាចភ្ជាប់ទៅ ${brain.name} (${brain.url}) បានទេ — server ត្រូវតែកំពុងរត់។ ` +
       `(Could not reach ${brain.name}.)`);
@@ -456,44 +776,48 @@ async function askServer(brain, messages, onDelta) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let answer = '', buffer = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-    for (const line of lines) {
-      if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
-      const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content;
-      if (delta) { answer += delta; onDelta(answer); }
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+        const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content;
+        if (delta) { answer += delta; onDelta(answer); }
+      }
     }
+  } catch (err) {
+    if (!signal?.aborted) throw err;
   }
   return answer;
 }
 
-// ---- All brains together ----------------------------------------------
+// ---- All brains together -----------------------------------------------
 
-async function askAllBrains(question, messages) {
+async function askAllBrains(question, messages, signal) {
   const results = [];
-  const tasks = serverBrains.map((brain) => {
+  const liveBrains = serverBrains.filter((b) => b.online !== false);
+  const tasks = liveBrains.map((brain) => {
     const div = addMsg('ai', '…', '🖥️ ' + brain.name);
-    return askServer(brain, messages, (t) => div.update(t))
+    return askServer(brain, messages, (t) => div.update(t), signal)
       .then((answer) => results.push({ name: brain.name, answer, brain }))
       .catch((err) => div.update('⚠ ' + err.message));
   });
   if (loadedModel && webllmEngine) {
     const div = addMsg('ai', '…', '🧠 ' + loadedModel);
     tasks.push(
-      askBrowser(messages, (t) => div.update(t))
+      askBrowser(messages, (t) => div.update(t), signal)
         .then((answer) => results.push({ name: 'In-browser ' + loadedModel, answer, brain: null }))
         .catch((err) => div.update('⚠ ' + err.message)));
   }
   await Promise.allSettled(tasks);
 
   if (results.length === 0) {
-    throw new Error(
-      'គ្មានខួរក្បាលណាឆ្លើយបានទេ — សូមបើក A2I Core ឬផ្ទុក model ក្នុង browser សិន។ ' +
-      '(No brain answered — start A2I Core or load the in-browser model first.)');
+    const div = addMsg('ai', '…', '🧠 In-browser AI');
+    return askBrowser(messages, (t) => div.update(t), signal);
   }
   if (results.length === 1) return results[0].answer;
 
@@ -511,49 +835,119 @@ async function askAllBrains(question, messages) {
   const div = addMsg('ai combined', '…', '🧩 A2I combined / ចម្លើយរួម');
   const serverResult = results.find((r) => r.brain);
   const combined = webllmEngine && loadedModel
-    ? await askBrowser(combineMessages, (t) => div.update(t))
-    : await askServer(serverResult.brain, combineMessages, (t) => div.update(t));
+    ? await askBrowser(combineMessages, (t) => div.update(t), signal)
+    : await askServer(serverResult.brain, combineMessages, (t) => div.update(t), signal);
   return combined;
 }
 
 // ---- Send flow ---------------------------------------------------------
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  send.disabled = true;
-  addMsg('user', text);
-  history.push({ role: 'user', content: text });
-  const mode = engineSel.value;
+function setGenerating(on) {
+  send.style.display = on ? 'none' : 'grid';
+  stopBtn.style.display = on ? 'grid' : 'none';
+  regenBtn.style.display = !on &&
+    history.at(-1)?.role === 'assistant' ? 'grid' : 'none';
+  input.disabled = on;
+}
+
+stopBtn.addEventListener('click', () => {
+  currentAbort?.abort();
+  webllmEngine?.stop?.();
+});
+
+async function generate() {
+  const question = [...history].reverse().find((m) => m.role === 'user')?.content || '';
+  let mode = engineSel.value;
+  setGenerating(true);
+  currentAbort = new AbortController();
+  const signal = currentAbort.signal;
   const messages = await withKnowledge(history);
+
+  const chosenBrain = currentServerBrain();
+  if (chosenBrain && chosenBrain.online === false) {
+    addMsg('note',
+      `🖥️ ${chosenBrain.name} មិន online ទេ — ប្តូរទៅ 🧠 In-browser AI ដោយស្វ័យប្រវត្តិ ` +
+      `(${chosenBrain.name} is offline — switching to the in-browser AI)`);
+    mode = 'browser';
+    rebuildEngineSelect('browser');
+    refreshBar();
+  }
+
   try {
     let answer;
     if (mode === 'all') {
-      answer = await askAllBrains(text, messages);
+      answer = await askAllBrains(question, messages, signal);
     } else if (mode === 'browser') {
       const aiDiv = addMsg('ai', '…', '🧠 In-browser AI');
-      answer = await askBrowser(messages, (t) => aiDiv.update(t));
+      // Until the engine is ready, mirror download progress into the bubble.
+      if (!(webllmEngine && loadedModel)) {
+        aiDiv.update('⬇ កំពុងរៀបចំ AI ជាលើកដំបូង… (setting up the AI for the first time — this downloads a model once, then works instantly)');
+        loadingReporter = (t) => aiDiv.update(t);
+      }
+      try {
+        answer = await askBrowser(messages, (t) => aiDiv.update(t), signal);
+      } finally {
+        loadingReporter = null;
+      }
     } else {
       const brain = currentServerBrain();
       const aiDiv = addMsg('ai', '…', '🖥️ ' + (brain?.name || 'server'));
-      answer = await askServer(brain, messages, (t) => aiDiv.update(t));
+      answer = await askServer(brain, messages, (t) => aiDiv.update(t), signal);
     }
-    history.push({ role: 'assistant', content: answer });
+    if (answer) {
+      history.push({ role: 'assistant', content: answer });
+      persistChat();
+    }
   } catch (err) {
     addMsg('ai', '⚠ ' + err.message);
-    history.pop();
   } finally {
-    send.disabled = false;
+    currentAbort = null;
+    setGenerating(false);
     input.focus();
     refreshBar();
   }
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text || currentAbort) return;
+  input.value = '';
+  input.style.height = 'auto';
+  addMsg('user', text);
+  history.push({ role: 'user', content: text });
+  persistChat();
+  await generate();
 });
+
+regenBtn.addEventListener('click', async () => {
+  if (currentAbort) return;
+  if (history.at(-1)?.role !== 'assistant') return;
+  history.pop();
+  renderChat();
+  await generate();
+});
+
+// textarea: Enter sends, Shift+Enter = new line, auto-grow
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    form.requestSubmit();
+  }
+});
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+});
+
+// ---- Init --------------------------------------------------------------
 
 rebuildEngineSelect('browser');
 refreshBar();
+renderChat();
+renderChatList();
 loadKnowledge();
+checkBrains();
 </script>
 </body>
 </html>
