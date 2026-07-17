@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A2I — ការពិនិត្យ / Self-check</title>
+<style>
+  body { font-family: system-ui, "Noto Sans Khmer", sans-serif; max-width: 780px;
+    margin: 0 auto; padding: 1.2rem; background: #0f1117; color: #e8eaf0; line-height: 1.5; }
+  h1 { font-size: 1.2rem; }
+  .row { display: flex; gap: .6rem; padding: .55rem 0; border-bottom: 1px solid #2a2d38; align-items: flex-start; }
+  .ic { flex-shrink: 0; width: 1.4rem; font-size: 1.1rem; }
+  .name { font-weight: 600; }
+  .detail { color: #9aa0b0; font-size: .85rem; word-break: break-word; }
+  .run { color: #f0b429; } .ok { color: #3ecf8e; } .bad { color: #ff6b6b; }
+  #summary { margin: 1rem 0; padding: 1rem; border-radius: 12px; background: #1a1d27; font-size: .95rem; }
+  button { background: #6c8cff; color: #fff; border: 0; border-radius: 10px;
+    padding: .6rem 1.2rem; font-size: 1rem; cursor: pointer; margin-top: 1rem; }
+  code { background: #1a1d27; padding: .1em .4em; border-radius: 5px; font-size: .85em; }
+  a { color: #6c8cff; }
+</style>
+</head>
+<body>
+<h1>🩺 A2I — ការពិនិត្យឧបករណ៍ / Device self-check</h1>
+<p class="detail">Page នេះពិនិត្យថាហេតុអ្វី A2I មិនដំណើរការលើឧបករណ៍អ្នក។ សូមរង់ចាំឱ្យចប់
+រួចថតរូប (screenshot) ផ្ញើមក។ · This checks why A2I may not work on your device.
+Wait for it to finish, then screenshot the results.</p>
+<div id="list"></div>
+<div id="summary">កំពុងពិនិត្យ… / Running checks…</div>
+<button id="copy">📋 Copy results</button>
+
+<script type="module">
+const list = document.getElementById('list');
+const lines = [];
+function row(name) {
+  const el = document.createElement('div');
+  el.className = 'row';
+  el.innerHTML = `<div class="ic run">⏳</div><div><div class="name"></div><div class="detail"></div></div>`;
+  el.querySelector('.name').textContent = name;
+  list.appendChild(el);
+  return {
+    set(state, detail) {
+      const ic = el.querySelector('.ic');
+      ic.textContent = state === 'ok' ? '✅' : state === 'bad' ? '❌' : state === 'warn' ? '⚠️' : '⏳';
+      ic.className = 'ic ' + (state === 'ok' ? 'ok' : state === 'bad' ? 'bad' : 'run');
+      el.querySelector('.detail').textContent = detail || '';
+      lines.push(`${ic.textContent} ${name}: ${detail || ''}`);
+    },
+  };
+}
+
+const MODEL_URL =
+  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
+
+let bad = 0, warn = 0;
+const mark = (r, state, detail) => { if (state === 'bad') bad++; if (state === 'warn') warn++; r.set(state, detail); };
+
+// 1. Environment
+(() => {
+  const r = row('1. Browser & device');
+  const dm = navigator.deviceMemory ? navigator.deviceMemory + 'GB RAM' : 'RAM unknown';
+  const cores = navigator.hardwareConcurrency || '?';
+  const mobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'MOBILE' : 'desktop';
+  mark(r, navigator.deviceMemory && navigator.deviceMemory < 2 ? 'warn' : 'ok',
+    `${mobile}, ${cores} cores, ${dm} — ${navigator.userAgent.slice(0, 80)}`);
+})();
+
+// 2. Secure context / crossOriginIsolated
+(() => {
+  const r = row('2. Secure context & isolation');
+  mark(r, window.isSecureContext ? 'ok' : 'bad',
+    `secureContext=${window.isSecureContext}, crossOriginIsolated=${window.crossOriginIsolated}`);
+})();
+
+// 3. WebGPU
+await (async () => {
+  const r = row('3. WebGPU (fast path)');
+  if (!navigator.gpu) { mark(r, 'warn', 'navigator.gpu absent — will use CPU mode (slower but works)'); return; }
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) { mark(r, 'warn', 'adapter null — will use CPU mode'); return; }
+    const dev = await adapter.requestDevice();
+    mark(r, 'ok', 'WebGPU works (device created) — fast path available');
+    dev.destroy?.();
+  } catch (e) {
+    mark(r, 'warn', 'GPU device FAILED (' + e.message.slice(0, 70) + ') — CPU fallback will be used');
+  }
+})();
+
+// 4. Same-origin app assets
+for (const [label, path, type] of [
+  ['wllama JS', 'vendor/wllama/index.js', 'text'],
+  ['wllama WASM', 'vendor/wllama/wllama.wasm', 'bin'],
+  ['WebLLM JS', 'vendor/web-llm.mjs', 'text'],
+]) {
+  const r = row('4. App asset: ' + label);
+  try {
+    const res = await fetch(path, { method: 'GET', headers: { Range: 'bytes=0-1023' } });
+    mark(r, res.ok ? 'ok' : 'bad', `HTTP ${res.status}, type ${res.headers.get('content-type')}`);
+  } catch (e) { mark(r, 'bad', e.message.slice(0, 90)); }
+}
+
+// 5. Storage quota
+await (async () => {
+  const r = row('5. Storage for the model');
+  try {
+    const est = await navigator.storage.estimate();
+    const quotaMB = Math.round((est.quota || 0) / 1048576);
+    const usedMB = Math.round((est.usage || 0) / 1048576);
+    mark(r, quotaMB < 600 ? 'warn' : 'ok',
+      `quota ~${quotaMB}MB, used ~${usedMB}MB (model needs ~470MB free)`);
+  } catch (e) { mark(r, 'warn', 'storage.estimate unavailable: ' + e.message.slice(0, 60)); }
+})();
+
+// 6. THE KEY TEST — can THIS device download the model from HuggingFace?
+await (async () => {
+  const r = row('6. Model download from HuggingFace (THE key test)');
+  r.set('run', 'downloading first 3MB to measure your connection…');
+  try {
+    const t0 = performance.now();
+    const res = await fetch(MODEL_URL, { headers: { Range: 'bytes=0-3145727' } });
+    if (!res.ok && res.status !== 206) { mark(r, 'bad', `HTTP ${res.status} — model host blocked or unreachable`); return; }
+    const buf = await res.arrayBuffer();
+    const secs = (performance.now() - t0) / 1000;
+    const mbps = (buf.byteLength / 1048576) / secs;
+    const total = 470;
+    const eta = Math.round(total / mbps);
+    mark(r, mbps < 0.3 ? 'warn' : 'ok',
+      `got ${(buf.byteLength / 1048576).toFixed(1)}MB in ${secs.toFixed(1)}s = ${mbps.toFixed(2)} MB/s → ` +
+      `full model (~${total}MB) ≈ ${eta}s (${Math.round(eta / 60)} min)`);
+  } catch (e) {
+    mark(r, 'bad', 'DOWNLOAD FAILED: ' + e.message.slice(0, 90) +
+      ' — network blocks HuggingFace, or offline');
+  }
+})();
+
+// 7. Can we actually instantiate the CPU engine (WASM + worker)?
+await (async () => {
+  const r = row('7. CPU engine (WASM) starts');
+  try {
+    const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
+    new Wllama({ default: new URL('vendor/wllama/wllama.wasm', location.href).href });
+    mark(r, 'ok', 'wllama module + WASM initialise fine');
+  } catch (e) { mark(r, 'bad', 'wllama init failed: ' + e.message.slice(0, 90)); }
+})();
+
+// Summary
+const s = document.getElementById('summary');
+if (bad > 0) {
+  s.innerHTML = `<b class="bad">❌ រកឃើញបញ្ហា ${bad} — នេះជាមូលហេតុ A2I មិនដំណើរការ។</b><br>` +
+    `សូមថតរូបលទ្ធផលទាំងអស់ ផ្ញើមក ខ្ញុំនឹងដោះស្រាយឱ្យត្រង់ចំណុច។ (Found ${bad} blocking problem(s) — screenshot this and send it.)`;
+} else if (warn > 0) {
+  s.innerHTML = `<b class="ok">✅ គ្មានបញ្ហាបិទផ្លូវ។</b> មាន ${warn} ចំណុចយឺត (ដូចជា CPU mode ឬ net យឺត)។ ` +
+    `A2I គួរដំណើរការ ប៉ុន្តែការទាញ model លើកដំបូងអាចយូរ — សូមរង់ចាំ progress bar ឱ្យចប់។`;
+} else {
+  s.innerHTML = `<b class="ok">✅ គ្រប់យ៉ាងល្អ!</b> A2I គួរដំណើរការពេញលេញ។ ត្រឡប់ទៅ ` +
+    `<a href="./">ទំព័រ A2I</a> ផ្ញើសារ។`;
+}
+
+document.getElementById('copy').addEventListener('click', () => {
+  navigator.clipboard?.writeText(lines.join('\n'));
+  document.getElementById('copy').textContent = '✓ Copied';
+});
+</script>
+</body>
+</html>
