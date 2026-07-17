@@ -251,6 +251,8 @@ async function repairModelCache() {
       }
     }
   } catch { /* ignore */ }
+  // Give the GPU another chance after a manual repair.
+  localStorage.removeItem('a2i-gpu-broken');
   location.reload();
 }
 $('repair-btn').addEventListener('click', repairModelCache);
@@ -772,15 +774,19 @@ async function loadCpuEngine() {
   const wllama = new Wllama(
     { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
   const url = localStorage.getItem('a2i-cpu-model-url') || CPU_MODEL_URL;
+  // Use all CPU cores (SharedArrayBuffer multi-threading is enabled by our
+  // COOP/COEP headers) for markedly faster generation.
+  const threads = Math.max(2, Math.min(navigator.hardwareConcurrency || 4, 8));
   progress.hidden = false;
   const watch = stallGuard(60000);
   await Promise.race([
     watch.signal,
     wllama.loadModelFromUrl(url, {
-      // Generous window (KV cache for a 0.5B model is tiny) so the trimmed
-      // prompt — including Khmer, which uses more tokens per character —
-      // always fits with room for the answer.
-      n_ctx: 8192,
+      // 4096 is plenty once prompts are trimmed — smaller KV cache means
+      // faster prefill and less RAM than a larger window.
+      n_ctx: 4096,
+      n_threads: threads,
+      n_batch: 256,
       // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
       // which would hit the same broken GPU we are falling back FROM.
       n_gpu_layers: 0,
@@ -826,8 +832,10 @@ async function ensureBrowserEngine() {
   // 1. Try the GPU engine when a WebGPU adapter is advertised. The adapter
   //    can exist yet fail at device creation (e.g. DXGI_ERROR_DEVICE_REMOVED
   //    on a weak/broken Windows GPU), so a failure here must NOT be fatal —
-  //    we fall through to the CPU engine.
-  if (navigator.gpu) {
+  //    we fall through to the CPU engine. Once GPU has failed on this device
+  //    we remember it and skip straight to CPU on later loads (faster start).
+  const gpuBroken = localStorage.getItem('a2i-gpu-broken') === '1';
+  if (navigator.gpu && !gpuBroken) {
     try {
       webllmEngine = await loadGpuEngine(modelSel.value);
       loadedModel = modelSel.value;
@@ -836,6 +844,7 @@ async function ensureBrowserEngine() {
     } catch (err) {
       progress.hidden = true;
       errors.push('GPU: ' + err.message);
+      localStorage.setItem('a2i-gpu-broken', '1');
       setStatus('GPU មិនដំណើរការ — ប្តូរទៅ CPU ស្វ័យប្រវត្តិ / GPU failed, switching to CPU…');
     }
   }
