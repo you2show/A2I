@@ -619,9 +619,14 @@ function refreshBar() {
   }
 }
 
+// When a model is loading, `loadingReporter` (set by the send flow) mirrors
+// progress into the visible chat bubble so it never looks frozen.
+let loadingReporter = null;
+
 function setStatus(text, ready = false) {
   statusEl.textContent = text;
   dot.classList.toggle('ready', ready);
+  if (loadingReporter) loadingReporter(text);
 }
 
 // ---- In-browser brain --------------------------------------------------
@@ -653,7 +658,8 @@ async function loadGpuEngine(model) {
   const engine = await webllm.CreateMLCEngine(model, {
     initProgressCallback: (p) => {
       progress.value = p.progress || 0;
-      setStatus(p.text.slice(0, 60));
+      const pct = Math.round((p.progress || 0) * 100);
+      setStatus(`⬇ ទាញ AI model ${pct}% (ម្តងគត់) · downloading ${pct}% (one-time)`);
     },
   });
   progress.hidden = true;
@@ -686,7 +692,9 @@ async function loadCpuEngine() {
     n_ctx: 2048,
     progressCallback: ({ loaded, total }) => {
       progress.value = total ? loaded / total : 0;
-      setStatus(`CPU mode — downloading model ${Math.round(100 * (loaded / (total || 1)))}%`);
+      const pct = Math.round(100 * (loaded / (total || 1)));
+      const mb = Math.round(loaded / 1048576);
+      setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
     },
   });
   progress.hidden = true;
@@ -871,7 +879,16 @@ async function generate() {
       answer = await askAllBrains(question, messages, signal);
     } else if (mode === 'browser') {
       const aiDiv = addMsg('ai', '…', '🧠 In-browser AI');
-      answer = await askBrowser(messages, (t) => aiDiv.update(t), signal);
+      // Until the engine is ready, mirror download progress into the bubble.
+      if (!(webllmEngine && loadedModel)) {
+        aiDiv.update('⬇ កំពុងរៀបចំ AI ជាលើកដំបូង… (setting up the AI for the first time — this downloads a model once, then works instantly)');
+        loadingReporter = (t) => aiDiv.update(t);
+      }
+      try {
+        answer = await askBrowser(messages, (t) => aiDiv.update(t), signal);
+      } finally {
+        loadingReporter = null;
+      }
     } else {
       const brain = currentServerBrain();
       const aiDiv = addMsg('ai', '…', '🖥️ ' + (brain?.name || 'server'));
