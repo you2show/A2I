@@ -499,24 +499,49 @@ function calculate(query) {
   }
 }
 
+// Rough char budgets so the whole prompt stays within a small local model's
+// context window (CPU engine uses n_ctx 4096; ~1 token ≈ 2.5 chars for mixed
+// Khmer/English, so keep the prompt well under that).
+const CONTEXT_CHAR_BUDGET = 1500; // injected knowledge + Wikipedia
+const HISTORY_CHAR_BUDGET = 4000; // conversation turns
+
+// Keep the system message plus the most recent turns that fit the budget.
+function fitHistory(systemMsg, turns) {
+  const kept = [];
+  let used = 0;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const len = turns[i].content.length + 8;
+    if (used + len > HISTORY_CHAR_BUDGET && kept.length) break;
+    kept.unshift(turns[i]);
+    used += len;
+  }
+  return [systemMsg, ...kept];
+}
+
 async function withKnowledge(messages) {
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-  if (!lastUser) return messages;
-  const parts = [];
-  const calc = calculate(lastUser.content);
-  if (calc) parts.push('[Calculator — exact result, trust this]\n' + calc);
-  for (const h of searchKnowledge(lastUser.content)) {
-    parts.push(`[${h.source}]\n${h.text}`);
+  const turns = messages.filter((m) => m.role !== 'system');
+  const lastUser = [...turns].reverse().find((m) => m.role === 'user');
+  let systemContent = SYSTEM_PROMPT;
+
+  if (lastUser) {
+    const parts = [];
+    const calc = calculate(lastUser.content);
+    if (calc) parts.push('[Calculator — exact result, trust this]\n' + calc);
+    for (const h of searchKnowledge(lastUser.content)) parts.push(`[${h.source}]\n${h.text}`);
+    for (const w of await searchWikipedia(lastUser.content)) parts.push(`[${w.source}]\n${w.text}`);
+
+    // Cap total injected context so it cannot overflow the context window.
+    let ctx = '', used = 0;
+    for (const p of parts) {
+      if (used >= CONTEXT_CHAR_BUDGET) break;
+      const piece = p.slice(0, CONTEXT_CHAR_BUDGET - used);
+      ctx += (ctx ? '\n\n' : '') + piece;
+      used += piece.length;
+    }
+    if (ctx) systemContent = SYSTEM_PROMPT + '\n\nContext documents:\n' + ctx;
   }
-  for (const w of await searchWikipedia(lastUser.content)) {
-    parts.push(`[${w.source}]\n${w.text}`);
-  }
-  if (!parts.length) return messages;
-  return [
-    { role: 'system',
-      content: SYSTEM_PROMPT + '\n\nContext documents:\n' + parts.join('\n\n') },
-    ...messages.filter((m) => m.role !== 'system'),
-  ];
+
+  return fitHistory({ role: 'system', content: systemContent }, turns);
 }
 
 // ---- Brains ------------------------------------------------------------
@@ -691,7 +716,10 @@ async function loadCpuEngine() {
   const url = localStorage.getItem('a2i-cpu-model-url') || CPU_MODEL_URL;
   progress.hidden = false;
   await wllama.loadModelFromUrl(url, {
-    n_ctx: 2048,
+    // Generous window (KV cache for a 0.5B model is tiny) so the trimmed
+    // prompt — including Khmer, which uses more tokens per character —
+    // always fits with room for the answer.
+    n_ctx: 8192,
     // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
     // which would hit the same broken GPU we are falling back FROM.
     n_gpu_layers: 0,
