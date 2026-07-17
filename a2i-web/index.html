@@ -245,6 +245,12 @@ function loadServerBrains() {
 let serverBrains = loadServerBrains();
 const saveBrains = () => localStorage.setItem('a2i-brains', JSON.stringify(serverBrains));
 
+function brainStatusLabel(brain) {
+  if (brain.online === true) return ' ✅';
+  if (brain.online === false) return ' (offline ❌)';
+  return '';
+}
+
 function rebuildEngineSelect(selected) {
   engineSel.innerHTML = '';
   const add = (value, label) => {
@@ -253,11 +259,29 @@ function rebuildEngineSelect(selected) {
     engineSel.appendChild(o);
   };
   add('browser', '🧠 In-browser AI (no server, no API)');
-  serverBrains.forEach((b, i) => add('server:' + i, '🖥️ ' + b.name));
+  serverBrains.forEach((b, i) => add('server:' + i, '🖥️ ' + b.name + brainStatusLabel(b)));
   add('all', '🧩 All brains together / ខួរក្បាលទាំងអស់រួមគ្នា');
   add('add', '➕ Add brain (Ollama, LM Studio, any URL)…');
   engineSel.value = selected || 'browser';
 }
+
+// Ping every server brain so the UI can show online/offline status and the
+// send flow can avoid brains that are down.
+async function checkBrains() {
+  await Promise.all(serverBrains.map(async (brain) => {
+    try {
+      const res = await fetch(brain.url + '/v1/models',
+        { signal: AbortSignal.timeout(2500) });
+      brain.online = res.ok;
+    } catch {
+      brain.online = false;
+    }
+  }));
+  const current = engineSel.value;
+  if (current !== 'add') rebuildEngineSelect(current);
+  refreshBar();
+}
+setInterval(checkBrains, 30000);
 
 engineSel.addEventListener('change', () => {
   if (engineSel.value === 'add') {
@@ -417,15 +441,24 @@ async function loadCpuEngine() {
 async function ensureBrowserEngine() {
   const model = navigator.gpu ? modelSel.value : CPU_MODEL_NAME;
   if (webllmEngine && loadedModel === model) return webllmEngine;
-  try {
-    webllmEngine = navigator.gpu
-      ? await loadGpuEngine(model)
-      : await loadCpuEngine();
-  } catch (err) {
-    progress.hidden = true;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      webllmEngine = navigator.gpu
+        ? await loadGpuEngine(model)
+        : await loadCpuEngine();
+      lastError = null;
+      break;
+    } catch (err) {
+      lastError = err;
+      progress.hidden = true;
+      if (attempt < 2) setStatus('ការទាញបរាជ័យ — ព្យាយាមម្តងទៀត / retrying…');
+    }
+  }
+  if (lastError) {
     throw new Error(
-      'ការទាញ model បរាជ័យ — សូមព្យាយាមម្តងទៀត ឬពិនិត្យអ៊ីនធឺណិត។ ' +
-      '(Model load failed.) ' + err.message);
+      'ការទាញ model បរាជ័យ (ព្យាយាម ២ ដងហើយ) — សូមពិនិត្យអ៊ីនធឺណិត រួចផ្ញើសារម្តងទៀត។ ' +
+      '(Model load failed after 2 attempts.) ' + lastError.message);
   }
   loadedModel = model;
   setStatus(`ready: ${model}` + (webllmEngine.kind === 'cpu' ? ' — CPU mode, slower' : ''), true);
@@ -475,7 +508,8 @@ async function askServer(brain, messages, onDelta) {
 
 async function askAllBrains(question, messages) {
   const results = [];
-  const tasks = serverBrains.map((brain) => {
+  const liveBrains = serverBrains.filter((b) => b.online !== false);
+  const tasks = liveBrains.map((brain) => {
     const div = addMsg('ai', '…', '🖥️ ' + brain.name);
     return askServer(brain, messages, (t) => div.update(t))
       .then((answer) => results.push({ name: brain.name, answer, brain }))
@@ -491,9 +525,9 @@ async function askAllBrains(question, messages) {
   await Promise.allSettled(tasks);
 
   if (results.length === 0) {
-    throw new Error(
-      'គ្មានខួរក្បាលណាឆ្លើយបានទេ — សូមបើក A2I Core ឬផ្ទុក model ក្នុង browser សិន។ ' +
-      '(No brain answered — start A2I Core or load the in-browser model first.)');
+    // Nothing answered — guarantee a response by loading the in-browser brain.
+    const div = addMsg('ai', '…', '🧠 In-browser AI');
+    return askBrowser(messages, (t) => div.update(t));
   }
   if (results.length === 1) return results[0].answer;
 
@@ -526,8 +560,21 @@ form.addEventListener('submit', async (e) => {
   send.disabled = true;
   addMsg('user', text);
   history.push({ role: 'user', content: text });
-  const mode = engineSel.value;
+  let mode = engineSel.value;
   const messages = await withKnowledge(history);
+
+  // Robustness: never leave the user stuck on a dead brain. If the chosen
+  // server brain is offline, switch to the in-browser engine automatically.
+  const chosenBrain = currentServerBrain();
+  if (chosenBrain && chosenBrain.online === false) {
+    addMsg('note',
+      `🖥️ ${chosenBrain.name} មិន online ទេ — ប្តូរទៅ 🧠 In-browser AI ដោយស្វ័យប្រវត្តិ ` +
+      `(${chosenBrain.name} is offline — switching to the in-browser AI)`);
+    mode = 'browser';
+    rebuildEngineSelect('browser');
+    refreshBar();
+  }
+
   try {
     let answer;
     if (mode === 'all') {
@@ -554,6 +601,7 @@ form.addEventListener('submit', async (e) => {
 rebuildEngineSelect('browser');
 refreshBar();
 loadKnowledge();
+checkBrains();
 </script>
 </body>
 </html>
