@@ -711,8 +711,10 @@ async function loadWebLLM() {
     '(Could not load the AI library.) ' + lastError.message);
 }
 
+// Smaller build of the same Qwen2.5-0.5B-Instruct (~379MB vs ~468MB) — same
+// quality and Khmer support, ~20% less to download.
 const CPU_MODEL_URL =
-  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
+  'https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf';
 const CPU_MODEL_NAME = 'Qwen2.5 0.5B (CPU)';
 
 // Turns an infinite hang into a clear, recoverable error: rejects if the
@@ -1032,6 +1034,27 @@ stopBtn.addEventListener('click', () => {
   webllmEngine?.stop?.();
 });
 
+// Show an elapsed-time "thinking…" indicator until the first token arrives,
+// so slow CPU generation never looks frozen. Returns a wrapped onDelta.
+function withThinking(aiDiv, note) {
+  const t0 = Date.now();
+  let firstToken = false;
+  const tick = () => {
+    if (firstToken) return;
+    const s = Math.round((Date.now() - t0) / 1000);
+    aiDiv.update(`🤔 កំពុងគិត… ${s}s ${note || '(CPU យឺត សូមរង់ចាំ · thinking, please wait)'}`);
+  };
+  const timer = setInterval(tick, 1000);
+  tick();
+  return {
+    onDelta(text) {
+      if (!firstToken && text) { firstToken = true; clearInterval(timer); }
+      aiDiv.update(text);
+    },
+    done() { clearInterval(timer); },
+  };
+}
+
 async function generate() {
   const question = [...history].reverse().find((m) => m.role === 'user')?.content || '';
   let mode = engineSel.value;
@@ -1054,20 +1077,34 @@ async function generate() {
     let answer;
     if (mode === 'cloud') {
       const aiDiv = addMsg('ai', '…', '☁️ A2I Cloud');
-      answer = await askCloud(messages, (t) => aiDiv.update(t), signal);
+      const think = withThinking(aiDiv);
+      try { answer = await askCloud(messages, think.onDelta, signal); }
+      finally { think.done(); }
     } else if (mode === 'all') {
       answer = await askAllBrains(question, messages, signal);
     } else if (mode === 'browser') {
       const aiDiv = addMsg('ai', '…', '🧠 In-browser AI');
-      // Until the engine is ready, mirror download progress into the bubble.
-      if (!(webllmEngine && loadedModel)) {
+      if (webllmEngine && loadedModel) {
+        // Engine ready: just show a "thinking…" timer until the first token.
+        const think = withThinking(aiDiv);
+        try { answer = await askBrowser(messages, think.onDelta, signal); }
+        finally { think.done(); }
+      } else {
+        // First use: show the one-time download progress, then stream.
         aiDiv.update('⬇ កំពុងរៀបចំ AI ជាលើកដំបូង… (setting up the AI for the first time — this downloads a model once, then works instantly)');
         loadingReporter = (t) => aiDiv.update(t);
-      }
-      try {
-        answer = await askBrowser(messages, (t) => aiDiv.update(t), signal);
-      } finally {
-        loadingReporter = null;
+        let think = null;
+        try {
+          answer = await askBrowser(messages, (t) => {
+            // First token: stop the download reporter and stream the answer.
+            loadingReporter = null;
+            if (!think) think = withThinking(aiDiv);
+            think.onDelta(t);
+          }, signal);
+        } finally {
+          loadingReporter = null;
+          think?.done();
+        }
       }
     } else {
       const brain = currentServerBrain();
