@@ -712,8 +712,15 @@ async function loadWebLLM() {
     '(Could not load the AI library.) ' + lastError.message);
 }
 
-const CPU_MODEL_URL =
-  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
+// The CPU model is fetched from HuggingFace. On some devices and networks
+// (e.g. many Huawei/HarmonyOS tablets, or regions where huggingface.co is
+// blocked or throttled) that host is unreachable, so the download stalls and
+// the AI can never answer. We try each source in turn — the same file on a
+// mirror — until one works.
+const CPU_MODEL_URLS = [
+  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+  'https://hf-mirror.com/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+];
 const CPU_MODEL_NAME = 'Qwen2.5 0.5B (CPU)';
 
 // Turns an infinite hang into a clear, recoverable error: rejects if the
@@ -769,38 +776,7 @@ async function loadGpuEngine(model) {
   };
 }
 
-async function loadCpuEngine() {
-  setStatus('ប្រើ CPU / using CPU mode…');
-  const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
-  const wllama = new Wllama(
-    { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
-  const url = localStorage.getItem('a2i-cpu-model-url') || CPU_MODEL_URL;
-  // Use all CPU cores (SharedArrayBuffer multi-threading is enabled by our
-  // COOP/COEP headers) for markedly faster generation.
-  const threads = Math.max(2, Math.min(navigator.hardwareConcurrency || 4, 8));
-  progress.hidden = false;
-  const watch = stallGuard(60000);
-  await Promise.race([
-    watch.signal,
-    wllama.loadModelFromUrl(url, {
-      // 4096 is plenty once prompts are trimmed — smaller KV cache means
-      // faster prefill and less RAM than a larger window.
-      n_ctx: 4096,
-      n_threads: threads,
-      n_batch: 256,
-      // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
-      // which would hit the same broken GPU we are falling back FROM.
-      n_gpu_layers: 0,
-      progressCallback: ({ loaded, total }) => {
-        watch.ping();
-        progress.value = total ? loaded / total : 0;
-        const pct = Math.round(100 * (loaded / (total || 1)));
-        const mb = Math.round(loaded / 1048576);
-        setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
-      },
-    }),
-  ]).finally(() => watch.clear());
-  progress.hidden = true;
+function makeCpuEngine(wllama) {
   return {
     kind: 'cpu',
     stop: () => {},
@@ -824,6 +800,59 @@ async function loadCpuEngine() {
       });
     },
   };
+}
+
+async function loadCpuEngine() {
+  setStatus('ប្រើ CPU / using CPU mode…');
+  const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
+  const wasmUrl = new URL('vendor/wllama/wllama.wasm', location.href).href;
+  // Use all CPU cores (SharedArrayBuffer multi-threading is enabled by our
+  // COOP/COEP headers) for markedly faster generation.
+  const threads = Math.max(2, Math.min(navigator.hardwareConcurrency || 4, 8));
+  const override = localStorage.getItem('a2i-cpu-model-url');
+  const urls = override ? [override] : CPU_MODEL_URLS;
+
+  let lastError = null;
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    const host = new URL(url).host;
+    const wllama = new Wllama({ default: wasmUrl });
+    progress.hidden = false;
+    const watch = stallGuard(60000);
+    try {
+      await Promise.race([
+        watch.signal,
+        wllama.loadModelFromUrl(url, {
+          // 4096 is plenty once prompts are trimmed — smaller KV cache means
+          // faster prefill and less RAM than a larger window.
+          n_ctx: 4096,
+          n_threads: threads,
+          n_batch: 256,
+          // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
+          // which would hit the same broken GPU we are falling back FROM.
+          n_gpu_layers: 0,
+          progressCallback: ({ loaded, total }) => {
+            watch.ping();
+            progress.value = total ? loaded / total : 0;
+            const pct = Math.round(100 * (loaded / (total || 1)));
+            const mb = Math.round(loaded / 1048576);
+            setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
+          },
+        }),
+      ]).finally(() => watch.clear());
+      progress.hidden = true;
+      return makeCpuEngine(wllama);
+    } catch (err) {
+      progress.hidden = true;
+      lastError = err;
+      // Try the next mirror before giving up (e.g. huggingface.co blocked).
+      if (i < urls.length - 1) {
+        const next = new URL(urls[i + 1]).host;
+        setStatus(`${host} មិនដំណើរការ — ប្តូរទៅ ${next}… / trying mirror ${next}…`);
+      }
+    }
+  }
+  throw lastError;
 }
 
 async function ensureBrowserEngine() {
@@ -865,8 +894,9 @@ async function ensureBrowserEngine() {
   }
 
   throw new Error(
-    'ការទាញ AI បរាជ័យ — សូមពិនិត្យអ៊ីនធឺណិត រួចផ្ញើសារម្តងទៀត។ ' +
-    '(Could not start any in-browser engine.) ' + errors.join(' | '));
+    'ការទាញ AI បរាជ័យ — សូមបើក check.html ដើម្បីពិនិត្យឧបករណ៍ រួចផ្ញើសារម្តងទៀត។ ' +
+    '(Could not start any in-browser engine. Open check.html to see why.) ' +
+    errors.join(' | '));
 }
 
 async function askBrowser(messages, onDelta, signal) {

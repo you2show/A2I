@@ -50,8 +50,10 @@ function row(name) {
   };
 }
 
-const MODEL_URL =
-  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
+const MODEL_URLS = [
+  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+  'https://hf-mirror.com/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+];
 
 let bad = 0, warn = 0;
 const mark = (r, state, detail) => { if (state === 'bad') bad++; if (state === 'warn') warn++; r.set(state, detail); };
@@ -113,26 +115,32 @@ await (async () => {
   } catch (e) { mark(r, 'warn', 'storage.estimate unavailable: ' + e.message.slice(0, 60)); }
 })();
 
-// 6. THE KEY TEST — can THIS device download the model from HuggingFace?
+// 6. THE KEY TEST — can THIS device download the model? Try each mirror.
 await (async () => {
-  const r = row('6. Model download from HuggingFace (THE key test)');
-  r.set('run', 'downloading first 3MB to measure your connection…');
-  try {
-    const t0 = performance.now();
-    const res = await fetch(MODEL_URL, { headers: { Range: 'bytes=0-3145727' } });
-    if (!res.ok && res.status !== 206) { mark(r, 'bad', `HTTP ${res.status} — model host blocked or unreachable`); return; }
-    const buf = await res.arrayBuffer();
-    const secs = (performance.now() - t0) / 1000;
-    const mbps = (buf.byteLength / 1048576) / secs;
-    const total = 470;
-    const eta = Math.round(total / mbps);
-    mark(r, mbps < 0.3 ? 'warn' : 'ok',
-      `got ${(buf.byteLength / 1048576).toFixed(1)}MB in ${secs.toFixed(1)}s = ${mbps.toFixed(2)} MB/s → ` +
-      `full model (~${total}MB) ≈ ${eta}s (${Math.round(eta / 60)} min)`);
-  } catch (e) {
-    mark(r, 'bad', 'DOWNLOAD FAILED: ' + e.message.slice(0, 90) +
-      ' — network blocks HuggingFace, or offline');
+  const r = row('6. Model download (THE key test — tries mirrors)');
+  const failures = [];
+  for (const url of MODEL_URLS) {
+    const host = new URL(url).host;
+    r.set('run', `trying ${host} — downloading first 3MB to measure your connection…`);
+    try {
+      const t0 = performance.now();
+      const res = await fetch(url, { headers: { Range: 'bytes=0-3145727' } });
+      if (!res.ok && res.status !== 206) { failures.push(`${host}: HTTP ${res.status}`); continue; }
+      const buf = await res.arrayBuffer();
+      const secs = (performance.now() - t0) / 1000;
+      const mbps = (buf.byteLength / 1048576) / secs;
+      const total = 470;
+      const eta = Math.round(total / mbps);
+      mark(r, mbps < 0.3 ? 'warn' : 'ok',
+        `${host}: got ${(buf.byteLength / 1048576).toFixed(1)}MB in ${secs.toFixed(1)}s = ${mbps.toFixed(2)} MB/s → ` +
+        `full model (~${total}MB) ≈ ${eta}s (${Math.round(eta / 60)} min)`);
+      return;
+    } catch (e) {
+      failures.push(`${host}: ${e.message.slice(0, 50)}`);
+    }
   }
+  mark(r, 'bad', 'DOWNLOAD FAILED on all mirrors (' + failures.join(' | ') +
+    ') — network blocks the model hosts, or offline');
 })();
 
 // 7. Can we actually instantiate the CPU engine (WASM + worker)?
