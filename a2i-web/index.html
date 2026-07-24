@@ -370,14 +370,35 @@
     .msg.user .msg-imgs img { max-width: 150px; max-height: 150px; }
     #topbar { gap: .4rem; }
   }
+
+  /* ---- Install button ---- */
+  #install-btn {
+    width: 100%; text-align: left; padding: .6rem .9rem; border: 1px solid transparent;
+    border-radius: 12px; background: var(--grad); color: #fff; cursor: pointer;
+    font-size: .88rem; font-weight: 700; box-shadow: 0 6px 16px var(--ring);
+    transition: transform .12s;
+  }
+  #install-btn:hover { transform: translateY(-1px); }
 </style>
+
+<!-- PWA: installable, offline-capable app -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#c96442" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#262624" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icons/apple-touch-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="A2I">
 </head>
 <body>
 <aside id="sidebar">
   <div class="brand"><div class="logo">A2</div> A2I <span style="color:var(--muted);font-weight:400;font-size:.75rem">All-in-One AI</span></div>
   <button id="new-chat">＋ ជជែកថ្មី · New chat</button>
   <nav id="chat-list"></nav>
-  <div class="side-foot">
+  <div class="side-foot" style="flex-direction:column;gap:.5rem">
+    <button id="install-btn" hidden title="Install A2I as an app">⬇️ ដំឡើងជា App · Install</button>
     <button id="settings-btn" title="Settings — API keys, servers, appearance">⚙️ ការកំណត់ · Settings</button>
   </div>
   <div class="side-foot" style="border-top:0;padding-top:0">
@@ -1816,6 +1837,28 @@ $('set-autospeak').addEventListener('click', () => {
   refreshAutospeak();
 });
 refreshAutospeak();
+
+// ---- PWA: installable + offline app ------------------------------------
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () =>
+    navigator.serviceWorker.register('sw.js').catch(() => { /* offline install optional */ }));
+}
+let deferredInstall = null;
+const installBtn = $('install-btn');
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstall = e;
+  if (installBtn) installBtn.hidden = false;
+});
+installBtn?.addEventListener('click', async () => {
+  if (!deferredInstall) return;
+  deferredInstall.prompt();
+  await deferredInstall.userChoice.catch(() => {});
+  deferredInstall = null;
+  installBtn.hidden = true;
+});
+window.addEventListener('appinstalled', () => { if (installBtn) installBtn.hidden = true; });
 
 // ---- Init --------------------------------------------------------------
 
