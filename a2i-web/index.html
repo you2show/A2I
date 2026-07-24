@@ -76,6 +76,12 @@
   }
   #server-url { flex: 1; min-width: 11rem; display: none; }
   #topbar label.wiki { display: flex; align-items: center; gap: .3rem; cursor: pointer; color: var(--muted); }
+  #live-link {
+    text-decoration: none; padding: .4rem .7rem; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--text); font-size: .82rem;
+    background: linear-gradient(135deg, rgba(201,100,66,.14), rgba(176,108,255,.14));
+  }
+  #live-link:hover { border-color: var(--accent); }
   #status-wrap { margin-left: auto; display: flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .78rem; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: #e0b23e; }
   .dot.ready { background: #3ecf8e; }
@@ -193,6 +199,7 @@
     </select>
     <input id="server-url" placeholder="http://127.0.0.1:8990 (OpenAI-compatible URL)">
     <label class="wiki"><input type="checkbox" id="wiki-toggle" checked> 🌐 Wikipedia</label>
+    <a href="live.html" id="live-link" title="3D voice AI — talk to A2I">🤖 Live</a>
     <div id="status-wrap">
       <progress id="progress" max="1" value="0" hidden></progress>
       <span id="status">ready</span>
@@ -619,12 +626,15 @@ function rebuildEngineSelect(selected) {
     engineSel.appendChild(o);
   };
   if (cloudAvailable) add('cloud', '☁️ A2I Cloud (fast, no download)');
+  const hasGemini = !!GEMINI_KEY();
+  if (hasGemini) add('gemini', '✨ Gemini (' + GEMINI_MODEL() + ')');
   add('browser', '🧠 In-browser AI (no server, no API)');
   serverBrains.forEach((b, i) => add('server:' + i, '🖥️ ' + b.name + brainStatusLabel(b)));
   add('all', '🧩 All brains together / ខួរក្បាលទាំងអស់រួមគ្នា');
+  add('gemini-setup', hasGemini ? '✨ Change Gemini API key…' : '✨ Add Gemini API key…');
   add('add', '➕ Add brain (Ollama, LM Studio, any URL)…');
-  // Default to Cloud when available (fast, no download); else in-browser.
-  engineSel.value = selected || (cloudAvailable ? 'cloud' : 'browser');
+  // Default: Cloud if available, else Gemini if a key is set, else in-browser.
+  engineSel.value = selected || (cloudAvailable ? 'cloud' : hasGemini ? 'gemini' : 'browser');
 }
 
 async function checkBrains() {
@@ -638,7 +648,7 @@ async function checkBrains() {
     }
   }));
   const current = engineSel.value;
-  if (current !== 'add') rebuildEngineSelect(current);
+  if (current !== 'add' && current !== 'gemini-setup') rebuildEngineSelect(current);
   refreshBar();
 }
 setInterval(checkBrains, 30000);
@@ -654,6 +664,21 @@ engineSel.addEventListener('change', () => {
       checkBrains();
     } else {
       rebuildEngineSelect('browser');
+    }
+  } else if (engineSel.value === 'gemini-setup') {
+    const key = prompt(
+      'Paste your Gemini API key (free from https://aistudio.google.com/apikey).\n' +
+      'It is stored only in this browser and sent directly to Google:',
+      GEMINI_KEY());
+    if (key && key.trim()) {
+      localStorage.setItem('a2i-gemini-key', key.trim());
+      const model = prompt(
+        'Gemini model (e.g. gemini-2.0-flash, gemini-2.5-flash, gemini-1.5-flash):',
+        GEMINI_MODEL());
+      if (model && model.trim()) localStorage.setItem('a2i-gemini-model', model.trim());
+      rebuildEngineSelect('gemini');
+    } else {
+      rebuildEngineSelect(GEMINI_KEY() ? 'gemini' : 'browser');
     }
   }
   refreshBar();
@@ -685,6 +710,8 @@ function refreshBar() {
   if (brain) serverUrl.value = brain.url;
   if (mode === 'cloud') {
     setStatus('☁️ A2I Cloud — fast, no download', true);
+  } else if (mode === 'gemini') {
+    setStatus(`✨ Gemini ${GEMINI_MODEL()} — using your API key`, true);
   } else if (mode === 'browser') {
     setStatus(loadedModel ? `ready: ${loadedModel}`
       : navigator.gpu ? 'model loads on first message'
@@ -971,6 +998,73 @@ async function readSSE(res, onDelta, signal) {
   return answer;
 }
 
+// ---- Gemini (Google) — your own API key, called straight from the browser --
+// Uses Gemini's native streaming endpoint with ?key=…, which is CORS-friendly
+// for browsers (the OpenAI-compat Bearer endpoint is not). The key is stored
+// only in this browser's localStorage and sent directly to Google — no proxy.
+const GEMINI_KEY = () => localStorage.getItem('a2i-gemini-key') || '';
+const GEMINI_MODEL = () => localStorage.getItem('a2i-gemini-model') || 'gemini-2.0-flash';
+
+function toGeminiBody(messages, maxTokens = 1024) {
+  const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
+  const contents = messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+  const body = { contents, generationConfig: { maxOutputTokens: maxTokens } };
+  if (system) body.systemInstruction = { parts: [{ text: system }] };
+  return body;
+}
+
+async function readGeminiSSE(res, onDelta, signal) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let answer = '', buffer = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const parts = JSON.parse(line.slice(6)).candidates?.[0]?.content?.parts || [];
+          const t = parts.map((p) => p.text || '').join('');
+          if (t) { answer += t; onDelta(answer); }
+        } catch { /* ignore keep-alive / partial lines */ }
+      }
+    }
+  } catch (err) {
+    if (!signal?.aborted) throw err;
+  }
+  return answer;
+}
+
+async function askGemini(messages, onDelta, signal) {
+  const key = GEMINI_KEY();
+  if (!key) throw new Error('គ្មាន Gemini API key — សូម paste key សិន។ (No Gemini API key set.)');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/` +
+    `${encodeURIComponent(GEMINI_MODEL())}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(toGeminiBody(messages, 1024)),
+      signal,
+    });
+  } catch (err) {
+    if (signal?.aborted) return '';
+    throw new Error('មិនអាចភ្ជាប់ Gemini បានទេ។ (Could not reach Gemini.)');
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Gemini error ${res.status}: ${text.slice(0, 160)}`);
+  }
+  return readGeminiSSE(res, onDelta, signal);
+}
+
 // ---- A2I Cloud (Vercel serverless proxy → hosted model) ----------------
 
 let cloudAvailable = false;
@@ -1038,6 +1132,13 @@ async function askAllBrains(question, messages, signal) {
       .then((answer) => results.push({ name: brain.name, answer, brain }))
       .catch((err) => div.update('⚠ ' + err.message));
   });
+  if (GEMINI_KEY()) {
+    const div = addMsg('ai', '…', '✨ Gemini');
+    tasks.push(
+      askGemini(messages, (t) => div.update(t), signal)
+        .then((answer) => results.push({ name: 'Gemini', answer, brain: null }))
+        .catch((err) => div.update('⚠ ' + err.message)));
+  }
   if (cloudAvailable) {
     const div = addMsg('ai', '…', '☁️ A2I Cloud');
     tasks.push(
@@ -1125,6 +1226,9 @@ async function generate() {
     if (mode === 'cloud') {
       const aiDiv = addMsg('ai', '…', '☁️ A2I Cloud');
       answer = await askCloud(messages, (t) => aiDiv.update(t), signal);
+    } else if (mode === 'gemini') {
+      const aiDiv = addMsg('ai', '…', '✨ Gemini');
+      answer = await askGemini(messages, (t) => aiDiv.update(t), signal);
     } else if (mode === 'all') {
       answer = await askAllBrains(question, messages, signal);
     } else if (mode === 'browser') {

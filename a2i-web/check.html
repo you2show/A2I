@@ -168,10 +168,17 @@ await (async () => {
 // what proves whether generation aborts or works.
 await (async () => {
   const r = row('9. CPU generation actually runs (compat engine)');
+  // Capture wllama's own logs — on "(ABORT)" it logs a decoded stack trace that
+  // reveals the real cause (which "(ABORT)" alone hides). Surface it here.
+  const logs = [];
+  const cap = (lvl) => (...a) => logs.push(lvl + ': ' +
+    a.map((x) => typeof x === 'string' ? x : (() => { try { return JSON.stringify(x); } catch { return String(x); } })()).join(' '));
+  const logger = { debug: cap('D'), log: cap('L'), info: cap('I'), warn: cap('W'), error: cap('E') };
   try {
     const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
     const wllama = new Wllama(
-      { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
+      { default: new URL('vendor/wllama/wllama.wasm', location.href).href },
+      { logger });
     wllama.setCompat({
       worker: new URL('vendor/wllama/compat/wllama.js', location.href).href,
       wasm: new URL('vendor/wllama/compat/wllama.wasm', location.href).href,
@@ -195,7 +202,12 @@ await (async () => {
     ]);
     mark(r, 'ok', `compat engine generated "${(got || '').trim().slice(0, 40)}" — chat works ✅`);
   } catch (e) {
-    mark(r, 'bad', 'compat generation FAILED: ' + String(e.message || e).slice(0, 140));
+    // Pull the most informative wllama log lines (the abort stack trace tells us
+    // which wasm op crashed — the real cause behind a bare "(ABORT)").
+    const trace = logs.filter((l) => l.startsWith('E:') || /trace|abort|assert|ggml|wasm|Aborted/i.test(l))
+      .slice(-4).join(' ⏎ ').slice(0, 600);
+    mark(r, 'bad', 'compat generation FAILED: ' + String(e.message || e).slice(0, 100) +
+      (trace ? ' — LOG: ' + trace : ' — (no extra log captured; open DevTools console)'));
   }
 })();
 
