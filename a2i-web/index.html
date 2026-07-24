@@ -796,15 +796,17 @@ function needsWllamaCompat() {
   return !hasJSPI || !hasMem64;
 }
 
-async function loadCpuEngine() {
-  setStatus('ប្រើ CPU / using CPU mode…');
+async function loadCpuEngine(forceCompat = false) {
+  setStatus(forceCompat
+    ? 'ប្រើ CPU (compat) / compatibility mode…'
+    : 'ប្រើ CPU / using CPU mode…');
   const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
   const wllama = new Wllama(
     { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
-  // On browsers that lack JSPI/Memory64, point wllama at the vendored compat
-  // build (single-threaded, works everywhere) instead of letting it fall back to
-  // an incompatible engine that aborts mid-inference.
-  const compat = needsWllamaCompat();
+  // On browsers that lack JSPI/Memory64 — or after the default build has aborted
+  // once — point wllama at the vendored compat build (single-threaded, works
+  // everywhere) instead of the engine that aborts mid-inference.
+  const compat = forceCompat || needsWllamaCompat();
   if (compat) {
     wllama.setCompat({
       worker: new URL('vendor/wllama/compat/wllama.js', location.href).href,
@@ -840,8 +842,9 @@ async function loadCpuEngine() {
     }),
   ]).finally(() => watch.clear());
   progress.hidden = true;
-  return {
+  const engine = {
     kind: 'cpu',
+    compat,
     stop: () => {},
     ask(messages, onDelta, signal, maxTokens = 1024) {
       return new Promise((resolve, reject) => {
@@ -862,7 +865,14 @@ async function loadCpuEngine() {
           (err) => signal?.aborted ? resolve(answer) : reject(err));
       });
     },
+    // Generate a single token so any WASM "(ABORT)" surfaces now, at load time,
+    // where we can transparently fall back to the compat build — instead of on
+    // the user's first message.
+    async warmup() {
+      await this.ask([{ role: 'user', content: 'Hi' }], () => {}, null, 1);
+    },
   };
+  return engine;
 }
 
 async function ensureBrowserEngine() {
@@ -893,23 +903,39 @@ async function ensureBrowserEngine() {
     }
   }
 
-  // 2. CPU engine (wllama, WebAssembly). Works on any device; one retry.
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  // 2. CPU engine (wllama, WebAssembly). Works on any device. We try the fast
+  //    default build first (unless feature-detection already says it can't run
+  //    here), then the universal compat build. Each candidate is warmed up with
+  //    a 1-token generation so a mid-inference "(ABORT)" is caught here and
+  //    turned into a fallback — never shown to the user as a dead chat.
+  const cpuPlans = needsWllamaCompat() ? [true] : [false, true];
+  for (const forceCompat of cpuPlans) {
     try {
-      webllmEngine = await loadCpuEngine();
-      loadedModel = CPU_MODEL_NAME;
-      setStatus(`ready: ${CPU_MODEL_NAME} — CPU mode, slower`, true);
+      const engine = await loadCpuEngine(forceCompat);
+      setStatus('កំពុងសាកល្បង AI… / warming up…');
+      await Promise.race([
+        engine.warmup(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('warmup timed out')), 30000)),
+      ]);
+      webllmEngine = engine;
+      loadedModel = CPU_MODEL_NAME + (engine.compat ? ' — compat' : '');
+      setStatus(`ready: ${loadedModel} — CPU mode, slower`, true);
       return webllmEngine;
     } catch (err) {
       progress.hidden = true;
-      errors.push('CPU attempt ' + attempt + ': ' + err.message);
-      if (attempt < 2) setStatus('ការទាញបរាជ័យ — ព្យាយាមម្តងទៀត / retrying…');
+      errors.push('CPU' + (forceCompat ? ' compat' : '') + ': ' + err.message);
+      if (!forceCompat) {
+        setStatus('ប្តូរទៅ engine ត្រូវគ្នា… / switching to compatibility engine…');
+      }
     }
   }
 
   throw new Error(
-    'ការទាញ AI បរាជ័យ — សូមពិនិត្យអ៊ីនធឺណិត រួចផ្ញើសារម្តងទៀត។ ' +
-    '(Could not start any in-browser engine.) ' + errors.join(' | '));
+    'មិនអាចចាប់ផ្តើម AI ក្នុងឧបករណ៍បានទេ — សូមបើក check.html ដើម្បីមើលមូលហេតុ ' +
+    'ឬប្រើ engine មួយផ្សេង (A2I Core / Ollama)។ ' +
+    '(Could not start any in-browser engine — open check.html to diagnose.) ' +
+    errors.join(' | '));
 }
 
 async function askBrowser(messages, onDelta, signal) {
