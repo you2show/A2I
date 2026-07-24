@@ -820,6 +820,53 @@ function makeCpuEngine(wllama) {
   };
 }
 
+// wllama downloads the model inside a Web Worker. On some networks that worker
+// fetch fails with "Failed to fetch" even though a normal fetch of the very
+// same URL works (a CORS/COEP quirk of the worker context, seen e.g. on some
+// Huawei/HarmonyOS devices). So we download the model ourselves on the main
+// thread — the path that works, and that check.html's test #6 verifies —
+// cache it for next time, and try each mirror in turn.
+const MODEL_CACHE = 'a2i-models';
+
+async function fetchModelBlob(urls, onProgress) {
+  const cache = await caches.open(MODEL_CACHE).catch(() => null);
+  let lastError = null;
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    const host = new URL(url).host;
+    try {
+      if (cache) {
+        const hit = await cache.match(url).catch(() => null);
+        if (hit) return await hit.blob(); // already downloaded — instant
+      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const total = Number(res.headers.get('content-length')) || 0;
+      const reader = res.body.getReader();
+      const parts = [];
+      let loaded = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value);
+        loaded += value.length;
+        onProgress(loaded, total, host);
+      }
+      const blob = new Blob(parts);
+      if (cache) { try { await cache.put(url, new Response(blob)); } catch { /* quota — skip caching */ } }
+      return blob;
+    } catch (err) {
+      lastError = err;
+      // Try the next mirror before giving up (e.g. huggingface.co blocked).
+      if (i < urls.length - 1) {
+        const next = new URL(urls[i + 1]).host;
+        setStatus(`${host} មិនដំណើរការ — ប្តូរទៅ ${next}… / trying mirror ${next}…`);
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function loadCpuEngine() {
   setStatus('ប្រើ CPU / using CPU mode…');
   const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
@@ -830,47 +877,40 @@ async function loadCpuEngine() {
   const override = localStorage.getItem('a2i-cpu-model-url');
   const urls = override ? [override] : CPU_MODEL_URLS;
 
-  let lastError = null;
-  for (let i = 0; i < urls.length; i++) {
-    const url = urls[i];
-    const host = new URL(url).host;
-    const wllama = new Wllama({ default: wasmUrl });
-    progress.hidden = false;
-    const watch = stallGuard(60000);
-    try {
-      await Promise.race([
-        watch.signal,
-        wllama.loadModelFromUrl(url, {
-          // 4096 is plenty once prompts are trimmed — smaller KV cache means
-          // faster prefill and less RAM than a larger window.
-          n_ctx: 4096,
-          n_threads: threads,
-          n_batch: 256,
-          // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
-          // which would hit the same broken GPU we are falling back FROM.
-          n_gpu_layers: 0,
-          progressCallback: ({ loaded, total }) => {
-            watch.ping();
-            progress.value = total ? loaded / total : 0;
-            const pct = Math.round(100 * (loaded / (total || 1)));
-            const mb = Math.round(loaded / 1048576);
-            setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
-          },
-        }),
-      ]).finally(() => watch.clear());
-      progress.hidden = true;
-      return makeCpuEngine(wllama);
-    } catch (err) {
-      progress.hidden = true;
-      lastError = err;
-      // Try the next mirror before giving up (e.g. huggingface.co blocked).
-      if (i < urls.length - 1) {
-        const next = new URL(urls[i + 1]).host;
-        setStatus(`${host} មិនដំណើរការ — ប្តូរទៅ ${next}… / trying mirror ${next}…`);
-      }
-    }
+  // 1. Download the weights ourselves (with a stall watchdog + mirrors).
+  progress.hidden = false;
+  const watch = stallGuard(60000);
+  let blob;
+  try {
+    blob = await Promise.race([
+      watch.signal,
+      fetchModelBlob(urls, (loaded, total, host) => {
+        watch.ping();
+        progress.value = total ? loaded / total : 0;
+        const pct = Math.round(100 * (loaded / (total || 1)));
+        const mb = Math.round(loaded / 1048576);
+        setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB · ${host} (ម្តងគត់ · one-time)`);
+      }),
+    ]);
+  } finally {
+    watch.clear();
   }
-  throw lastError;
+
+  // 2. Hand the bytes to wllama (no network here — cannot hit the fetch bug).
+  setStatus('រៀបចំ AI… / preparing the model…');
+  const wllama = new Wllama({ default: wasmUrl });
+  await wllama.loadModel([blob], {
+    // 4096 is plenty once prompts are trimmed — smaller KV cache means
+    // faster prefill and less RAM than a larger window.
+    n_ctx: 4096,
+    n_threads: threads,
+    n_batch: 256,
+    // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
+    // which would hit the same broken GPU we are falling back FROM.
+    n_gpu_layers: 0,
+  });
+  progress.hidden = true;
+  return makeCpuEngine(wllama);
 }
 
 async function ensureBrowserEngine() {

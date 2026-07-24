@@ -167,23 +167,30 @@ function chunkToText(chunk) {
 }
 await (async () => {
   const r = row('8. Model actually generates a reply (end-to-end)');
-  // Only run if the model is already downloaded — otherwise this page would
-  // pull ~470MB. Send one message in the app first, then re-run this check.
-  let cached = false;
-  try {
-    const est = await navigator.storage.estimate();
-    cached = (est.usage || 0) > 400 * 1048576;
-  } catch { /* assume not cached */ }
-  if (!cached) {
-    mark(r, 'warn', 'model not downloaded yet — open the app, send one message so it downloads, then re-run this check');
-    return;
+  // Load the model the same way the app does: from our own cache, else a
+  // main-thread fetch. Only download here if it is already cached, so this
+  // page never pulls ~470MB on its own.
+  const cache = await caches.open('a2i-models').catch(() => null);
+  let blob = null;
+  if (cache) {
+    const hit = await cache.match(MODEL_URLS[0]).catch(() => null);
+    if (hit) blob = await hit.blob();
+  }
+  if (!blob) {
+    let used = 0;
+    try { used = (await navigator.storage.estimate()).usage || 0; } catch { /* ignore */ }
+    if (used < 400 * 1048576) {
+      mark(r, 'warn', 'model not downloaded yet — open the app, send one message so it downloads, then re-run this check');
+      return;
+    }
   }
   try {
-    r.set('run', 'loading the cached model and generating a few words…');
+    r.set('run', 'loading the model and generating a few words…');
     const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
     const wllama = new Wllama({ default: new URL('vendor/wllama/wllama.wasm', location.href).href });
     const threads = Math.max(2, Math.min(navigator.hardwareConcurrency || 4, 8));
-    await wllama.loadModelFromUrl(MODEL_URLS[0], { n_ctx: 512, n_threads: threads, n_batch: 128, n_gpu_layers: 0 });
+    if (!blob) { const res = await fetch(MODEL_URLS[0]); blob = await res.blob(); }
+    await wllama.loadModel([blob], { n_ctx: 512, n_threads: threads, n_batch: 128, n_gpu_layers: 0 });
     let text = '', firstChunk = null;
     const gen = wllama.createChatCompletion({
       messages: [{ role: 'user', content: 'Say hello in one short sentence.' }],
