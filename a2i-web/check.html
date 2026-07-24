@@ -163,6 +163,42 @@ await (async () => {
   }
 })();
 
+// 9. THE real test — actually run a token through the compat CPU engine,
+// using the same model the app uses (already cached, so this is fast). This is
+// what proves whether generation aborts or works.
+await (async () => {
+  const r = row('9. CPU generation actually runs (compat engine)');
+  try {
+    const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
+    const wllama = new Wllama(
+      { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
+    wllama.setCompat({
+      worker: new URL('vendor/wllama/compat/wllama.js', location.href).href,
+      wasm: new URL('vendor/wllama/compat/wllama.wasm', location.href).href,
+    }, 'firefox_safari');
+    r.set('run', 'loading model (from cache) with compat engine…');
+    await Promise.race([
+      wllama.loadModelFromUrl(MODEL_URL, {
+        n_ctx: 512, n_threads: 1, n_batch: 128, n_gpu_layers: 0,
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('load timed out (model not cached?)')), 120000)),
+    ]);
+    r.set('run', 'generating a token…');
+    let got = '';
+    await Promise.race([
+      wllama.createChatCompletion({
+        messages: [{ role: 'user', content: 'Hi' }],
+        stream: true, max_tokens: 4,
+        onData: (c) => { got = c?.currentText ?? (got + (c?.choices?.[0]?.delta?.content || '')); },
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('generation timed out')), 60000)),
+    ]);
+    mark(r, 'ok', `compat engine generated "${(got || '').trim().slice(0, 40)}" — chat works ✅`);
+  } catch (e) {
+    mark(r, 'bad', 'compat generation FAILED: ' + String(e.message || e).slice(0, 140));
+  }
+})();
+
 // Summary
 const s = document.getElementById('summary');
 if (bad > 0) {
