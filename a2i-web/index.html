@@ -371,6 +371,40 @@
     #topbar { gap: .4rem; }
   }
 
+  /* ---- Search button + command palette ---- */
+  #search-btn {
+    margin: 0 1rem .6rem; padding: .5rem .9rem; border: 1px solid var(--border);
+    border-radius: 12px; background: var(--panel); color: var(--muted); cursor: pointer;
+    font-size: .82rem; text-align: left; display: flex; align-items: center; gap: .4rem;
+  }
+  #search-btn:hover { border-color: var(--accent); color: var(--text); }
+  .kbd {
+    margin-left: auto; font-size: .68rem; padding: .1rem .35rem; border-radius: 6px;
+    border: 1px solid var(--border); color: var(--muted); background: var(--bg);
+  }
+  .palette-overlay { align-items: flex-start; padding-top: 12vh; }
+  .palette {
+    width: min(600px, 100%); background: var(--panel); border: 1px solid var(--border);
+    border-radius: 18px; box-shadow: 0 30px 90px rgba(0,0,0,.45); overflow: hidden;
+    animation: a2i-rise .2s cubic-bezier(.2,.7,.2,1) both;
+  }
+  #palette-input {
+    width: 100%; border: 0; border-bottom: 1px solid var(--border); outline: none;
+    background: transparent; color: var(--text); font-size: 1.05rem; padding: 1rem 1.2rem;
+    font-family: inherit;
+  }
+  #palette-list { max-height: 52vh; overflow-y: auto; padding: .4rem; }
+  .pal-row {
+    display: flex; align-items: center; gap: .7rem; width: 100%; text-align: left;
+    padding: .6rem .8rem; border: 0; border-radius: 11px; background: transparent;
+    color: var(--text); cursor: pointer; font-size: .9rem;
+  }
+  .pal-row .pi { width: 1.4rem; text-align: center; flex-shrink: 0; }
+  .pal-row .pl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pal-row .tag { font-size: .68rem; color: var(--muted); }
+  .pal-row.sel { background: var(--grad-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+  #palette-list:empty::after { content: "គ្មានលទ្ធផល · No results"; color: var(--muted); font-size: .85rem; display: block; padding: 1rem 1.2rem; }
+
   /* ---- Export / share menu ---- */
   .menu-wrap { position: relative; }
   #export-btn {
@@ -416,6 +450,7 @@
 <aside id="sidebar">
   <div class="brand"><div class="logo">A2</div> A2I <span style="color:var(--muted);font-weight:400;font-size:.75rem">All-in-One AI</span></div>
   <button id="new-chat">＋ ជជែកថ្មី · New chat</button>
+  <button id="search-btn" title="Search chats & commands (Ctrl/⌘ K)">🔍 ស្វែងរក · Search <span class="kbd">⌘K</span></button>
   <nav id="chat-list"></nav>
   <div class="side-foot" style="flex-direction:column;gap:.5rem">
     <button id="install-btn" hidden title="Install A2I as an app">⬇️ ដំឡើងជា App · Install</button>
@@ -426,6 +461,14 @@
     <button id="repair-btn" title="Clear the downloaded model cache and reload — use if loading is stuck">🔄 ជួសជុល · Fix</button>
   </div>
 </aside>
+
+<!-- ============ Command palette (⌘K) — search chats & run actions ======= -->
+<div id="palette-overlay" class="overlay palette-overlay" hidden>
+  <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+    <input id="palette-input" placeholder="ស្វែងរក ឬ command… Search chats or type a command…" autocomplete="off">
+    <div id="palette-list"></div>
+  </div>
+</div>
 
 <!-- ============ Settings modal (premium, replaces prompt dialogs) ======= -->
 <div id="settings-overlay" class="overlay" hidden>
@@ -1937,6 +1980,86 @@ exportMenu.querySelectorAll('button').forEach((b) => {
       }
     }
   });
+});
+
+// ---- Command palette (⌘K): search chats + run actions ------------------
+
+const paletteOverlay = $('palette-overlay');
+const paletteInput = $('palette-input');
+const paletteList = $('palette-list');
+let paletteItems = [], paletteSel = 0;
+
+function paletteActions() {
+  const list = [
+    { icon: '＋', label: 'New chat', run: newChat },
+    { icon: '⚙️', label: 'Settings — API keys, servers', run: () => openSettings() },
+    { icon: '✨', label: 'Add / change Gemini API key', run: () => openSettings('gemini') },
+    { icon: '🤖', label: 'Open Live 3D voice', run: () => { location.href = 'live.html'; } },
+    { icon: '🌓', label: 'Toggle light / dark theme', run: () =>
+      applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
+    { icon: '⤓', label: 'Copy this chat (Markdown)', run: async () => {
+      const md = chatToMarkdown(); if (md) await navigator.clipboard.writeText(md).catch(() => {}); } },
+  ];
+  return list;
+}
+
+function buildPalette(q) {
+  q = q.trim().toLowerCase();
+  const items = [];
+  for (const a of paletteActions()) {
+    if (!q || a.label.toLowerCase().includes(q)) items.push({ ...a, tag: 'command' });
+  }
+  for (const c of chats) {
+    const title = c.title || 'Chat';
+    const hay = (title + ' ' + (c.messages || []).map((m) => m.content || '').join(' ')).toLowerCase();
+    if (!q || hay.includes(q)) {
+      items.push({ icon: '💬', label: title, tag: 'chat', run: () => openChat(c.id) });
+    }
+    if (items.length > 50) break;
+  }
+  return items;
+}
+
+function renderPalette() {
+  paletteItems = buildPalette(paletteInput.value);
+  if (paletteSel >= paletteItems.length) paletteSel = Math.max(0, paletteItems.length - 1);
+  paletteList.innerHTML = '';
+  paletteItems.forEach((it, i) => {
+    const row = document.createElement('button');
+    row.className = 'pal-row' + (i === paletteSel ? ' sel' : '');
+    const pi = document.createElement('span'); pi.className = 'pi'; pi.textContent = it.icon;
+    const pl = document.createElement('span'); pl.className = 'pl'; pl.textContent = it.label;
+    const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = it.tag;
+    row.append(pi, pl, tag);
+    row.addEventListener('click', () => runPalette(i));
+    row.addEventListener('mousemove', () => { if (paletteSel !== i) { paletteSel = i; highlightPalette(); } });
+    paletteList.appendChild(row);
+  });
+}
+function highlightPalette() {
+  [...paletteList.children].forEach((r, i) => {
+    r.classList.toggle('sel', i === paletteSel);
+    if (i === paletteSel) r.scrollIntoView({ block: 'nearest' });
+  });
+}
+function runPalette(i) { const it = paletteItems[i]; closePalette(); it?.run?.(); }
+function openPalette() {
+  paletteOverlay.hidden = false; paletteInput.value = ''; paletteSel = 0; renderPalette();
+  setTimeout(() => paletteInput.focus(), 40);
+}
+function closePalette() { paletteOverlay.hidden = true; }
+
+paletteInput.addEventListener('input', () => { paletteSel = 0; renderPalette(); });
+paletteInput.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); paletteSel = Math.min(paletteSel + 1, paletteItems.length - 1); highlightPalette(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); paletteSel = Math.max(paletteSel - 1, 0); highlightPalette(); }
+  else if (e.key === 'Enter') { e.preventDefault(); runPalette(paletteSel); }
+  else if (e.key === 'Escape') { closePalette(); }
+});
+paletteOverlay.addEventListener('click', (e) => { if (e.target === paletteOverlay) closePalette(); });
+$('search-btn').addEventListener('click', openPalette);
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
 });
 
 // ---- Init --------------------------------------------------------------
