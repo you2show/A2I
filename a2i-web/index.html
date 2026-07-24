@@ -56,6 +56,11 @@
   .chat-item .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .chat-item .del { opacity: 0; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: .85rem; }
   .chat-item:hover .del { opacity: 1; }
+  .chat-item .pin, .chat-item .ren { opacity: 0; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: .8rem; padding: 0 1px; }
+  .chat-item:hover .pin, .chat-item:hover .ren { opacity: .8; }
+  .chat-item .pin.on { opacity: 1; }
+  .chat-item .pin:hover, .chat-item .ren:hover { color: var(--accent); }
+  .rename-input { flex: 1; border: 1px solid var(--accent); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; font-size: .85rem; padding: .15rem .4rem; outline: none; min-width: 0; }
   .side-foot { padding: .8rem 1rem; border-top: 1px solid var(--border); display: flex; gap: .5rem; }
   .side-foot button {
     flex: 1; padding: .5rem; border: 1px solid var(--border); border-radius: 10px;
@@ -661,22 +666,61 @@ const saveChats = () => {
   }
 };
 
+function startRename(title, chat) {
+  const inp = document.createElement('input');
+  inp.className = 'rename-input';
+  inp.value = chat.title || '';
+  title.replaceWith(inp);
+  inp.focus(); inp.select();
+  let done = false;
+  const finish = (save) => {
+    if (done) return; done = true;
+    if (save && inp.value.trim()) {
+      chat.title = inp.value.trim().slice(0, 60);
+      chat.renamed = true;
+      saveChats();
+    }
+    renderChatList();
+  };
+  inp.addEventListener('click', (e) => e.stopPropagation());
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { finish(false); }
+  });
+  inp.addEventListener('blur', () => finish(true));
+}
+
 function renderChatList() {
   const list = $('chat-list');
   list.innerHTML = '';
-  for (const chat of chats) {
-    const item = document.createElement('button');
+  const sorted = [...chats].sort((a, b) =>
+    (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updated || 0) - (a.updated || 0));
+  for (const chat of sorted) {
+    const item = document.createElement('div');
     item.className = 'chat-item' + (chat.id === currentId ? ' active' : '');
+    item.addEventListener('click', () => openChat(chat.id));
+
+    const pin = document.createElement('button');
+    pin.className = 'pin' + (chat.pinned ? ' on' : '');
+    pin.textContent = chat.pinned ? '📌' : '📍';
+    pin.title = chat.pinned ? 'Unpin' : 'Pin to top';
+    pin.addEventListener('click', (e) => {
+      e.stopPropagation(); chat.pinned = !chat.pinned; saveChats(); renderChatList();
+    });
+
     const title = document.createElement('span');
     title.className = 't';
     title.textContent = chat.title || 'ជជែក / Chat';
+
+    const ren = document.createElement('button');
+    ren.className = 'ren'; ren.textContent = '✎'; ren.title = 'Rename';
+    ren.addEventListener('click', (e) => { e.stopPropagation(); startRename(title, chat); });
+
     const del = document.createElement('button');
-    del.className = 'del';
-    del.textContent = '✕';
-    del.title = 'Delete';
+    del.className = 'del'; del.textContent = '✕'; del.title = 'Delete';
     del.addEventListener('click', (e) => { e.stopPropagation(); deleteChat(chat.id); });
-    item.append(title, del);
-    item.addEventListener('click', () => openChat(chat.id));
+
+    item.append(pin, title, ren, del);
     list.appendChild(item);
   }
 }
@@ -689,7 +733,9 @@ function persistChat() {
   }
   const chat = chats.find((c) => c.id === currentId);
   chat.messages = history;
-  chat.title = (history.find((m) => m.role === 'user')?.content || 'Chat').slice(0, 42);
+  if (!chat.renamed) {
+    chat.title = (history.find((m) => m.role === 'user')?.content || 'Chat').slice(0, 42);
+  }
   chat.updated = Date.now();
   saveChats();
   renderChatList();
