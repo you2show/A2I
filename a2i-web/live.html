@@ -208,9 +208,19 @@ function setState(s, label) {
 // ---- Spline load / fallback --------------------------------------------
 const spline = $('spline');
 let splineOk = false;
-spline?.addEventListener('load', () => { splineOk = true; });
-// If the viewer script or scene fails within a few seconds, show the orb.
-setTimeout(() => { if (!splineOk) body.classList.add('spline-failed'); }, 6000);
+const markSplineOk = () => { splineOk = true; body.classList.remove('spline-failed'); };
+spline?.addEventListener('load', markSplineOk);
+spline?.addEventListener('load-complete', markSplineOk);
+// The viewer renders into a <canvas> in its shadow DOM. Poll for it: if it
+// appears, the robot is live; if nothing renders in ~12s (e.g. the CDN/scene
+// is blocked or offline), show the animated orb fallback instead.
+let polls = 0;
+const splinePoll = setInterval(() => {
+  const canvas = spline && (spline.shadowRoot?.querySelector('canvas') || spline.querySelector('canvas'));
+  if (canvas) { markSplineOk(); clearInterval(splinePoll); return; }
+  if (++polls > 24) { clearInterval(splinePoll); if (!splineOk) body.classList.add('spline-failed'); }
+}, 500);
+// If the runtime script itself fails to load, fall back immediately.
 window.addEventListener('error', (e) => {
   if (String(e?.target?.src || '').includes('spline')) body.classList.add('spline-failed');
 }, true);
