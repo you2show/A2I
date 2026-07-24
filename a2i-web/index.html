@@ -76,6 +76,12 @@
   }
   #server-url { flex: 1; min-width: 11rem; display: none; }
   #topbar label.wiki { display: flex; align-items: center; gap: .3rem; cursor: pointer; color: var(--muted); }
+  #live-link {
+    text-decoration: none; padding: .4rem .7rem; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--text); font-size: .82rem;
+    background: linear-gradient(135deg, rgba(201,100,66,.14), rgba(176,108,255,.14));
+  }
+  #live-link:hover { border-color: var(--accent); }
   #status-wrap { margin-left: auto; display: flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .78rem; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: #e0b23e; }
   .dot.ready { background: #3ecf8e; }
@@ -193,6 +199,7 @@
     </select>
     <input id="server-url" placeholder="http://127.0.0.1:8990 (OpenAI-compatible URL)">
     <label class="wiki"><input type="checkbox" id="wiki-toggle" checked> 🌐 Wikipedia</label>
+    <a href="live.html" id="live-link" title="3D voice AI — talk to A2I">🤖 Live</a>
     <div id="status-wrap">
       <progress id="progress" max="1" value="0" hidden></progress>
       <span id="status">ready</span>

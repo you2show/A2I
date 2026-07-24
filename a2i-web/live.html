@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A2I Live — 3D Voice AI</title>
+<style>
+  :root {
+    --bg: #05060a; --panel: rgba(20, 22, 34, .55); --text: #eef1ff;
+    --muted: #97a0c4; --accent: #6c8cff; --accent2: #b06cff;
+    --ok: #3ecf8e; --listen: #4aa8ff; --think: #f0b429; --speak: #3ecf8e;
+    --border: rgba(140, 150, 200, .18);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: ui-sans-serif, system-ui, "Segoe UI", "Noto Sans Khmer", sans-serif;
+    background: var(--bg); color: var(--text); overflow: hidden; height: 100dvh;
+  }
+  /* animated future background */
+  .bg {
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      radial-gradient(1200px 700px at 70% 20%, rgba(108,140,255,.18), transparent 60%),
+      radial-gradient(900px 600px at 20% 80%, rgba(176,108,255,.16), transparent 60%),
+      var(--bg);
+  }
+  .grid {
+    position: fixed; inset: 0; z-index: 0; opacity: .25;
+    background-image:
+      linear-gradient(rgba(120,140,220,.10) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120,140,220,.10) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(circle at 50% 45%, #000 30%, transparent 78%);
+    animation: drift 24s linear infinite;
+  }
+  @keyframes drift { to { background-position: 46px 46px, 46px 46px; } }
+
+  .app { position: relative; z-index: 1; height: 100dvh; display: flex; flex-direction: column; }
+
+  /* top bar */
+  header {
+    display: flex; align-items: center; gap: .7rem; padding: .8rem 1.1rem;
+  }
+  .brand { display: flex; align-items: center; gap: .55rem; font-weight: 700; letter-spacing: .02em; }
+  .brand .logo {
+    width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; font-weight: 800; font-size: .9rem;
+  }
+  .brand small { color: var(--muted); font-weight: 400; font-size: .72rem; }
+  header .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .8rem;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--panel);
+    color: var(--text); font-size: .8rem; cursor: pointer; text-decoration: none;
+    backdrop-filter: blur(8px);
+  }
+  .pill:hover { border-color: var(--accent); }
+  .pill.on { border-color: var(--accent); color: #cfe; }
+
+  /* stage */
+  .stage { flex: 1; position: relative; display: grid; place-items: center; min-height: 0; }
+  .halo {
+    position: absolute; width: min(74vmin, 560px); height: min(74vmin, 560px);
+    border-radius: 50%; filter: blur(38px); opacity: .55; z-index: 0;
+    background: radial-gradient(circle, var(--accent) 0%, transparent 60%);
+    transition: background .5s, opacity .5s, transform .5s; transform: scale(.9);
+  }
+  body[data-state="listening"] .halo { background: radial-gradient(circle, var(--listen), transparent 60%); opacity: .8; animation: pulse 1.4s ease-in-out infinite; }
+  body[data-state="thinking"]  .halo { background: radial-gradient(circle, var(--think), transparent 60%); opacity: .8; animation: pulse 1s ease-in-out infinite; }
+  body[data-state="speaking"]  .halo { background: radial-gradient(circle, var(--speak), transparent 60%); opacity: .85; animation: pulse .7s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { transform: scale(.86); } 50% { transform: scale(1.02); } }
+
+  .robot { position: relative; z-index: 1; width: min(88vmin, 680px); height: min(72vh, 620px); }
+  spline-viewer, .robot canvas { width: 100%; height: 100%; }
+  /* fallback orb when Spline can't load (offline / blocked) */
+  .orb-fallback {
+    position: absolute; inset: 0; display: none; place-items: center;
+  }
+  .orb-fallback .orb {
+    width: 42vmin; max-width: 320px; aspect-ratio: 1; border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%, #cfe0ff, rgba(108,140,255,.25) 40%, transparent 60%),
+      conic-gradient(from 0deg, var(--accent), var(--accent2), var(--accent));
+    box-shadow: 0 0 90px rgba(108,140,255,.55), inset 0 0 60px rgba(255,255,255,.15);
+    animation: spin 14s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  body.spline-failed .orb-fallback { display: grid; }
+  body.spline-failed spline-viewer { display: none; }
+
+  /* captions */
+  .caption {
+    position: absolute; z-index: 2; left: 50%; transform: translateX(-50%);
+    max-width: min(90vw, 720px); text-align: center; pointer-events: none;
+  }
+  .caption.user { top: 4.2rem; color: var(--muted); font-size: .95rem; min-height: 1.4em; }
+  .caption.ai {
+    bottom: 8.2rem; font-size: 1.15rem; line-height: 1.5;
+    text-shadow: 0 2px 24px rgba(0,0,0,.6);
+  }
+  .status-chip {
+    position: absolute; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 2;
+    font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+  }
+
+  /* controls */
+  .controls {
+    position: relative; z-index: 3; display: flex; align-items: center; gap: .7rem;
+    justify-content: center; padding: .8rem 1rem 1.4rem; flex-wrap: wrap;
+  }
+  .mic {
+    width: 78px; height: 78px; border-radius: 50%; border: 0; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
+    font-size: 1.7rem; display: grid; place-items: center;
+    box-shadow: 0 10px 40px rgba(108,140,255,.5); transition: transform .12s, box-shadow .2s;
+  }
+  .mic:hover { transform: translateY(-2px); }
+  .mic:active { transform: scale(.96); }
+  body[data-state="listening"] .mic { animation: micpulse 1.2s ease-in-out infinite; }
+  @keyframes micpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(74,168,255,.5); } 50% { box-shadow: 0 0 0 16px rgba(74,168,255,0); } }
+  .mic.off { background: #2a2e42; box-shadow: none; }
+
+  form { display: flex; gap: .5rem; align-items: center; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 999px; padding: .35rem .35rem .35rem 1rem; backdrop-filter: blur(8px); min-width: min(90vw, 460px); }
+  form input {
+    flex: 1; background: none; border: 0; outline: 0; color: var(--text); font-size: .98rem; font-family: inherit;
+  }
+  form button {
+    width: 40px; height: 40px; flex-shrink: 0; border: 0; border-radius: 50%; cursor: pointer;
+    background: var(--accent); color: #fff; font-size: 1rem;
+  }
+  .foot { text-align: center; color: var(--muted); font-size: .68rem; padding: 0 1rem .8rem; z-index: 3; position: relative; }
+  a.link { color: var(--accent); text-decoration: none; }
+  @media (max-width: 640px) { .caption.ai { bottom: 7rem; font-size: 1rem; } .robot { height: 54vh; } }
+</style>
+<script type="module"
+  src="https://unpkg.com/@splinetool/viewer@1/build/spline-viewer.js"
+  onerror="document.body.classList.add('spline-failed')"></script>
+</head>
+<body data-state="idle">
+<div class="bg"></div>
+<div class="grid"></div>
+
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="logo">A2</div>
+      <div>A2I Live <small>· ប្រព័ន្ធអនាគត · future system</small></div>
+    </div>
+    <div class="spacer"></div>
+    <button id="lang" class="pill" title="Voice language">🌐 <span id="lang-label">EN</span></button>
+    <button id="autolisten" class="pill" title="Hands-free: keep listening">🎙️ Auto</button>
+    <a class="pill" href="./" title="Classic chat">💬 Chat</a>
+  </header>
+
+  <div class="stage">
+    <div class="halo"></div>
+    <div class="status-chip" id="status">tap the mic and speak</div>
+    <div class="caption user" id="cap-user"></div>
+
+    <div class="robot">
+      <spline-viewer id="spline"
+        url="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"></spline-viewer>
+      <div class="orb-fallback"><div class="orb"></div></div>
+    </div>
+
+    <div class="caption ai md" id="cap-ai"></div>
+  </div>
+
+  <div class="controls">
+    <button id="mic" class="mic" title="Push to talk">🎤</button>
+    <form id="form">
+      <input id="input" placeholder="ឬវាយសួរ… or type to ask…" autocomplete="off">
+      <button type="submit" title="Send">➤</button>
+    </form>
+  </div>
+  <div class="foot" id="foot"></div>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const body = document.body;
+const capUser = $('cap-user'), capAI = $('cap-ai'), statusEl = $('status');
+const micBtn = $('mic'), form = $('form'), input = $('input');
+const langBtn = $('lang'), langLabel = $('lang-label'), autoBtn = $('autolisten');
+
+const SYSTEM_PROMPT =
+  'You are A2I, a friendly, futuristic voice AI assistant. Keep answers concise, ' +
+  'natural and easy to speak aloud. Reply in the language of the user (Khmer or English).';
+
+// ---- Which brain to talk to (native A2I Core by default) ----------------
+// A2I Core is the robust, fully-local backend (native llama.cpp). We also try
+// the A2I Cloud proxy (/api/chat) if the local server is not reachable.
+// When this page is served BY A2I Core (http://127.0.0.1:8990/live) we call it
+// same-origin — no mixed-content or CORS concerns. When served from the hosted
+// (https) site, we call the local server directly (browsers allow localhost).
+const onLocalServer = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(location.origin);
+const CORE_URL = localStorage.getItem('a2i-live-url') ||
+  (onLocalServer ? location.origin : 'http://127.0.0.1:8990');
+const history = [{ role: 'system', content: SYSTEM_PROMPT }];
+
+function setState(s, label) {
+  body.dataset.state = s;
+  if (label) statusEl.textContent = label;
+}
+
+// ---- Spline load / fallback --------------------------------------------
+const spline = $('spline');
+let splineOk = false;
+spline?.addEventListener('load', () => { splineOk = true; });
+// If the viewer script or scene fails within a few seconds, show the orb.
+setTimeout(() => { if (!splineOk) body.classList.add('spline-failed'); }, 6000);
+window.addEventListener('error', (e) => {
+  if (String(e?.target?.src || '').includes('spline')) body.classList.add('spline-failed');
+}, true);
+
+// ---- Talking to the model (OpenAI-compatible streaming) ----------------
+let controller = null;
+
+async function readSSE(res, onDelta) {
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let answer = '', buf = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n'); buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+      try {
+        const d = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content;
+        if (d) { answer += d; onDelta(answer); }
+      } catch { /* keep-alive */ }
+    }
+  }
+  return answer;
+}
+
+async function askModel(messages, onDelta, signal) {
+  // 1) local A2I Core (or any OpenAI-compatible URL)
+  try {
+    const res = await fetch(CORE_URL.replace(/\/+$/, '') + '/v1/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, stream: true, max_tokens: 512, temperature: 0.7 }),
+      signal,
+    });
+    if (res.ok) return await readSSE(res, onDelta);
+  } catch { /* fall through to cloud */ }
+  // 2) A2I Cloud proxy (optional)
+  const res = await fetch('/api/chat', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, max_tokens: 512 }), signal,
+  }).catch(() => null);
+  if (res && res.ok) return await readSSE(res, onDelta);
+  throw new Error(
+    'មិនអាចភ្ជាប់ខួរក្បាល A2I បានទេ — ចាប់ផ្តើម A2I Core (http://127.0.0.1:8990) សិន។ ' +
+    '(No A2I brain reachable — start A2I Core first.)');
+}
+
+// ---- Voice output (the robot speaks) -----------------------------------
+let voices = [];
+const loadVoices = () => { voices = speechSynthesis.getVoices(); };
+loadVoices();
+speechSynthesis.onvoiceschanged = loadVoices;
+
+function speak(text) {
+  if (!('speechSynthesis' in window) || !text) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const want = lang === 'km' ? 'km' : 'en';
+  const v = voices.find((v) => v.lang?.toLowerCase().startsWith(want))
+    || voices.find((v) => v.lang?.toLowerCase().startsWith('en'));
+  if (v) u.voice = v;
+  u.rate = 1; u.pitch = 1;
+  u.onstart = () => setState('speaking', 'speaking…');
+  u.onend = () => { setState('idle', 'tap the mic and speak'); if (autoListen) startRecog(); };
+  speechSynthesis.speak(u);
+}
+
+// ---- The turn: send text → stream → caption → speak --------------------
+async function handle(text) {
+  if (!text.trim()) return;
+  controller?.abort();
+  controller = new AbortController();
+  capUser.textContent = '“' + text + '”';
+  capAI.textContent = '';
+  history.push({ role: 'user', content: text });
+  setState('thinking', 'thinking…');
+  try {
+    const answer = await askModel(history, (t) => { capAI.textContent = t; }, controller.signal);
+    if (answer) { history.push({ role: 'assistant', content: answer }); speak(answer); }
+    else setState('idle', 'tap the mic and speak');
+  } catch (err) {
+    capAI.textContent = '⚠ ' + err.message;
+    setState('idle', 'tap the mic and speak');
+  }
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const t = input.value.trim(); if (!t) return;
+  input.value = ''; handle(t);
+});
+
+// ---- Voice input (you talk to the robot) -------------------------------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let lang = localStorage.getItem('a2i-live-lang') || 'en';
+let recog = null, listening = false, autoListen = false;
+langLabel.textContent = lang.toUpperCase();
+
+function buildRecog() {
+  if (!SR) return null;
+  const r = new SR();
+  r.lang = lang === 'km' ? 'km-KH' : 'en-US';
+  r.interimResults = true;
+  r.continuous = false;
+  r.onstart = () => { listening = true; setState('listening', 'listening…'); micBtn.classList.remove('off'); };
+  r.onresult = (e) => {
+    let txt = '';
+    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    capUser.textContent = '“' + txt + '”';
+    if (e.results[e.results.length - 1].isFinal) { listening = false; handle(txt); }
+  };
+  r.onerror = (e) => {
+    listening = false;
+    setState('idle', e.error === 'not-allowed'
+      ? 'microphone blocked — allow mic access' : 'tap the mic and speak');
+  };
+  r.onend = () => { listening = false; if (body.dataset.state === 'listening') setState('idle', 'tap the mic and speak'); };
+  return r;
+}
+
+function startRecog() {
+  if (!SR) { setState('idle', 'voice input not supported — type instead'); return; }
+  if (listening) return;
+  recog = buildRecog();
+  try { recog.start(); } catch { /* already started */ }
+}
+function stopRecog() { try { recog?.stop(); } catch {} listening = false; }
+
+micBtn.addEventListener('click', () => {
+  if (!SR) { input.focus(); setState('idle', 'voice not supported here — type below'); return; }
+  if (listening) stopRecog(); else startRecog();
+});
+
+langBtn.addEventListener('click', () => {
+  lang = lang === 'km' ? 'en' : 'km';
+  localStorage.setItem('a2i-live-lang', lang);
+  langLabel.textContent = lang.toUpperCase();
+});
+
+autoBtn.addEventListener('click', () => {
+  autoListen = !autoListen;
+  autoBtn.classList.toggle('on', autoListen);
+  if (autoListen) startRecog();
+});
+
+// ---- Init --------------------------------------------------------------
+$('foot').innerHTML = SR
+  ? 'និយាយ ឬវាយ — ភ្ជាប់ A2I Core មូលដ្ឋាន · talk or type · powered by your local A2I Core. ' +
+    '<span style="opacity:.7">(Voice recognition uses your browser\'s speech service.)</span>'
+  : 'Browser នេះមិនគាំទ្រការនិយាយទេ — សូមវាយសួរ · this browser has no speech input — type to chat.';
+if (!SR) micBtn.classList.add('off');
+</script>
+</body>
+</html>

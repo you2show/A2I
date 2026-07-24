@@ -141,6 +141,18 @@ def chat_ui() -> str:
     return (Path(__file__).parent / "static" / "chat.html").read_text()
 
 
+@app.get("/live", response_class=HTMLResponse)
+def live_ui() -> HTMLResponse:
+    """Serve the 3D voice UI same-origin so it talks to this server directly."""
+    live_html = Path(__file__).parent.parent / "a2i-web" / "live.html"
+    if not live_html.exists():
+        return HTMLResponse(
+            "<h1>A2I Live</h1><p>live.html not found — it ships in a2i-web/.</p>",
+            status_code=404,
+        )
+    return HTMLResponse(live_html.read_text())
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="A2I Core — self-hosted AI server")
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)

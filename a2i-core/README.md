@@ -28,7 +28,8 @@ not support — some devices load a model but then abort mid-generation. A2I
 Core sidesteps all of that: it runs the model on **native llama.cpp** on your
 own machine, so it works the same everywhere, needs no GPU, and never calls an
 external API. Point the A2I web app at it (add a brain → `http://127.0.0.1:8990`)
-or just use the built-in chat UI at that address.
+or just use the built-in chat UI at that address. For the futuristic **3D
+voice assistant**, open <http://127.0.0.1:8990/live> and talk to it directly.
 
 Pick a bigger model any time with `A2I_MODEL` (see `./download-model.sh list`):
 
