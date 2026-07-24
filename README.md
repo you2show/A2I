@@ -62,17 +62,46 @@ visual builders, chat interfaces, and coding agents.
 - **Self-improvement**: `sweep/` can act on issues in this repo to keep the
   platform evolving.
 
-## Run it fully offline — no external AI APIs
+## Famous, powerful AI models — with no external AI API
 
-`a2i-core/` makes the whole platform self-sufficient: it serves open-weight
-models locally through an OpenAI-compatible endpoint
-(`http://127.0.0.1:8990/v1`), which Dify, Flowise, Vane, and the AI SDK can
-all use as their model provider. See [`a2i-core/README.md`](a2i-core/README.md).
+A2I runs well-known open-weight models (Qwen2.5, Llama 3.1/3.2, Gemma 2,
+Mistral, Phi) with **no external inference API**. There are two independent
+ways to do it, and either one alone is enough:
+
+| Path | Runs where | Models | Needs a server? |
+| ---- | ---------- | ------ | --------------- |
+| **In-browser** | the user's own browser (WebGPU, CPU fallback) | up to Llama 3.1 8B / Qwen2.5 7B / Gemma 2 9B | no — open the page and chat |
+| **A2I Core** | the user's own machine (`a2i-core`, llama.cpp) | the same models, plus bigger ones (Llama 70B, Qwen 72B) | yes — a local self-hosted server |
+
+In both paths the model weights are downloaded **once** (from the open model
+hub) and every inference request after that stays on your device. The only
+piece that talks to an outside service is the *optional* **A2I Cloud** proxy
+(`api/chat.js`), which is off by default and only appears when you deliberately
+configure a provider — the famous-model, no-API guarantee above never depends
+on it.
+
+Reliability is built in: the in-browser engine automatically falls back from
+GPU → CPU so any device gets an answer, and A2I Core verifies every model
+download is a valid GGUF file so a dropped connection can't leave you stuck.
+
+### In-browser (zero setup)
+
+Open [`a2i-web/`](a2i-web/) (or the deployed page) and pick a model from the
+**engine → In-browser AI** menu. A strong GPU can run the "Powerful" group
+(7–9B). No server, no API, no account.
+
+### A2I Core (self-hosted, most powerful)
+
+`a2i-core/` serves open-weight models locally through an OpenAI-compatible
+endpoint (`http://127.0.0.1:8990/v1`), which Dify, Flowise, Vane, and the AI
+SDK can all use as their model provider. See
+[`a2i-core/README.md`](a2i-core/README.md).
 
 ```bash
 cd a2i-core
-./download-model.sh   # one-time download of open model weights
-./run.sh              # chat at http://127.0.0.1:8990
+./download-model.sh list        # see every available famous open model
+./download-model.sh llama-3.1-8b # one-time download of open model weights
+./run.sh                        # chat at http://127.0.0.1:8990
 ```
 
 ## Getting started

@@ -91,6 +91,8 @@ await (async () => {
 for (const [label, path, type] of [
   ['wllama JS', 'vendor/wllama/index.js', 'text'],
   ['wllama WASM', 'vendor/wllama/wllama.wasm', 'bin'],
+  ['wllama compat JS', 'vendor/wllama/compat/wllama.js', 'text'],
+  ['wllama compat WASM', 'vendor/wllama/compat/wllama.wasm', 'bin'],
   ['WebLLM JS', 'vendor/web-llm.mjs', 'text'],
 ]) {
   const r = row('4. App asset: ' + label);
@@ -142,6 +144,59 @@ await (async () => {
     new Wllama({ default: new URL('vendor/wllama/wllama.wasm', location.href).href });
     mark(r, 'ok', 'wllama module + WASM initialise fine');
   } catch (e) { mark(r, 'bad', 'wllama init failed: ' + e.message.slice(0, 90)); }
+})();
+
+// 8. WASM inference features — the cause of "(ABORT)" mid-generation.
+// wllama's default build needs JSPI + Memory64; without them A2I now uses the
+// vendored compat build instead of aborting. This reports which path applies.
+(() => {
+  const r = row('8. CPU inference features (JSPI / Memory64)');
+  const hasJSPI = typeof WebAssembly.Suspending === 'function';
+  let hasMem64 = false;
+  try { new WebAssembly.Memory({ address: 'i64', initial: 1n }); hasMem64 = true; } catch { /* no */ }
+  if (hasJSPI && hasMem64) {
+    mark(r, 'ok', 'JSPI + Memory64 supported — fast native wllama build used');
+  } else {
+    mark(r, 'warn',
+      `JSPI=${hasJSPI}, Memory64=${hasMem64} — A2I will use the compatibility ` +
+      'CPU engine (slower, single-thread) so generation still works');
+  }
+})();
+
+// 9. THE real test — actually run a token through the compat CPU engine,
+// using the same model the app uses (already cached, so this is fast). This is
+// what proves whether generation aborts or works.
+await (async () => {
+  const r = row('9. CPU generation actually runs (compat engine)');
+  try {
+    const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
+    const wllama = new Wllama(
+      { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
+    wllama.setCompat({
+      worker: new URL('vendor/wllama/compat/wllama.js', location.href).href,
+      wasm: new URL('vendor/wllama/compat/wllama.wasm', location.href).href,
+    }, 'firefox_safari');
+    r.set('run', 'loading model (from cache) with compat engine…');
+    await Promise.race([
+      wllama.loadModelFromUrl(MODEL_URL, {
+        n_ctx: 512, n_threads: 1, n_batch: 128, n_gpu_layers: 0,
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('load timed out (model not cached?)')), 120000)),
+    ]);
+    r.set('run', 'generating a token…');
+    let got = '';
+    await Promise.race([
+      wllama.createChatCompletion({
+        messages: [{ role: 'user', content: 'Hi' }],
+        stream: true, max_tokens: 4,
+        onData: (c) => { got = c?.currentText ?? (got + (c?.choices?.[0]?.delta?.content || '')); },
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('generation timed out')), 60000)),
+    ]);
+    mark(r, 'ok', `compat engine generated "${(got || '').trim().slice(0, 40)}" — chat works ✅`);
+  } catch (e) {
+    mark(r, 'bad', 'compat generation FAILED: ' + String(e.message || e).slice(0, 140));
+  }
 })();
 
 // Summary

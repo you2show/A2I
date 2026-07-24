@@ -17,15 +17,26 @@ cd a2i-core
 
 Then open <http://127.0.0.1:8990> in your browser and chat.
 
-Model sizes:
+Models — famous open-weight models that run **100% locally, no external API**.
+Run `./download-model.sh list` to see them all; here are the highlights:
 
 | Command | Model | RAM needed | Quality |
 | ------- | ----- | ---------- | ------- |
-| `./download-model.sh small` | Qwen2.5 0.5B | ~1 GB | basic |
-| `./download-model.sh` | Qwen2.5 1.5B | ~2 GB | good |
-| `./download-model.sh large` | Qwen2.5 7B | ~6 GB | much smarter |
+| `./download-model.sh small` | Qwen2.5 0.5B | ~1 GB | basic, any machine |
+| `./download-model.sh` | Qwen2.5 1.5B | ~2 GB | good, CPU-friendly |
+| `./download-model.sh qwen-3b` | Qwen2.5 3B | ~4 GB | smart |
+| `./download-model.sh mistral-7b` | Mistral 7B Instruct | ~6 GB | powerful |
+| `./download-model.sh qwen-7b` | Qwen2.5 7B (alias `large`) | ~6 GB | powerful |
+| `./download-model.sh qwen-coder-7b` | Qwen2.5 Coder 7B | ~6 GB | great at code |
+| `./download-model.sh gemma-2-9b` | Google Gemma 2 9B | ~8 GB | powerful |
+| `./download-model.sh llama-3.1-8b` | Meta Llama 3.1 8B | ~7 GB | powerful |
 
-Any GGUF model works — put it at `models/model.gguf` or pass `--model path`.
+Each download is verified to be a real GGUF file before it is accepted, so a
+dropped connection or proxy error page can never leave you with a broken model
+— you get a clear "please retry" instead.
+
+Any GGUF model works — even bigger ones like Llama 70B or Qwen 72B: put the
+file at `models/model.gguf`, or pass `--model /path/to/model.gguf` to `run.sh`.
 
 ## Answer questions from your own documents (local RAG)
 
