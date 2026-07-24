@@ -153,6 +153,58 @@ await (async () => {
   } catch (e) { mark(r, 'bad', 'wllama init failed: ' + e.message.slice(0, 90)); }
 })();
 
+// 8. THE real end-to-end test: does the model actually GENERATE text?
+// Loading + init can all pass yet the reply stays empty (the model runs but
+// no text is shown). This runs the exact same call the app uses and reports
+// whether tokens actually came out — and, if not, the raw chunk shape.
+function chunkToText(chunk) {
+  if (typeof chunk === 'string') return chunk;
+  if (typeof chunk?.currentText === 'string') return chunk.currentText;
+  return chunk?.choices?.[0]?.delta?.content ??
+    chunk?.choices?.[0]?.message?.content ??
+    chunk?.content ?? chunk?.piece ??
+    (typeof chunk?.token === 'string' ? chunk.token : '') ?? '';
+}
+await (async () => {
+  const r = row('8. Model actually generates a reply (end-to-end)');
+  // Only run if the model is already downloaded — otherwise this page would
+  // pull ~470MB. Send one message in the app first, then re-run this check.
+  let cached = false;
+  try {
+    const est = await navigator.storage.estimate();
+    cached = (est.usage || 0) > 400 * 1048576;
+  } catch { /* assume not cached */ }
+  if (!cached) {
+    mark(r, 'warn', 'model not downloaded yet — open the app, send one message so it downloads, then re-run this check');
+    return;
+  }
+  try {
+    r.set('run', 'loading the cached model and generating a few words…');
+    const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
+    const wllama = new Wllama({ default: new URL('vendor/wllama/wllama.wasm', location.href).href });
+    const threads = Math.max(2, Math.min(navigator.hardwareConcurrency || 4, 8));
+    await wllama.loadModelFromUrl(MODEL_URLS[0], { n_ctx: 512, n_threads: threads, n_batch: 128, n_gpu_layers: 0 });
+    let text = '', firstChunk = null;
+    const gen = wllama.createChatCompletion({
+      messages: [{ role: 'user', content: 'Say hello in one short sentence.' }],
+      stream: true, max_tokens: 16,
+      onData: (chunk) => { if (firstChunk === null) firstChunk = chunk; text += chunkToText(chunk); },
+    });
+    await Promise.race([
+      gen,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('generation timed out after 90s')), 90000)),
+    ]);
+    if (text.trim()) {
+      mark(r, 'ok', `generated: "${text.trim().slice(0, 60)}" — inference works end-to-end`);
+    } else {
+      mark(r, 'bad', 'model ran but produced NO text. Raw first chunk: ' +
+        JSON.stringify(firstChunk).slice(0, 120));
+    }
+  } catch (e) {
+    mark(r, 'bad', 'generation failed: ' + (e.message || String(e)).slice(0, 110));
+  }
+})();
+
 // Summary
 const s = document.getElementById('summary');
 if (bad > 0) {

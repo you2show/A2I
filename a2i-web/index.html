@@ -776,6 +776,27 @@ async function loadGpuEngine(model) {
   };
 }
 
+// Extract the running answer text from one streamed chunk. Different engine
+// builds stream different shapes, and getting this wrong silently produces an
+// empty reply (the model runs but nothing shows). We handle all of them:
+//   - old wllama:        { currentText: "<full text so far>" }   (accumulated)
+//   - llama.cpp native:  { content: "<piece>" }                  (incremental)
+//   - OpenAI streaming:  { choices: [{ delta: { content } }] }   (incremental)
+//   - OpenAI full:       { choices: [{ message: { content } }] }
+//   - raw string / token piece
+function chunkToText(chunk, prev) {
+  if (typeof chunk === 'string') return prev + chunk;
+  if (typeof chunk?.currentText === 'string') return chunk.currentText;
+  const piece =
+    chunk?.choices?.[0]?.delta?.content ??
+    chunk?.choices?.[0]?.message?.content ??
+    chunk?.content ??
+    chunk?.piece ??
+    (typeof chunk?.token === 'string' ? chunk.token : '') ??
+    '';
+  return prev + piece;
+}
+
 function makeCpuEngine(wllama) {
   return {
     kind: 'cpu',
@@ -789,10 +810,7 @@ function makeCpuEngine(wllama) {
           abortSignal: signal,
           max_tokens: Math.min(maxTokens, 300),
           onData: (chunk) => {
-            const delta =
-              chunk?.choices?.[0]?.delta?.content ?? chunk?.currentText ?? '';
-            if (chunk?.currentText !== undefined) answer = chunk.currentText;
-            else answer += delta;
+            answer = chunkToText(chunk, answer);
             onDelta(answer);
           },
         }).then(() => resolve(answer),
