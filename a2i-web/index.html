@@ -280,6 +280,70 @@
 
   /* live link shimmer */
   #live-link { background: var(--grad-soft); font-weight: 600; }
+
+  /* ---- Settings modal ---- */
+  #settings-btn {
+    width: 100%; text-align: left; padding: .6rem .9rem; border: 1px solid var(--border);
+    border-radius: 12px; background: var(--grad-soft); color: var(--text); cursor: pointer;
+    font-size: .88rem; font-weight: 600; transition: transform .12s, box-shadow .15s;
+  }
+  #settings-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px var(--ring); }
+  .overlay {
+    position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+    background: rgba(10,10,14,.55); backdrop-filter: blur(6px); padding: 1rem;
+    animation: a2i-fade .2s ease both;
+  }
+  @keyframes a2i-fade { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    width: min(560px, 100%); max-height: 88vh; overflow-y: auto; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 22px; box-shadow: 0 24px 80px rgba(0,0,0,.4);
+    animation: a2i-rise .28s cubic-bezier(.2,.7,.2,1) both;
+  }
+  .modal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.1rem 1.3rem .6rem; position: sticky; top: 0; background: var(--panel); z-index: 1;
+  }
+  .modal-head h2 { font-size: 1.1rem; font-weight: 800; }
+  .modal .x {
+    width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); cursor: pointer; font-size: 1rem;
+  }
+  .modal .x:hover { color: var(--accent); border-color: var(--accent); }
+  .modal-body { padding: .4rem 1.3rem 1.3rem; display: flex; flex-direction: column; gap: 1.1rem; }
+  .setblock { border: 1px solid var(--border); border-radius: 16px; padding: 1rem; background: var(--bg); }
+  .setblock-h { display: flex; align-items: center; gap: .5rem; font-weight: 700; font-size: .95rem; margin-bottom: .3rem; }
+  .setblock-h .ic { font-size: 1.05rem; }
+  .hint { color: var(--muted); font-size: .8rem; margin: .1rem 0 .7rem; line-height: 1.45; }
+  .hint a { color: var(--accent); }
+  .field { display: flex; flex-direction: column; gap: .25rem; font-size: .78rem; color: var(--muted); margin-bottom: .6rem; }
+  .field input {
+    padding: .6rem .8rem; border-radius: 11px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: .9rem; font-family: inherit;
+  }
+  .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  .row-btns { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
+  .btn {
+    padding: .55rem .95rem; border-radius: 11px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); cursor: pointer; font-size: .85rem; font-weight: 600;
+    transition: transform .12s, box-shadow .15s, border-color .15s;
+  }
+  .btn:hover { transform: translateY(-1px); border-color: var(--accent); }
+  .btn.primary { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 6px 16px var(--ring); }
+  .statetag { font-size: .78rem; color: var(--muted); }
+  .statetag.on { color: #3ecf8e; }
+  .brain-list { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .7rem; }
+  .brain-row {
+    display: flex; align-items: center; gap: .5rem; padding: .5rem .7rem;
+    border: 1px solid var(--border); border-radius: 11px; background: var(--panel); font-size: .84rem;
+  }
+  .brain-row .nm { font-weight: 600; }
+  .brain-row .u { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; }
+  .brain-row .rm { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: .9rem; }
+  .brain-row .rm:hover { color: #ff6b6b; }
+  .add-brain { display: grid; grid-template-columns: 1fr 1.3fr auto; gap: .45rem; }
+  .add-brain input { padding: .55rem .7rem; border-radius: 11px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: .82rem; font-family: inherit; }
+  .add-brain input:focus { outline: none; border-color: var(--accent); }
+  @media (max-width: 520px) { .add-brain { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -288,10 +352,63 @@
   <button id="new-chat">＋ ជជែកថ្មី · New chat</button>
   <nav id="chat-list"></nav>
   <div class="side-foot">
+    <button id="settings-btn" title="Settings — API keys, servers, appearance">⚙️ ការកំណត់ · Settings</button>
+  </div>
+  <div class="side-foot" style="border-top:0;padding-top:0">
     <button id="theme-btn">🌓 Theme</button>
     <button id="repair-btn" title="Clear the downloaded model cache and reload — use if loading is stuck">🔄 ជួសជុល · Fix</button>
   </div>
 </aside>
+
+<!-- ============ Settings modal (premium, replaces prompt dialogs) ======= -->
+<div id="settings-overlay" class="overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="modal-head">
+      <h2>⚙️ ការកំណត់ · Settings</h2>
+      <button id="settings-close" class="x" title="Close">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <section class="setblock">
+        <div class="setblock-h"><span class="ic">✨</span> Gemini (Google)</div>
+        <p class="hint">Paste your own key — free from
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.
+          Stored only in this browser, sent directly to Google.</p>
+        <label class="field">API key
+          <input id="set-gemini-key" type="password" placeholder="AIzaSy…" autocomplete="off">
+        </label>
+        <label class="field">Model
+          <input id="set-gemini-model" placeholder="gemini-2.5-flash" autocomplete="off">
+        </label>
+        <div class="row-btns">
+          <button id="set-gemini-save" class="btn primary">Save Gemini</button>
+          <button id="set-gemini-clear" class="btn">Clear</button>
+          <span id="set-gemini-state" class="statetag"></span>
+        </div>
+      </section>
+
+      <section class="setblock">
+        <div class="setblock-h"><span class="ic">🖥️</span> Local / self-hosted servers</div>
+        <p class="hint">A2I Core, Ollama, LM Studio, or any OpenAI-compatible URL.
+          Add your local brain — runs with no external API.</p>
+        <div id="set-brain-list" class="brain-list"></div>
+        <div class="add-brain">
+          <input id="set-brain-name" placeholder="Name (e.g. A2I Core)" autocomplete="off">
+          <input id="set-brain-url" placeholder="http://127.0.0.1:8990" autocomplete="off">
+          <button id="set-brain-add" class="btn primary">Add</button>
+        </div>
+      </section>
+
+      <section class="setblock">
+        <div class="setblock-h"><span class="ic">🎨</span> Appearance</div>
+        <div class="row-btns">
+          <button id="set-theme" class="btn">🌓 Toggle light / dark</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
 
 <main>
   <div id="topbar">
@@ -754,8 +871,12 @@ function rebuildEngineSelect(selected) {
   add('all', '🧩 All brains together / ខួរក្បាលទាំងអស់រួមគ្នា');
   add('gemini-setup', hasGemini ? '✨ Change Gemini API key…' : '✨ Add Gemini API key…');
   add('add', '➕ Add brain (Ollama, LM Studio, any URL)…');
-  // Default: Cloud if available, else Gemini if a key is set, else in-browser.
-  engineSel.value = selected || (cloudAvailable ? 'cloud' : hasGemini ? 'gemini' : 'browser');
+  // Prefer the caller's choice, then the last remembered engine (if still
+  // valid), then a sensible default: Cloud → Gemini → in-browser.
+  const saved = localStorage.getItem('a2i-engine');
+  const savedValid = saved && [...engineSel.options].some((o) => o.value === saved);
+  engineSel.value = selected ||
+    (savedValid ? saved : (cloudAvailable ? 'cloud' : hasGemini ? 'gemini' : 'browser'));
 }
 
 async function checkBrains() {
@@ -775,32 +896,18 @@ async function checkBrains() {
 setInterval(checkBrains, 30000);
 
 engineSel.addEventListener('change', () => {
-  if (engineSel.value === 'add') {
-    const name = prompt('ឈ្មោះខួរក្បាល / Brain name (e.g. Ollama):');
-    const url = name && prompt('OpenAI-compatible base URL (e.g. http://127.0.0.1:11434):');
-    if (name && url) {
-      serverBrains.push({ name: name.trim(), url: url.trim().replace(/\/+$/, '') });
-      saveBrains();
-      rebuildEngineSelect('server:' + (serverBrains.length - 1));
-      checkBrains();
-    } else {
-      rebuildEngineSelect('browser');
-    }
-  } else if (engineSel.value === 'gemini-setup') {
-    const key = prompt(
-      'Paste your Gemini API key (free from https://aistudio.google.com/apikey).\n' +
-      'It is stored only in this browser and sent directly to Google:',
-      GEMINI_KEY());
-    if (key && key.trim()) {
-      localStorage.setItem('a2i-gemini-key', key.trim());
-      const model = prompt(
-        'Gemini model (e.g. gemini-2.0-flash, gemini-2.5-flash, gemini-1.5-flash):',
-        GEMINI_MODEL());
-      if (model && model.trim()) localStorage.setItem('a2i-gemini-model', model.trim());
-      rebuildEngineSelect('gemini');
-    } else {
-      rebuildEngineSelect(GEMINI_KEY() ? 'gemini' : 'browser');
-    }
+  // The "add / gemini-setup" options now open the polished Settings panel
+  // instead of native prompt() dialogs.
+  if (engineSel.value === 'add' || engineSel.value === 'gemini-setup') {
+    const focus = engineSel.value === 'gemini-setup' ? 'gemini' : 'brain';
+    rebuildEngineSelect(GEMINI_KEY() ? 'gemini' : 'browser');
+    refreshBar();
+    openSettings(focus);
+    return;
+  }
+  // Remember a concrete engine choice so it sticks across reloads.
+  if (!['add', 'gemini-setup'].includes(engineSel.value)) {
+    localStorage.setItem('a2i-engine', engineSel.value);
   }
   refreshBar();
 });
@@ -1415,6 +1522,83 @@ input.addEventListener('input', () => {
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 160) + 'px';
 });
+
+// ---- Settings panel ----------------------------------------------------
+
+const overlay = $('settings-overlay');
+
+function renderBrainList() {
+  const list = $('set-brain-list');
+  list.innerHTML = '';
+  if (!serverBrains.length) {
+    list.innerHTML = '<div class="hint" style="margin:0">No servers yet — add A2I Core below.</div>';
+    return;
+  }
+  serverBrains.forEach((b, i) => {
+    const row = document.createElement('div');
+    row.className = 'brain-row';
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = b.name;
+    const u = document.createElement('span'); u.className = 'u'; u.textContent = b.url;
+    const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑'; rm.title = 'Remove';
+    rm.addEventListener('click', () => {
+      serverBrains.splice(i, 1); saveBrains();
+      rebuildEngineSelect(engineSel.value); refreshBar(); renderBrainList();
+    });
+    row.append(nm, u, rm);
+    list.appendChild(row);
+  });
+}
+
+function openSettings(focus) {
+  $('set-gemini-key').value = GEMINI_KEY();
+  $('set-gemini-model').value = GEMINI_MODEL();
+  const tag = $('set-gemini-state');
+  tag.textContent = GEMINI_KEY() ? '● active' : '';
+  tag.classList.toggle('on', !!GEMINI_KEY());
+  renderBrainList();
+  overlay.hidden = false;
+  setTimeout(() => {
+    if (focus === 'gemini') $('set-gemini-key').focus();
+    else if (focus === 'brain') $('set-brain-name').focus();
+  }, 50);
+}
+function closeSettings() { overlay.hidden = true; }
+
+$('settings-btn').addEventListener('click', () => openSettings());
+$('settings-close').addEventListener('click', closeSettings);
+overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSettings(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) closeSettings(); });
+
+$('set-gemini-save').addEventListener('click', () => {
+  const key = $('set-gemini-key').value.trim();
+  const model = $('set-gemini-model').value.trim() || 'gemini-2.5-flash';
+  if (!key) { $('set-gemini-state').textContent = 'enter a key first'; return; }
+  localStorage.setItem('a2i-gemini-key', key);
+  localStorage.setItem('a2i-gemini-model', model);
+  localStorage.setItem('a2i-engine', 'gemini');
+  rebuildEngineSelect('gemini'); refreshBar();
+  const tag = $('set-gemini-state'); tag.textContent = '✓ saved — Gemini is active'; tag.classList.add('on');
+});
+$('set-gemini-clear').addEventListener('click', () => {
+  localStorage.removeItem('a2i-gemini-key');
+  $('set-gemini-key').value = '';
+  if (localStorage.getItem('a2i-engine') === 'gemini') localStorage.removeItem('a2i-engine');
+  rebuildEngineSelect('browser'); refreshBar();
+  const tag = $('set-gemini-state'); tag.textContent = 'cleared'; tag.classList.remove('on');
+});
+
+$('set-brain-add').addEventListener('click', () => {
+  const name = $('set-brain-name').value.trim();
+  const url = $('set-brain-url').value.trim().replace(/\/+$/, '');
+  if (!name || !url) return;
+  serverBrains.push({ name, url }); saveBrains();
+  $('set-brain-name').value = ''; $('set-brain-url').value = '';
+  rebuildEngineSelect('server:' + (serverBrains.length - 1)); refreshBar();
+  checkBrains(); renderBrainList();
+});
+
+$('set-theme').addEventListener('click', () =>
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 
 // ---- Init --------------------------------------------------------------
 
