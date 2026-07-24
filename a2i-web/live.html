@@ -151,6 +151,7 @@
     <div class="spacer"></div>
     <button id="lang" class="pill" title="Voice language">🌐 <span id="lang-label">EN</span></button>
     <button id="autolisten" class="pill" title="Hands-free: keep listening">🎙️ Auto</button>
+    <button id="gemini-btn" class="pill" title="Use your Gemini API key">✨ Gemini</button>
     <a class="pill" href="./" title="Classic chat">💬 Chat</a>
   </header>
 
@@ -248,7 +249,48 @@ async function readSSE(res, onDelta) {
   return answer;
 }
 
+// ---- Gemini (your own API key, called straight from the browser) --------
+const GEMINI_KEY = () => localStorage.getItem('a2i-gemini-key') || '';
+const GEMINI_MODEL = () => localStorage.getItem('a2i-gemini-model') || 'gemini-2.0-flash';
+
+function toGeminiBody(messages, maxTokens = 512) {
+  const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
+  const contents = messages.filter((m) => m.role !== 'system')
+    .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+  const body = { contents, generationConfig: { maxOutputTokens: maxTokens } };
+  if (system) body.systemInstruction = { parts: [{ text: system }] };
+  return body;
+}
+
+async function askGemini(messages, onDelta, signal) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/` +
+    `${encodeURIComponent(GEMINI_MODEL())}:streamGenerateContent?alt=sse&key=${encodeURIComponent(GEMINI_KEY())}`;
+  const res = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(toGeminiBody(messages, 512)), signal,
+  });
+  if (!res.ok) throw new Error('Gemini error ' + res.status + ': ' + (await res.text().catch(() => '')).slice(0, 140));
+  const reader = res.body.getReader(); const dec = new TextDecoder();
+  let answer = '', buf = '';
+  for (;;) {
+    const { done, value } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n'); buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const parts = JSON.parse(line.slice(6)).candidates?.[0]?.content?.parts || [];
+        const t = parts.map((p) => p.text || '').join('');
+        if (t) { answer += t; onDelta(answer); }
+      } catch { /* keep-alive */ }
+    }
+  }
+  return answer;
+}
+
 async function askModel(messages, onDelta, signal) {
+  // 0) Gemini, if you've pasted a key — works anywhere, no local server needed.
+  if (GEMINI_KEY()) return askGemini(messages, onDelta, signal);
   // 1) local A2I Core (or any OpenAI-compatible URL)
   try {
     const res = await fetch(CORE_URL.replace(/\/+$/, '') + '/v1/chat/completions', {
@@ -366,6 +408,30 @@ autoBtn.addEventListener('click', () => {
   autoBtn.classList.toggle('on', autoListen);
   if (autoListen) startRecog();
 });
+
+// ---- Gemini API key ----------------------------------------------------
+const geminiBtn = $('gemini-btn');
+function refreshGeminiBtn() {
+  const on = !!GEMINI_KEY();
+  geminiBtn.classList.toggle('on', on);
+  geminiBtn.textContent = on ? '✨ Gemini ✓' : '✨ Gemini';
+  geminiBtn.title = on ? 'Using Gemini (' + GEMINI_MODEL() + ') — click to change/clear' : 'Use your Gemini API key';
+}
+geminiBtn.addEventListener('click', () => {
+  const key = prompt(
+    'Paste your Gemini API key (free from https://aistudio.google.com/apikey).\n' +
+    'Stored only in this browser, sent directly to Google. Leave empty to clear:',
+    GEMINI_KEY());
+  if (key === null) return;
+  if (!key.trim()) { localStorage.removeItem('a2i-gemini-key'); refreshGeminiBtn();
+    setState('idle', 'Gemini cleared — using local A2I Core'); return; }
+  localStorage.setItem('a2i-gemini-key', key.trim());
+  const model = prompt('Gemini model (e.g. gemini-2.0-flash, gemini-2.5-flash):', GEMINI_MODEL());
+  if (model && model.trim()) localStorage.setItem('a2i-gemini-model', model.trim());
+  refreshGeminiBtn();
+  setState('idle', '✨ Gemini ready — tap the mic and speak');
+});
+refreshGeminiBtn();
 
 // ---- Init --------------------------------------------------------------
 $('foot').innerHTML = SR
