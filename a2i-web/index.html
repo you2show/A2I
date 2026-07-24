@@ -344,6 +344,18 @@
   .add-brain input { padding: .55rem .7rem; border-radius: 11px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: .82rem; font-family: inherit; }
   .add-brain input:focus { outline: none; border-color: var(--accent); }
   @media (max-width: 520px) { .add-brain { grid-template-columns: 1fr; } }
+
+  /* ---- Image attachments (vision) ---- */
+  #attach-preview { display: none; max-width: 46rem; margin: 0 auto .5rem; gap: .5rem; flex-wrap: wrap; }
+  #attach-preview .thumb { position: relative; width: 62px; height: 62px; }
+  #attach-preview .thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+  #attach-preview .thumb button {
+    position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; border-radius: 50%;
+    border: 2px solid var(--panel); background: #b3403f; color: #fff; cursor: pointer; font-size: .62rem; line-height: 1; padding: 0;
+  }
+  #composer.dragging { border-color: var(--accent); box-shadow: 0 0 0 4px var(--ring), var(--shadow); }
+  .msg.user .msg-imgs { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .45rem; }
+  .msg.user .msg-imgs img { max-width: 220px; max-height: 220px; border-radius: 12px; display: block; }
 </style>
 </head>
 <body>
@@ -449,12 +461,15 @@
 
   <div id="composer-wrap">
     <form id="form">
+      <div id="attach-preview"></div>
       <div id="composer">
+        <button type="button" id="attach-btn" class="icon-btn ghost" title="Attach image / ភ្ជាប់រូប (best with Gemini)">🖼️</button>
         <textarea id="input" rows="1" placeholder="សួរអ្វីក៏បាន… Ask anything…"></textarea>
         <button type="button" id="regen" class="icon-btn ghost" title="Regenerate / បង្កើតចម្លើយម្តងទៀត" style="display:none">↻</button>
         <button type="button" id="stop" class="icon-btn" title="Stop / បញ្ឈប់">■</button>
         <button type="submit" id="send" class="icon-btn" title="Send / ផ្ញើ">➤</button>
       </div>
+      <input type="file" id="file-input" accept="image/*" multiple hidden>
     </form>
     <div class="footnote">A2I រត់ក្នុងឧបករណ៍អ្នកផ្ទាល់ — គ្មាន API ខាងក្រៅ · runs on your own device, no external AI APIs</div>
   </div>
@@ -524,8 +539,19 @@ try { chats = JSON.parse(localStorage.getItem('a2i-chats') || '[]'); } catch { c
 let currentId = null;
 let history = [{ role: 'system', content: SYSTEM_PROMPT }];
 
-const saveChats = () =>
-  localStorage.setItem('a2i-chats', JSON.stringify(chats.slice(0, 50)));
+const saveChats = () => {
+  try {
+    localStorage.setItem('a2i-chats', JSON.stringify(chats.slice(0, 50)));
+  } catch {
+    // Storage full (usually attached images) — persist text only so chat
+    // history and titles still survive across reloads.
+    const lean = chats.slice(0, 50).map((c) => ({
+      ...c,
+      messages: c.messages.map((m) => (m.images ? { ...m, images: undefined } : m)),
+    }));
+    try { localStorage.setItem('a2i-chats', JSON.stringify(lean)); } catch { /* give up */ }
+  }
+};
 
 function renderChatList() {
   const list = $('chat-list');
@@ -638,7 +664,7 @@ function showWelcome() {
   }
 }
 
-function addMsg(cls, text, label) {
+function addMsg(cls, text, label, images) {
   const welcome = $('welcome');
   if (welcome) welcome.remove();
   const div = document.createElement('div');
@@ -648,7 +674,21 @@ function addMsg(cls, text, label) {
     div.update = () => {};
   } else if (cls === 'user') {
     div.className = 'msg user';
-    div.textContent = text;
+    if (images && images.length) {
+      const gal = document.createElement('div');
+      gal.className = 'msg-imgs';
+      for (const src of images) {
+        const im = document.createElement('img');
+        im.src = src; im.alt = 'attached image';
+        gal.appendChild(im);
+      }
+      div.appendChild(gal);
+    }
+    if (text) {
+      const tx = document.createElement('div');
+      tx.textContent = text;
+      div.appendChild(tx);
+    }
     div.update = () => {};
   } else {
     div.className = 'msg ' + cls;
@@ -689,7 +729,7 @@ function renderChat() {
   const msgs = history.filter((m) => m.role !== 'system');
   if (!msgs.length) { showWelcome(); regenBtn.style.display = 'none'; return; }
   for (const m of msgs) {
-    if (m.role === 'user') addMsg('user', m.content);
+    if (m.role === 'user') addMsg('user', m.content, null, m.images);
     else addMsg('ai', m.content, '🧠 A2I');
   }
   regenBtn.style.display =
@@ -1237,10 +1277,36 @@ function toGeminiBody(messages, maxTokens = 1024) {
   const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
   const contents = messages
     .filter((m) => m.role !== 'system')
-    .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+    .map((m) => {
+      const parts = [];
+      if (m.content) parts.push({ text: m.content });
+      for (const url of (m.images || [])) {
+        const mt = /^data:(.*?);base64,(.*)$/.exec(url);
+        if (mt) parts.push({ inlineData: { mimeType: mt[1], data: mt[2] } });
+      }
+      if (!parts.length) parts.push({ text: '' });
+      return { role: m.role === 'assistant' ? 'model' : 'user', parts };
+    });
   const body = { contents, generationConfig: { maxOutputTokens: maxTokens } };
   if (system) body.systemInstruction = { parts: [{ text: system }] };
   return body;
+}
+
+// Convert history (with optional image data URLs) into OpenAI vision format
+// only for messages that carry images; plain text messages stay as strings.
+function toOpenAIMessages(messages) {
+  return messages.map((m) => {
+    if (m.images && m.images.length) {
+      return {
+        role: m.role,
+        content: [
+          ...(m.content ? [{ type: 'text', text: m.content }] : []),
+          ...m.images.map((url) => ({ type: 'image_url', image_url: { url } })),
+        ],
+      };
+    }
+    return { role: m.role, content: m.content };
+  });
 }
 
 async function readGeminiSSE(res, onDelta, signal) {
@@ -1313,7 +1379,7 @@ async function askCloud(messages, onDelta, signal) {
     res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, max_tokens: 1024 }),
+      body: JSON.stringify({ messages: toOpenAIMessages(messages), max_tokens: 1024 }),
       signal,
     });
   } catch (err) {
@@ -1336,7 +1402,7 @@ async function askServer(brain, messages, onDelta, signal) {
     res = await fetch(brain.url + '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, stream: true, max_tokens: 1024 }),
+      body: JSON.stringify({ messages: toOpenAIMessages(messages), stream: true, max_tokens: 1024 }),
       signal,
     });
   } catch (err) {
@@ -1491,14 +1557,88 @@ async function generate() {
   }
 }
 
+// ---- Image attachments (vision) ----------------------------------------
+let attachedImages = [];
+const fileInput = $('file-input');
+const attachPreview = $('attach-preview');
+
+function renderAttachPreview() {
+  attachPreview.innerHTML = '';
+  attachPreview.style.display = attachedImages.length ? 'flex' : 'none';
+  attachedImages.forEach((src, i) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    const img = document.createElement('img');
+    img.src = src;
+    const rm = document.createElement('button');
+    rm.textContent = '✕'; rm.title = 'Remove';
+    rm.addEventListener('click', () => { attachedImages.splice(i, 1); renderAttachPreview(); });
+    thumb.append(img, rm);
+    attachPreview.appendChild(thumb);
+  });
+}
+
+// Downscale to keep prompts small and localStorage happy (max 1024px, JPEG).
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 1024;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        const s = Math.min(MAX / width, MAX / height);
+        width = Math.round(width * s); height = Math.round(height * s);
+      }
+      const c = document.createElement('canvas');
+      c.width = width; c.height = height;
+      c.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('bad image')); };
+    img.src = url;
+  });
+}
+
+async function addFiles(files) {
+  for (const f of files) {
+    if (!f.type?.startsWith('image/')) continue;
+    if (attachedImages.length >= 4) break;
+    try { attachedImages.push(await compressImage(f)); } catch { /* skip */ }
+  }
+  renderAttachPreview();
+}
+
+$('attach-btn').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => { addFiles([...fileInput.files]); fileInput.value = ''; });
+input.addEventListener('paste', (e) => {
+  const imgs = [...(e.clipboardData?.items || [])]
+    .filter((it) => it.type.startsWith('image/')).map((it) => it.getAsFile()).filter(Boolean);
+  if (imgs.length) { e.preventDefault(); addFiles(imgs); }
+});
+const composerEl = $('composer');
+['dragenter', 'dragover'].forEach((ev) => composerEl.addEventListener(ev, (e) => {
+  e.preventDefault(); composerEl.classList.add('dragging');
+}));
+['dragleave', 'drop'].forEach((ev) => composerEl.addEventListener(ev, (e) => {
+  e.preventDefault(); composerEl.classList.remove('dragging');
+  if (ev === 'drop' && e.dataTransfer?.files?.length) addFiles([...e.dataTransfer.files]);
+}));
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = input.value.trim();
-  if (!text || currentAbort) return;
+  if ((!text && !attachedImages.length) || currentAbort) return;
+  const images = attachedImages.slice();
   input.value = '';
   input.style.height = 'auto';
-  addMsg('user', text);
-  history.push({ role: 'user', content: text });
+  attachedImages = [];
+  renderAttachPreview();
+  addMsg('user', text, null, images);
+  const msg = { role: 'user', content: text };
+  if (images.length) msg.images = images;
+  history.push(msg);
   persistChat();
   await generate();
 });
