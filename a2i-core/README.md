@@ -7,15 +7,34 @@ A2I Core is a self-hosted AI engine. It runs an open-weight language model
 locally with [llama.cpp](https://github.com/ggerganov/llama.cpp) — no OpenAI,
 no Anthropic, no cloud. Your data never leaves your machine.
 
-## Quick start
+## Quick start — one command
+
+**macOS / Linux / WSL:**
 
 ```bash
 cd a2i-core
-./download-model.sh        # one-time download of open model weights
-./run.sh                   # start the server (sets up Python env on first run)
+./run.sh
 ```
 
-Then open <http://127.0.0.1:8990> in your browser and chat.
+**Windows:** double-click `start.bat` (or run it in a terminal).
+
+That single command sets up Python, downloads an open model on first run, and
+starts the server. Then open <http://127.0.0.1:8990> and chat.
+
+### Why this is the reliable, guaranteed path
+
+In-browser AI (WebGPU / WebAssembly) depends on features a given browser may
+not support — some devices load a model but then abort mid-generation. A2I
+Core sidesteps all of that: it runs the model on **native llama.cpp** on your
+own machine, so it works the same everywhere, needs no GPU, and never calls an
+external API. Point the A2I web app at it (add a brain → `http://127.0.0.1:8990`)
+or just use the built-in chat UI at that address.
+
+Pick a bigger model any time with `A2I_MODEL` (see `./download-model.sh list`):
+
+```bash
+A2I_MODEL=llama-3.1-8b ./run.sh     # Meta Llama 3.1 8B, fully local
+```
 
 Models — famous open-weight models that run **100% locally, no external API**.
 Run `./download-model.sh list` to see them all; here are the highlights:
