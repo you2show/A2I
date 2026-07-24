@@ -780,15 +780,43 @@ async function loadGpuEngine(model) {
   };
 }
 
+// wllama's default WASM build needs the browser to support JSPI
+// (WebAssembly.Suspending) and Memory64. Browsers without them (Safari, older
+// Chrome/Firefox, many mobile browsers) load the model fine but then hard-abort
+// with "(ABORT)" at the first token. wllama ships a separate *compat* build for
+// exactly these browsers; we vendor it under vendor/wllama/compat/ and switch to
+// it here so the CPU engine works everywhere. See a2i-web/vendor/wllama/compat/.
+function needsWllamaCompat() {
+  const hasJSPI = typeof WebAssembly.Suspending === 'function';
+  let hasMem64 = false;
+  try {
+    new WebAssembly.Memory({ address: 'i64', initial: 1n });
+    hasMem64 = true;
+  } catch { /* Memory64 unsupported */ }
+  return !hasJSPI || !hasMem64;
+}
+
 async function loadCpuEngine() {
   setStatus('ប្រើ CPU / using CPU mode…');
   const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
   const wllama = new Wllama(
     { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
+  // On browsers that lack JSPI/Memory64, point wllama at the vendored compat
+  // build (single-threaded, works everywhere) instead of letting it fall back to
+  // an incompatible engine that aborts mid-inference.
+  const compat = needsWllamaCompat();
+  if (compat) {
+    wllama.setCompat({
+      worker: new URL('vendor/wllama/compat/wllama.js', location.href).href,
+      wasm: new URL('vendor/wllama/compat/wllama.wasm', location.href).href,
+    }, 'firefox_safari');
+  }
   const url = localStorage.getItem('a2i-cpu-model-url') || CPU_MODEL_URL;
-  // Use all CPU cores (SharedArrayBuffer multi-threading is enabled by our
-  // COOP/COEP headers) for markedly faster generation.
-  const threads = Math.max(2, Math.min(navigator.hardwareConcurrency || 4, 8));
+  // Multi-thread (SharedArrayBuffer, enabled by our COOP/COEP headers) is faster,
+  // but the compat build is single-threaded, so use 1 thread there for stability.
+  const threads = compat
+    ? 1
+    : Math.max(2, Math.min(navigator.hardwareConcurrency || 4, 8));
   progress.hidden = false;
   const watch = stallGuard(60000);
   await Promise.race([
