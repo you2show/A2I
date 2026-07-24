@@ -356,6 +356,20 @@
   #composer.dragging { border-color: var(--accent); box-shadow: 0 0 0 4px var(--ring), var(--shadow); }
   .msg.user .msg-imgs { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .45rem; }
   .msg.user .msg-imgs img { max-width: 220px; max-height: 220px; border-radius: 12px; display: block; }
+
+  /* ---- Voice in chat ---- */
+  .speak-btn { right: 1.7rem; }
+  #mic-btn.rec { color: #b3403f; animation: a2i-mic 1.2s ease-in-out infinite; }
+  @keyframes a2i-mic { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+  /* ---- Mobile polish ---- */
+  @media (max-width: 768px) {
+    .col { padding: 1rem .8rem 0; }
+    #composer-wrap { padding: .6rem .7rem calc(.8rem + env(safe-area-inset-bottom)); }
+    #composer { border-radius: 20px; }
+    .msg.user .msg-imgs img { max-width: 150px; max-height: 150px; }
+    #topbar { gap: .4rem; }
+  }
 </style>
 </head>
 <body>
@@ -412,9 +426,10 @@
       </section>
 
       <section class="setblock">
-        <div class="setblock-h"><span class="ic">🎨</span> Appearance</div>
+        <div class="setblock-h"><span class="ic">🎨</span> Appearance & voice</div>
         <div class="row-btns">
           <button id="set-theme" class="btn">🌓 Toggle light / dark</button>
+          <button id="set-autospeak" class="btn">🔊 Auto read answers: Off</button>
         </div>
       </section>
 
@@ -464,6 +479,7 @@
       <div id="attach-preview"></div>
       <div id="composer">
         <button type="button" id="attach-btn" class="icon-btn ghost" title="Attach image / ភ្ជាប់រូប (best with Gemini)">🖼️</button>
+        <button type="button" id="mic-btn" class="icon-btn ghost" title="Dictate / និយាយបញ្ចូល">🎤</button>
         <textarea id="input" rows="1" placeholder="សួរអ្វីក៏បាន… Ask anything…"></textarea>
         <button type="button" id="regen" class="icon-btn ghost" title="Regenerate / បង្កើតចម្លើយម្តងទៀត" style="display:none">↻</button>
         <button type="button" id="stop" class="icon-btn" title="Stop / បញ្ឈប់">■</button>
@@ -701,12 +717,18 @@ function addMsg(cls, text, label, images) {
     const body = document.createElement('div');
     body.className = 'md';
     div.appendChild(body);
+    let raw = text;
+    const speakBtn = document.createElement('button');
+    speakBtn.className = 'copy-btn speak-btn';
+    speakBtn.textContent = '🔊';
+    speakBtn.title = 'Read aloud / អានឮៗ';
+    speakBtn.addEventListener('click', () => speakText(raw));
+    div.appendChild(speakBtn);
     const copy = document.createElement('button');
     copy.className = 'copy-btn';
     copy.textContent = '⧉';
     copy.title = 'Copy';
     div.appendChild(copy);
-    let raw = text;
     copy.addEventListener('click', () => {
       navigator.clipboard?.writeText(raw);
       copy.textContent = '✓';
@@ -1546,6 +1568,7 @@ async function generate() {
     if (answer) {
       history.push({ role: 'assistant', content: answer });
       persistChat();
+      if (localStorage.getItem('a2i-autospeak') === '1') speakText(answer);
     }
   } catch (err) {
     addMsg('ai', '⚠ ' + err.message);
@@ -1651,6 +1674,47 @@ regenBtn.addEventListener('click', async () => {
   await generate();
 });
 
+// ---- Voice in chat: dictate messages + read answers aloud --------------
+
+const VOICE_LANG = navigator.language && navigator.language.startsWith('km') ? 'km-KH' : 'en-US';
+
+function speakText(t) {
+  if (!('speechSynthesis' in window) || !t) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(t.replace(/[#*`>_~]/g, ''));
+    u.lang = VOICE_LANG;
+    window.speechSynthesis.speak(u);
+  } catch { /* speech unavailable */ }
+}
+
+const micBtn = $('mic-btn');
+const SR_CHAT = window.SpeechRecognition || window.webkitSpeechRecognition;
+let chatRecog = null, chatListening = false;
+if (!SR_CHAT) {
+  micBtn.style.display = 'none';
+} else {
+  micBtn.addEventListener('click', () => {
+    if (chatListening) { try { chatRecog.stop(); } catch { /* */ } return; }
+    chatRecog = new SR_CHAT();
+    chatRecog.lang = VOICE_LANG;
+    chatRecog.interimResults = true;
+    chatRecog.continuous = false;
+    const base = input.value.trim();
+    chatRecog.onstart = () => { chatListening = true; micBtn.classList.add('rec'); };
+    chatRecog.onresult = (e) => {
+      let t = '';
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      input.value = base ? base + ' ' + t : t;
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+    };
+    chatRecog.onerror = () => { chatListening = false; micBtn.classList.remove('rec'); };
+    chatRecog.onend = () => { chatListening = false; micBtn.classList.remove('rec'); input.focus(); };
+    try { chatRecog.start(); } catch { /* already running */ }
+  });
+}
+
 // textarea: Enter sends, Shift+Enter = new line, auto-grow
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -1739,6 +1803,19 @@ $('set-brain-add').addEventListener('click', () => {
 
 $('set-theme').addEventListener('click', () =>
   applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+
+function refreshAutospeak() {
+  const on = localStorage.getItem('a2i-autospeak') === '1';
+  const btn = $('set-autospeak');
+  btn.textContent = '🔊 Auto read answers: ' + (on ? 'On' : 'Off');
+  btn.classList.toggle('primary', on);
+}
+$('set-autospeak').addEventListener('click', () => {
+  localStorage.setItem('a2i-autospeak',
+    localStorage.getItem('a2i-autospeak') === '1' ? '0' : '1');
+  refreshAutospeak();
+});
+refreshAutospeak();
 
 // ---- Init --------------------------------------------------------------
 
