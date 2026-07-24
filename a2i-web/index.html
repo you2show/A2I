@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>A2I — All-in-One AI</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c96442'/%3E%3Ctext x='16' y='22' font-family='sans-serif' font-size='15' font-weight='800' fill='%23fff' text-anchor='middle'%3EA2%3C/text%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #f4f3ee; --panel: #ffffff; --side: #ece9e0; --text: #1f1e1b;
@@ -711,8 +712,15 @@ async function loadWebLLM() {
     '(Could not load the AI library.) ' + lastError.message);
 }
 
-const CPU_MODEL_URL =
-  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
+// The CPU model is fetched from HuggingFace. On some devices and networks
+// (e.g. many Huawei/HarmonyOS tablets, or regions where huggingface.co is
+// blocked or throttled) that host is unreachable, so the download stalls and
+// the AI can never answer. We try each source in turn — the same file on a
+// mirror — until one works.
+const CPU_MODEL_URLS = [
+  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+  'https://hf-mirror.com/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+];
 const CPU_MODEL_NAME = 'Qwen2.5 0.5B (CPU)';
 
 // Turns an infinite hang into a clear, recoverable error: rejects if the
@@ -768,38 +776,28 @@ async function loadGpuEngine(model) {
   };
 }
 
-async function loadCpuEngine() {
-  setStatus('ប្រើ CPU / using CPU mode…');
-  const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
-  const wllama = new Wllama(
-    { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
-  const url = localStorage.getItem('a2i-cpu-model-url') || CPU_MODEL_URL;
-  // Use all CPU cores (SharedArrayBuffer multi-threading is enabled by our
-  // COOP/COEP headers) for markedly faster generation.
-  const threads = Math.max(2, Math.min(navigator.hardwareConcurrency || 4, 8));
-  progress.hidden = false;
-  const watch = stallGuard(60000);
-  await Promise.race([
-    watch.signal,
-    wllama.loadModelFromUrl(url, {
-      // 4096 is plenty once prompts are trimmed — smaller KV cache means
-      // faster prefill and less RAM than a larger window.
-      n_ctx: 4096,
-      n_threads: threads,
-      n_batch: 256,
-      // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
-      // which would hit the same broken GPU we are falling back FROM.
-      n_gpu_layers: 0,
-      progressCallback: ({ loaded, total }) => {
-        watch.ping();
-        progress.value = total ? loaded / total : 0;
-        const pct = Math.round(100 * (loaded / (total || 1)));
-        const mb = Math.round(loaded / 1048576);
-        setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
-      },
-    }),
-  ]).finally(() => watch.clear());
-  progress.hidden = true;
+// Extract the running answer text from one streamed chunk. Different engine
+// builds stream different shapes, and getting this wrong silently produces an
+// empty reply (the model runs but nothing shows). We handle all of them:
+//   - old wllama:        { currentText: "<full text so far>" }   (accumulated)
+//   - llama.cpp native:  { content: "<piece>" }                  (incremental)
+//   - OpenAI streaming:  { choices: [{ delta: { content } }] }   (incremental)
+//   - OpenAI full:       { choices: [{ message: { content } }] }
+//   - raw string / token piece
+function chunkToText(chunk, prev) {
+  if (typeof chunk === 'string') return prev + chunk;
+  if (typeof chunk?.currentText === 'string') return chunk.currentText;
+  const piece =
+    chunk?.choices?.[0]?.delta?.content ??
+    chunk?.choices?.[0]?.message?.content ??
+    chunk?.content ??
+    chunk?.piece ??
+    (typeof chunk?.token === 'string' ? chunk.token : '') ??
+    '';
+  return prev + piece;
+}
+
+function makeCpuEngine(wllama) {
   return {
     kind: 'cpu',
     stop: () => {},
@@ -812,10 +810,7 @@ async function loadCpuEngine() {
           abortSignal: signal,
           max_tokens: Math.min(maxTokens, 300),
           onData: (chunk) => {
-            const delta =
-              chunk?.choices?.[0]?.delta?.content ?? chunk?.currentText ?? '';
-            if (chunk?.currentText !== undefined) answer = chunk.currentText;
-            else answer += delta;
+            answer = chunkToText(chunk, answer);
             onDelta(answer);
           },
         }).then(() => resolve(answer),
@@ -823,6 +818,99 @@ async function loadCpuEngine() {
       });
     },
   };
+}
+
+// wllama downloads the model inside a Web Worker. On some networks that worker
+// fetch fails with "Failed to fetch" even though a normal fetch of the very
+// same URL works (a CORS/COEP quirk of the worker context, seen e.g. on some
+// Huawei/HarmonyOS devices). So we download the model ourselves on the main
+// thread — the path that works, and that check.html's test #6 verifies —
+// cache it for next time, and try each mirror in turn.
+const MODEL_CACHE = 'a2i-models';
+
+async function fetchModelBlob(urls, onProgress) {
+  const cache = await caches.open(MODEL_CACHE).catch(() => null);
+  let lastError = null;
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    const host = new URL(url).host;
+    try {
+      if (cache) {
+        const hit = await cache.match(url).catch(() => null);
+        if (hit) return await hit.blob(); // already downloaded — instant
+      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const total = Number(res.headers.get('content-length')) || 0;
+      const reader = res.body.getReader();
+      const parts = [];
+      let loaded = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value);
+        loaded += value.length;
+        onProgress(loaded, total, host);
+      }
+      const blob = new Blob(parts);
+      if (cache) { try { await cache.put(url, new Response(blob)); } catch { /* quota — skip caching */ } }
+      return blob;
+    } catch (err) {
+      lastError = err;
+      // Try the next mirror before giving up (e.g. huggingface.co blocked).
+      if (i < urls.length - 1) {
+        const next = new URL(urls[i + 1]).host;
+        setStatus(`${host} មិនដំណើរការ — ប្តូរទៅ ${next}… / trying mirror ${next}…`);
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function loadCpuEngine() {
+  setStatus('ប្រើ CPU / using CPU mode…');
+  const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
+  const wasmUrl = new URL('vendor/wllama/wllama.wasm', location.href).href;
+  // Use all CPU cores (SharedArrayBuffer multi-threading is enabled by our
+  // COOP/COEP headers) for markedly faster generation.
+  const threads = Math.max(2, Math.min(navigator.hardwareConcurrency || 4, 8));
+  const override = localStorage.getItem('a2i-cpu-model-url');
+  const urls = override ? [override] : CPU_MODEL_URLS;
+
+  // 1. Download the weights ourselves (with a stall watchdog + mirrors).
+  progress.hidden = false;
+  const watch = stallGuard(60000);
+  let blob;
+  try {
+    blob = await Promise.race([
+      watch.signal,
+      fetchModelBlob(urls, (loaded, total, host) => {
+        watch.ping();
+        progress.value = total ? loaded / total : 0;
+        const pct = Math.round(100 * (loaded / (total || 1)));
+        const mb = Math.round(loaded / 1048576);
+        setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB · ${host} (ម្តងគត់ · one-time)`);
+      }),
+    ]);
+  } finally {
+    watch.clear();
+  }
+
+  // 2. Hand the bytes to wllama (no network here — cannot hit the fetch bug).
+  setStatus('រៀបចំ AI… / preparing the model…');
+  const wllama = new Wllama({ default: wasmUrl });
+  await wllama.loadModel([blob], {
+    // 4096 is plenty once prompts are trimmed — smaller KV cache means
+    // faster prefill and less RAM than a larger window.
+    n_ctx: 4096,
+    n_threads: threads,
+    n_batch: 256,
+    // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
+    // which would hit the same broken GPU we are falling back FROM.
+    n_gpu_layers: 0,
+  });
+  progress.hidden = true;
+  return makeCpuEngine(wllama);
 }
 
 async function ensureBrowserEngine() {
@@ -864,8 +952,9 @@ async function ensureBrowserEngine() {
   }
 
   throw new Error(
-    'ការទាញ AI បរាជ័យ — សូមពិនិត្យអ៊ីនធឺណិត រួចផ្ញើសារម្តងទៀត។ ' +
-    '(Could not start any in-browser engine.) ' + errors.join(' | '));
+    'ការទាញ AI បរាជ័យ — សូមបើក check.html ដើម្បីពិនិត្យឧបករណ៍ រួចផ្ញើសារម្តងទៀត។ ' +
+    '(Could not start any in-browser engine. Open check.html to see why.) ' +
+    errors.join(' | '));
 }
 
 async function askBrowser(messages, onDelta, signal) {
