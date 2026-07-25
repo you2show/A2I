@@ -862,12 +862,21 @@ function addMsg(cls, text, label, images) {
     div.update = () => {};
   } else {
     div.className = 'msg ' + cls;
+    let labelEl = null;
     if (label) {
-      const l = document.createElement('div');
-      l.className = 'brain-label';
-      l.textContent = label;
-      div.appendChild(l);
+      labelEl = document.createElement('div');
+      labelEl.className = 'brain-label';
+      labelEl.textContent = label;
+      div.appendChild(labelEl);
     }
+    div.setLabel = (t) => {
+      if (!labelEl) {
+        labelEl = document.createElement('div');
+        labelEl.className = 'brain-label';
+        div.insertBefore(labelEl, div.firstChild);
+      }
+      labelEl.textContent = t;
+    };
     const body = document.createElement('div');
     body.className = 'md';
     div.appendChild(body);
@@ -1079,8 +1088,10 @@ function rebuildEngineSelect(selected) {
     o.value = value; o.textContent = label;
     engineSel.appendChild(o);
   };
-  if (cloudAvailable) add('cloud', '☁️ A2I Cloud (fast, no download)');
   const hasGemini = !!GEMINI_KEY();
+  const hasProviders = hasGemini || serverBrains.length > 0 || cloudAvailable;
+  if (hasProviders) add('auto', '🔄 Auto — best available (auto-failover)');
+  if (cloudAvailable) add('cloud', '☁️ A2I Cloud (fast, no download)');
   if (hasGemini) add('gemini', '✨ Gemini (' + GEMINI_MODEL() + ')');
   add('browser', '🧠 In-browser AI (no server, no API)');
   serverBrains.forEach((b, i) => add('server:' + i, '🖥️ ' + b.name + brainStatusLabel(b)));
@@ -1092,7 +1103,7 @@ function rebuildEngineSelect(selected) {
   const saved = localStorage.getItem('a2i-engine');
   const savedValid = saved && [...engineSel.options].some((o) => o.value === saved);
   engineSel.value = selected ||
-    (savedValid ? saved : (cloudAvailable ? 'cloud' : hasGemini ? 'gemini' : 'browser'));
+    (savedValid ? saved : (hasProviders ? 'auto' : 'browser'));
 }
 
 // Base URLs may or may not already end in /v1 (A2I Core/Ollama use bare host;
@@ -1160,7 +1171,9 @@ function refreshBar() {
   modelSel.style.display = mode === 'browser' && navigator.gpu ? 'inline-block' : 'none';
   serverUrl.style.display = brain ? 'inline-block' : 'none';
   if (brain) serverUrl.value = brain.url;
-  if (mode === 'cloud') {
+  if (mode === 'auto') {
+    setStatus('🔄 Auto — uses the best brain, auto-switches on limits', true);
+  } else if (mode === 'cloud') {
     setStatus('☁️ A2I Cloud — fast, no download', true);
   } else if (mode === 'gemini') {
     setStatus(`✨ Gemini ${GEMINI_MODEL()} — using your API key`, true);
@@ -1620,6 +1633,37 @@ async function askServer(brain, messages, onDelta, signal) {
   return readSSE(res, onDelta, signal);
 }
 
+// ---- Auto: best available brain, with automatic failover ----------------
+// Tries providers in priority order and falls through on rate-limit/error to
+// the next one, so a single 429 (free-tier limit) never breaks the chat.
+async function askAuto(messages, aiDiv, signal) {
+  const providers = [];
+  if (GEMINI_KEY()) providers.push({ label: '✨ Gemini', fn: (d) => askGemini(messages, d, signal) });
+  serverBrains.forEach((b) => {
+    if (b.online !== false) providers.push({ label: '🖥️ ' + b.name, fn: (d) => askServer(b, messages, d, signal) });
+  });
+  if (cloudAvailable) providers.push({ label: '☁️ A2I Cloud', fn: (d) => askCloud(messages, d, signal) });
+  providers.push({ label: '🧠 In-browser AI', fn: (d) => askBrowser(messages, d, signal) });
+
+  let lastErr = null;
+  for (let i = 0; i < providers.length; i++) {
+    const p = providers[i];
+    aiDiv.setLabel('🔄 ' + p.label);
+    try {
+      const ans = await p.fn((t) => aiDiv.update(t));
+      if (ans && ans.trim()) { aiDiv.setLabel(p.label); return ans; }
+    } catch (err) {
+      if (signal?.aborted) return '';
+      lastErr = err;
+      if (i < providers.length - 1) {
+        aiDiv.update('↻ ' + p.label + ' មិនអាចប្រើ (' +
+          (err.message || '').slice(0, 60) + ') — ព្យាយាម provider បន្ទាប់…');
+      }
+    }
+  }
+  throw lastErr || new Error('គ្មាន provider ណាឆ្លើយបានទេ។ (No provider could answer.)');
+}
+
 // ---- All brains together -----------------------------------------------
 
 async function askAllBrains(question, messages, signal) {
@@ -1723,7 +1767,10 @@ async function generate() {
 
   try {
     let answer;
-    if (mode === 'cloud') {
+    if (mode === 'auto') {
+      const aiDiv = addMsg('ai', '…', '🔄 Auto');
+      answer = await askAuto(messages, aiDiv, signal);
+    } else if (mode === 'cloud') {
       const aiDiv = addMsg('ai', '…', '☁️ A2I Cloud');
       answer = await askCloud(messages, (t) => aiDiv.update(t), signal);
     } else if (mode === 'gemini') {
