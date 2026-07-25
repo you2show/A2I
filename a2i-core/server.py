@@ -19,16 +19,18 @@ import json
 import time
 import uuid
 from pathlib import Path
-from typing import Iterator, TypedDict
+from typing import Callable, Iterator, TypedDict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from llama_cpp import Llama
 
+from agent import ask, run_agent
+from browse import browse
 from fim import RepoFile, build_repo_fim_prompt
 from knowledge import KnowledgeBase
-from repomap import extract_refs, rank_files
+from repomap import build_repo_map, extract_refs, rank_files
 
 DEFAULT_MODEL_PATH = Path(__file__).parent / "models" / "model.gguf"
 DEFAULT_SYSTEM_PROMPT = (
@@ -218,6 +220,98 @@ def completions(body: dict) -> JSONResponse | StreamingResponse:
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+def _local_llm(temperature: float = 0.2, max_tokens: int = 2048) -> "Callable[[list], str]":
+    """Use the loaded model directly, with no HTTP round trip."""
+
+    def call(messages: list[ChatMessage]) -> str:
+        result = state.llm.create_chat_completion(
+            messages=messages, max_tokens=max_tokens, temperature=temperature
+        )
+        return result["choices"][0]["message"]["content"]
+
+    return call
+
+
+@app.post("/v1/agent/ask")
+def agent_ask(body: dict) -> JSONResponse:
+    """Answer a question about a codebase, without changing anything.
+
+    The caller supplies the files, so this works for a browser client that
+    has no filesystem access of its own.
+    """
+    question: str = body.get("question") or body.get("query") or ""
+    files: dict[str, str] = body.get("files") or {}
+    if not question:
+        return JSONResponse({"error": "question is required"}, status_code=400)
+    answer = ask(question, files, _local_llm(), read_urls=bool(body.get("read_urls")))
+    return JSONResponse({"answer": answer})
+
+
+@app.post("/v1/agent/edit")
+def agent_edit(body: dict) -> JSONResponse:
+    """Edit the supplied files to accomplish a task.
+
+    Returns the updated contents; nothing is written to disk here — the
+    caller decides what to do with them, which keeps the dangerous half of
+    the operation on the client side where the user can see it.
+    """
+    task: str = body.get("task") or ""
+    files: dict[str, str] = body.get("files") or {}
+    if not task or not files:
+        return JSONResponse({"error": "task and files are required"}, status_code=400)
+    result = run_agent(
+        task=task,
+        files=files,
+        llm=_local_llm(),
+        max_rounds=int(body.get("rounds") or 3),
+        architect=_local_llm(temperature=0.4) if body.get("architect") else None,
+        read_urls=bool(body.get("read_urls")),
+    )
+    return JSONResponse(
+        {
+            "files": {p: t for p, t in result.files.items() if files.get(p) != t},
+            "applied": result.applied,
+            "failed": result.failed,
+            "rounds": result.rounds,
+            "plan": result.plan,
+            "log": result.log,
+        }
+    )
+
+
+@app.post("/v1/repomap")
+def repo_map(body: dict) -> JSONResponse:
+    """Rank a repository's definitions — useful context for any client."""
+    files: dict[str, str] = body.get("files") or {}
+    if not files:
+        return JSONResponse({"error": "files are required"}, status_code=400)
+    return JSONResponse(
+        {
+            "map": build_repo_map(
+                files,
+                focus_files=body.get("focus_files") or (),
+                mentioned_idents=extract_refs(body.get("query") or ""),
+                max_chars=int(body.get("max_chars") or 4000),
+            )
+        }
+    )
+
+
+@app.post("/v1/browse")
+def browse_url(body: dict) -> JSONResponse:
+    """Fetch web pages as text, so browser clients can bypass CORS.
+
+    Private and loopback addresses stay refused (see ``browse.fetch``).
+    """
+    urls = body.get("urls") or ([body["url"]] if body.get("url") else [])
+    if not urls:
+        return JSONResponse({"error": "url or urls is required"}, status_code=400)
+    pages = browse(urls, limit=int(body.get("limit") or 3))
+    return JSONResponse(
+        {"pages": [{"url": p.url, "title": p.title, "text": p.text} for p in pages]}
+    )
 
 
 @app.get("/", response_class=HTMLResponse)

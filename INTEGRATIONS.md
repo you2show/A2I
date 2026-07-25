@@ -37,6 +37,20 @@ repo-level FIM prompt, keeping the most useful ones within the budget:
 
 Plain clients that send only `prompt`/`suffix` are unaffected.
 
+### Agent endpoints (A2I extension)
+
+The agent's capabilities are also reachable over HTTP, so a browser client —
+which has no filesystem and is blocked by CORS — can use them. The caller
+supplies the files, and edits come back as data rather than being written,
+keeping the destructive step on the client where the user can see it.
+
+| Endpoint | Body | Returns |
+| -------- | ---- | ------- |
+| `POST /v1/agent/ask` | `question`, `files` | `answer` |
+| `POST /v1/agent/edit` | `task`, `files`, optional `architect`, `rounds` | changed `files`, `applied`, `failed`, `plan` |
+| `POST /v1/repomap` | `files`, optional `query`, `focus_files` | ranked `map` |
+| `POST /v1/browse` | `url` or `urls` | `pages` as text |
+
 Base URL: **`http://127.0.0.1:8990/v1`** — any non-empty API key string works.
 
 ---
