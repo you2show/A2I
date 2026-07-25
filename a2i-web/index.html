@@ -287,12 +287,12 @@
   #live-link { background: var(--grad-soft); font-weight: 600; }
 
   /* ---- Settings modal ---- */
-  #settings-btn {
+  #settings-btn, #project-btn {
     width: 100%; text-align: left; padding: .6rem .9rem; border: 1px solid var(--border);
     border-radius: 12px; background: var(--grad-soft); color: var(--text); cursor: pointer;
     font-size: .88rem; font-weight: 600; transition: transform .12s, box-shadow .15s;
   }
-  #settings-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px var(--ring); }
+  #settings-btn:hover, #project-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px var(--ring); }
   /* The `hidden` attribute must always win: an author `display` (grid/flex on
      .overlay / .popmenu) otherwise overrides the UA [hidden]{display:none},
      leaving modals stuck open. This makes hidden reliably hide. */
@@ -454,6 +454,25 @@
   }
   .popmenu button:hover { background: var(--user); }
 
+  /* ---- Project panel ---- */
+  .dropzone {
+    border: 2px dashed var(--border); border-radius: 14px; padding: 1rem;
+    text-align: center; font-size: .85rem; color: var(--muted); margin-bottom: .9rem;
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone.over { border-color: var(--accent); background: var(--grad-soft); }
+  .project-out {
+    margin-top: .9rem; border: 1px solid var(--border); border-radius: 12px;
+    padding: .8rem; background: var(--bg); font-size: .86rem; line-height: 1.55;
+    max-height: 40vh; overflow-y: auto;
+  }
+  .project-out pre {
+    background: var(--code-bg); border-radius: 8px; padding: .6rem;
+    overflow-x: auto; font-size: .78rem; margin: .4rem 0;
+  }
+  .project-file { display: flex; align-items: center; gap: .5rem; margin: .3rem 0; }
+  .project-file .nm { font-weight: 600; font-size: .82rem; }
+
   /* ---- Install button ---- */
   #install-btn {
     width: 100%; text-align: left; padding: .6rem .9rem; border: 1px solid transparent;
@@ -483,6 +502,7 @@
   <nav id="chat-list"></nav>
   <div class="side-foot" style="flex-direction:column;gap:.5rem">
     <button id="install-btn" hidden title="Install A2I as an app">⬇️ ដំឡើងជា App · Install</button>
+    <button id="project-btn" title="Ask about or edit a codebase with A2I Core">📁 គម្រោង · Project</button>
     <button id="settings-btn" title="Settings — API keys, servers, appearance">⚙️ ការកំណត់ · Settings</button>
   </div>
   <div class="side-foot" style="border-top:0;padding-top:0">
@@ -500,6 +520,41 @@
 </div>
 
 <!-- ============ Settings modal (premium, replaces prompt dialogs) ======= -->
+<!-- ============ Project panel — ask about / edit a codebase ============ -->
+<div id="project-overlay" class="overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Project">
+    <div class="modal-head">
+      <h2>📁 គម្រោង · Project</h2>
+      <button id="project-close" class="x" title="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="hint">Load source files, then ask questions about them or ask
+        for changes. This uses your local <b>A2I Core</b> — pick it in
+        ⚙️ Settings first. Files stay on your machine; edits are shown here
+        for you to download, never written for you.</p>
+
+      <div id="project-drop" class="dropzone">
+        <input type="file" id="project-files" multiple hidden>
+        <div>📂 ទម្លាក់ file ទីនេះ · Drop files here, or
+          <button type="button" id="project-pick" class="btn">Choose files</button>
+        </div>
+        <div id="project-list" class="hint" style="margin:.6rem 0 0"></div>
+      </div>
+
+      <label class="field">Question or task
+        <input id="project-task" placeholder="e.g. how does retrieval work?  ·  fix the off-by-one in add()" autocomplete="off">
+      </label>
+      <div class="row-btns">
+        <button id="project-ask" class="btn primary">💬 Ask</button>
+        <button id="project-edit" class="btn">✏️ Request edits</button>
+        <span id="project-state" class="statetag"></span>
+      </div>
+
+      <div id="project-output" class="project-out" hidden></div>
+    </div>
+  </div>
+</div>
+
 <div id="settings-overlay" class="overlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-label="Settings">
     <div class="modal-head">
@@ -2379,6 +2434,160 @@ $('set-autospeak').addEventListener('click', () => {
   refreshAutospeak();
 });
 refreshAutospeak();
+
+// ---- Project panel: ask about / edit a codebase via A2I Core ----------
+// The browser has no filesystem, so the user loads files here and A2I Core's
+// agent endpoints do the work. Edits come back as data and are shown for
+// download — the app never silently rewrites anyone's files.
+
+const projectOverlay = $('project-overlay');
+const projectFiles = new Map();      // path -> content
+const MAX_PROJECT_BYTES = 400_000;
+
+function projectState(message, busy = false) {
+  const el = $('project-state');
+  el.textContent = message;
+  el.classList.toggle('on', !busy && /✓/.test(message));
+}
+
+function renderProjectList() {
+  const list = $('project-list');
+  if (!projectFiles.size) { list.textContent = 'No files loaded yet.'; return; }
+  const total = [...projectFiles.values()].reduce((n, t) => n + t.length, 0);
+  list.textContent = `${projectFiles.size} file(s), ${Math.round(total / 1024)} KB loaded`;
+}
+
+async function addProjectFiles(fileList) {
+  let skipped = 0;
+  for (const file of fileList) {
+    if (file.size > MAX_PROJECT_BYTES) { skipped++; continue; }
+    try {
+      projectFiles.set(file.webkitRelativePath || file.name, await file.text());
+    } catch { skipped++; }
+  }
+  renderProjectList();
+  if (skipped) projectState(`${skipped} file(s) skipped (too large or unreadable)`);
+}
+
+$('project-btn').addEventListener('click', () => {
+  projectOverlay.hidden = false;
+  renderProjectList();
+  setTimeout(() => $('project-task').focus(), 50);
+});
+$('project-close').addEventListener('click', () => { projectOverlay.hidden = true; });
+projectOverlay.addEventListener('click', (e) => {
+  if (e.target === projectOverlay) projectOverlay.hidden = true;
+});
+$('project-pick').addEventListener('click', () => $('project-files').click());
+$('project-files').addEventListener('change', (e) => addProjectFiles(e.target.files));
+
+const dropzone = $('project-drop');
+['dragenter', 'dragover'].forEach((ev) => dropzone.addEventListener(ev, (e) => {
+  e.preventDefault(); dropzone.classList.add('over');
+}));
+['dragleave', 'drop'].forEach((ev) => dropzone.addEventListener(ev, (e) => {
+  e.preventDefault(); dropzone.classList.remove('over');
+  if (ev === 'drop' && e.dataTransfer?.files?.length) addProjectFiles(e.dataTransfer.files);
+}));
+
+// The agent endpoints live on A2I Core, not on the hosted page.
+function coreBaseUrl() {
+  const brain = serverBrains.find((b) => b.online !== false) || serverBrains[0];
+  return brain ? brain.url.replace(/\/+$/, '') : 'http://127.0.0.1:8990';
+}
+
+async function callAgent(path, body) {
+  const res = await fetch(coreBaseUrl() + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`A2I Core returned ${res.status}. ${detail.slice(0, 160)}`);
+  }
+  return res.json();
+}
+
+function requireProjectInput() {
+  const task = $('project-task').value.trim();
+  if (!projectFiles.size) { projectState('Load some files first'); return null; }
+  if (!task) { projectState('Type a question or task first'); return null; }
+  return task;
+}
+
+$('project-ask').addEventListener('click', async () => {
+  const task = requireProjectInput();
+  if (!task) return;
+  const out = $('project-output');
+  out.hidden = false;
+  out.textContent = 'Thinking…';
+  projectState('asking…', true);
+  try {
+    const data = await callAgent('/v1/agent/ask', {
+      question: task, files: Object.fromEntries(projectFiles),
+    });
+    out.innerHTML = renderMarkdown(data.answer || '(no answer)');
+    projectState('✓ done');
+  } catch (err) {
+    out.textContent = '⚠ ' + err.message +
+      '\n\nStart A2I Core (cd a2i-core && ./run.sh), then add it in ⚙️ Settings.';
+    projectState('failed');
+  }
+});
+
+$('project-edit').addEventListener('click', async () => {
+  const task = requireProjectInput();
+  if (!task) return;
+  const out = $('project-output');
+  out.hidden = false;
+  out.textContent = 'Working… the model is writing edits.';
+  projectState('editing…', true);
+  try {
+    const data = await callAgent('/v1/agent/edit', {
+      task, files: Object.fromEntries(projectFiles),
+    });
+    const changed = Object.entries(data.files || {});
+    out.innerHTML = '';
+    const summary = document.createElement('div');
+    summary.textContent =
+      `${data.applied || 0} edit(s) applied, ${data.failed || 0} failed` +
+      (changed.length ? ` — ${changed.length} file(s) changed:` : ' — no files changed.');
+    out.appendChild(summary);
+    if (data.plan) {
+      const plan = document.createElement('details');
+      plan.innerHTML = '<summary>Plan</summary>';
+      const body = document.createElement('pre');
+      body.textContent = data.plan;
+      plan.appendChild(body);
+      out.appendChild(plan);
+    }
+    for (const [path, content] of changed) {
+      const row = document.createElement('div');
+      row.className = 'project-file';
+      const name = document.createElement('span');
+      name.className = 'nm'; name.textContent = path;
+      const dl = document.createElement('button');
+      dl.className = 'btn'; dl.textContent = '⤓ Download';
+      dl.addEventListener('click', () => {
+        const url = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+        const a = document.createElement('a');
+        a.href = url; a.download = path.split('/').pop();
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      });
+      row.append(name, dl);
+      out.appendChild(row);
+      // Keep the panel's copy in sync so follow-up edits build on this one.
+      projectFiles.set(path, content);
+    }
+    projectState(changed.length ? '✓ done' : 'no changes');
+  } catch (err) {
+    out.textContent = '⚠ ' + err.message +
+      '\n\nStart A2I Core (cd a2i-core && ./run.sh), then add it in ⚙️ Settings.';
+    projectState('failed');
+  }
+});
 
 // ---- PWA: installable + offline app ------------------------------------
 
