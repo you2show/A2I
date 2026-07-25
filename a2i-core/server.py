@@ -136,6 +136,51 @@ def chat_completions(body: dict) -> JSONResponse | StreamingResponse:
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+@app.post("/v1/completions", response_model=None)
+def completions(body: dict) -> JSONResponse | StreamingResponse:
+    """Raw (non-chat) completion — what code-completion tools speak.
+
+    Coding assistants such as Tabby (``kind = "openai/completion"``) and
+    editor plugins send a prompt plus an optional ``suffix`` for
+    fill-in-the-middle, rather than a chat transcript. Serving this endpoint
+    lets them use A2I Core as their backend with no external API.
+    """
+    prompt: str = body.get("prompt") or ""
+    if isinstance(prompt, list):  # some clients send a list of prompts
+        prompt = prompt[0] if prompt else ""
+    suffix: str | None = body.get("suffix")
+    max_tokens: int = body.get("max_tokens") or 256
+    temperature: float = body.get("temperature", 0.2)
+    stop: list[str] | None = body.get("stop")
+    stream: bool = body.get("stream", False)
+    model_name = Path(state.llm.model_path).stem
+
+    kwargs: dict[str, object] = {
+        "prompt": prompt,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if suffix:
+        kwargs["suffix"] = suffix
+    if stop:
+        kwargs["stop"] = stop
+
+    if not stream:
+        result = state.llm.create_completion(**kwargs)
+        result["model"] = model_name
+        return JSONResponse(result)
+
+    def event_stream() -> Iterator[str]:
+        completion_id = f"cmpl-{uuid.uuid4().hex}"
+        for chunk in state.llm.create_completion(stream=True, **kwargs):
+            chunk["id"] = completion_id
+            chunk["model"] = model_name
+            yield f"data: {json.dumps(chunk)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @app.get("/", response_class=HTMLResponse)
 def chat_ui() -> str:
     return (Path(__file__).parent / "static" / "chat.html").read_text()
