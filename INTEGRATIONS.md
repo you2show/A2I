@@ -41,6 +41,25 @@ Base URL: **`http://127.0.0.1:8990/v1`** — any non-empty API key string works.
 
 ---
 
+## A2I's own coding agent (`a2i-core/agent.py`)
+
+A2I Core ships a small agent that edits files for you, using whichever
+OpenAI-compatible backend you point it at:
+
+```bash
+cd a2i-core
+python3 agent.py "fix the off-by-one in add()" --dir ../my-project   # dry run
+python3 agent.py "fix the off-by-one in add()" --dir ../my-project --write
+```
+
+It ranks the repository with `repomap.py` so the model sees the relevant
+code, asks for `SEARCH/REPLACE` edits, applies them through `editblock.py`'s
+fallback cascade, and retries whatever fails — showing the model the real
+surrounding text. **Nothing is written without `--write`.**
+
+Use `--url`/`--model`/`--api-key` to target vLLM, Ollama, or a hosted
+provider instead of the default `http://127.0.0.1:8990/v1`.
+
 ## Aider — AI pair programmer in the terminal
 
 [`you2show/aider`](https://github.com/you2show/aider). Aider sets
