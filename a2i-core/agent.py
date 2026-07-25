@@ -53,6 +53,23 @@ Rules:
 5. Do not explain; emit only the blocks."""
 
 
+ARCHITECT_PROMPT = """Act as an expert software architect.
+
+Study the change request and the current code, then describe exactly how to
+modify the code to complete it. A separate editor will follow your
+instructions literally, so be unambiguous and complete.
+
+Describe only the changes needed — do not reproduce whole files, and do not
+write SEARCH/REPLACE blocks yourself."""
+
+ASK_PROMPT = """You are A2I, answering questions about a codebase.
+
+You are shown a map of the repository and the contents of the most relevant
+files. Answer the question directly and concretely, citing file paths and
+symbol names. If the answer is not in what you were shown, say so rather
+than guessing. Do not propose edits unless asked."""
+
+
 class LLM(Protocol):
     """Anything that maps a list of chat messages to a reply."""
 
@@ -69,6 +86,8 @@ class AgentResult:
     log: list[str] = field(default_factory=list)
     #: ``None`` when no verification ran, otherwise whether it passed.
     verified: bool | None = None
+    #: The architect's plan, when architect mode was used.
+    plan: str = ""
 
     @property
     def applied(self) -> int:
@@ -152,6 +171,35 @@ def build_context(
     return "\n".join(parts)
 
 
+def ask(question: str, files: dict[str, str], llm: LLM) -> str:
+    """Answer a question about the code without changing anything.
+
+    The same ranked context the editing agent uses, but read-only — the
+    "answer engine" role that tools like Tabby expose over a codebase.
+    """
+    return llm(
+        [
+            {"role": "system", "content": ASK_PROMPT},
+            {"role": "user", "content": build_context(question, files)},
+        ]
+    )
+
+
+def plan_change(task: str, files: dict[str, str], llm: LLM) -> str:
+    """Have a model describe the change before another model writes it.
+
+    aider's architect mode: reasoning and editing are different skills, and
+    separating them lets a strong model plan while a cheaper or more
+    literal one produces the edits.
+    """
+    return llm(
+        [
+            {"role": "system", "content": ARCHITECT_PROMPT},
+            {"role": "user", "content": build_context(task, files)},
+        ]
+    )
+
+
 def run_agent(
     task: str,
     files: dict[str, str],
@@ -159,6 +207,7 @@ def run_agent(
     max_rounds: int = 3,
     on_progress: Callable[[str], None] | None = None,
     verify: Callable[[dict[str, str]], tuple[bool, str]] | None = None,
+    architect: LLM | None = None,
 ) -> AgentResult:
     """Ask the model for edits and apply them, retrying what fails.
 
@@ -173,6 +222,8 @@ def run_agent(
             ``(ok, output)``; on failure the output is fed back to the model
             so it can fix its own change. Injected rather than hardcoded so
             the loop stays testable and side-effect free by default.
+        architect: Optional second model that plans the change first; ``llm``
+            then only has to turn that plan into edits.
 
     Returns:
         An :class:`AgentResult` holding the updated file contents.
@@ -180,9 +231,24 @@ def run_agent(
     report = on_progress or (lambda _message: None)
     working = dict(files)
     outcome = AgentResult(files=working)
+
+    instruction = task
+    if architect is not None:
+        report("architect: planning the change…")
+        try:
+            plan = plan_change(task, working, architect)
+            outcome.plan = plan
+            outcome.log.append("architect produced a plan")
+            instruction = f"{task}\n\nFollow this plan exactly:\n\n{plan}"
+            report("architect: plan ready")
+        except Exception as exc:
+            # Planning is an enhancement; fall back to editing directly.
+            outcome.log.append(f"architect failed, editing directly: {exc}")
+            report(f"architect failed ({exc}) — editing directly")
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": build_context(task, working)},
+        {"role": "user", "content": build_context(instruction, working)},
     ]
 
     for round_number in range(1, max_rounds + 1):
@@ -345,6 +411,19 @@ def main() -> None:
     parser.add_argument(
         "--commit", action="store_true", help="git-commit the changed files (with --write)"
     )
+    parser.add_argument(
+        "--ask",
+        action="store_true",
+        help="answer a question about the code instead of editing it",
+    )
+    parser.add_argument(
+        "--architect",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="MODEL",
+        help="plan the change first; optionally with a different model id",
+    )
     args = parser.parse_args()
 
     if args.test and not args.write:
@@ -356,6 +435,11 @@ def main() -> None:
     if not files:
         raise SystemExit(f"No source files found under {args.dir}")
     print(f"Loaded {len(files)} files from {args.dir}")
+
+    if args.ask:
+        print()
+        print(ask(args.task, files, openai_llm(args.url, args.model, args.api_key)))
+        return
 
     # With --test the files must exist on disk for the command to see them, so
     # verification writes first and reports the command's output back.
@@ -372,7 +456,14 @@ def main() -> None:
         max_rounds=args.rounds,
         on_progress=lambda message: print(f"  {message}"),
         verify=verify if args.test else None,
+        architect=(
+            openai_llm(args.url, args.architect or args.model, args.api_key)
+            if args.architect is not None
+            else None
+        ),
     )
+    if result.plan:
+        print(f"\nPlan:\n{result.plan}\n")
 
     print(f"\n{result.applied} edit(s) applied, {result.failed} failed")
     for entry in result.results:
