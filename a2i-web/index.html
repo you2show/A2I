@@ -100,21 +100,48 @@
 
   /* ---- Chat ---- */
   #log { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
-  .col { max-width: 46rem; margin: 0 auto; padding: 1.4rem 1.1rem 0; display: flex; flex-direction: column; gap: 1.1rem; }
-  .msg { line-height: 1.65; word-wrap: break-word; font-size: .96rem; }
+  .col { max-width: 46rem; margin: 0 auto; padding: 1.6rem 1.1rem 0; display: flex; flex-direction: column; gap: 1.5rem; }
+  .msg { line-height: 1.7; word-wrap: break-word; font-size: .96rem; }
   .msg.user {
-    align-self: flex-end; max-width: 85%; background: var(--user);
-    padding: .65rem 1rem; border-radius: 16px 16px 4px 16px; white-space: pre-wrap;
+    align-self: flex-end; max-width: 78%; background: var(--user);
+    padding: .7rem 1.05rem; border-radius: 18px 18px 6px 18px; white-space: pre-wrap;
   }
-  .msg.ai { align-self: stretch; position: relative; padding-right: 2rem; }
-  .msg.ai.combined { border-left: 3px solid var(--accent); padding-left: .8rem; }
+  .msg.ai { align-self: stretch; display: flex; gap: .8rem; }
+  .ai-avatar {
+    width: 30px; height: 30px; flex-shrink: 0; border-radius: 10px; margin-top: 1px;
+    display: grid; place-items: center; font-size: .62rem; font-weight: 800;
+    color: #fff; user-select: none;
+    background: var(--grad, var(--accent)); box-shadow: 0 4px 12px var(--ring, transparent);
+  }
+  .msg-body { flex: 1; min-width: 0; }
+  .msg.ai.combined .msg-body { border-left: 3px solid var(--accent); padding-left: .8rem; }
   .brain-label { font-size: .72rem; color: var(--accent); margin-bottom: .3rem; font-weight: 700; letter-spacing: .03em; }
-  .copy-btn {
-    position: absolute; top: 0; right: 0; border: 0; background: none; color: var(--muted);
-    cursor: pointer; font-size: .85rem; opacity: 0; transition: opacity .15s;
+  .msg-actions {
+    display: flex; gap: .2rem; margin-top: .35rem; height: 1.55rem;
+    opacity: 0; transition: opacity .15s;
   }
-  .msg.ai:hover .copy-btn { opacity: 1; }
-  .note { color: var(--muted); font-size: .8rem; align-self: center; text-align: center; max-width: 38rem; }
+  .msg.ai:hover .msg-actions, .msg-actions:focus-within { opacity: 1; }
+  .act-btn {
+    display: grid; place-items: center; width: 26px; height: 26px;
+    border: 0; border-radius: 7px; background: none; color: var(--muted); cursor: pointer;
+  }
+  .act-btn:hover { background: var(--user); color: var(--text); }
+  .typing { display: inline-flex; gap: 5px; align-items: center; height: 1.3em; }
+  .typing i {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--muted);
+    animation: a2i-typing 1.2s ease-in-out infinite;
+  }
+  .typing i:nth-child(2) { animation-delay: .18s; }
+  .typing i:nth-child(3) { animation-delay: .36s; }
+  @keyframes a2i-typing {
+    0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+    30% { transform: translateY(-4px); opacity: 1; }
+  }
+  .note {
+    color: var(--muted); font-size: .78rem; align-self: center; text-align: center;
+    max-width: 38rem; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 999px; padding: .4rem 1rem;
+  }
   .md p { margin: 0 0 .6em; } .md p:last-child { margin-bottom: 0; }
   .md h2, .md h3, .md h4 { margin: .8em 0 .4em; }
   .md ul, .md ol { margin: 0 0 .6em; padding-left: 1.3em; }
@@ -126,20 +153,25 @@
   .md pre code { background: none; padding: 0; font-size: .85em; }
 
   /* ---- Welcome ---- */
-  #welcome { text-align: center; padding: 3.5rem 1rem 1rem; }
+  #welcome { text-align: center; padding: 3rem 1rem 1rem; }
   #welcome .logo-big {
     width: 54px; height: 54px; border-radius: 16px; background: var(--accent); color: #fff;
     display: grid; place-items: center; font-size: 1.6rem; font-weight: 800; margin: 0 auto 1rem;
   }
-  #welcome h2 { font-size: 1.5rem; margin-bottom: .4rem; }
-  #welcome p { color: var(--muted); font-size: .9rem; margin-bottom: 1.6rem; }
-  .chips { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; max-width: 34rem; margin: 0 auto; }
+  #welcome h2 { font-size: 1.75rem; margin-bottom: .45rem; }
+  #welcome p { color: var(--muted); font-size: .92rem; margin-bottom: 1.8rem; }
+  .chips {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem;
+    max-width: 34rem; margin: 0 auto; text-align: left;
+  }
   .chip {
-    padding: .6rem 1rem; border: 1px solid var(--border); border-radius: 14px;
+    padding: .8rem 1rem; border: 1px solid var(--border); border-radius: 14px;
     background: var(--panel); color: var(--text); cursor: pointer; font-size: .85rem;
+    line-height: 1.45; text-align: left;
     transition: border-color .15s, transform .1s;
   }
   .chip:hover { border-color: var(--accent); transform: translateY(-1px); }
+  @media (max-width: 560px) { .chips { grid-template-columns: 1fr; } }
 
   /* ---- Composer ---- */
   #composer-wrap { padding: .8rem 1.1rem 1.1rem; }
@@ -261,8 +293,6 @@
   }
   [data-theme="dark"] .msg.user { color: #fff; }
   .md pre { box-shadow: var(--shadow); }
-  .copy-btn { transition: opacity .15s, color .15s, transform .1s; }
-  .copy-btn:hover { transform: scale(1.15); }
   .brain-label {
     display: inline-block; padding: .1rem .5rem; border-radius: 999px;
     background: var(--grad-soft); color: var(--accent);
@@ -396,7 +426,6 @@
   .gen-img-wrap a:hover { text-decoration: underline; }
 
   /* ---- Voice in chat ---- */
-  .speak-btn { right: 1.7rem; }
   #mic-btn.rec { color: #b3403f; animation: a2i-mic 1.2s ease-in-out infinite; }
   @keyframes a2i-mic { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 
@@ -1085,45 +1114,65 @@ function addMsg(cls, text, label, images) {
     }
     div.update = () => {};
   } else {
+    // AI message: avatar | (label, content, hover action bar) — the layout
+    // readers know from Claude/ChatGPT, so the eye can skim who-said-what by
+    // the left rail alone.
     div.className = 'msg ' + cls;
+    const avatar = document.createElement('div');
+    avatar.className = 'ai-avatar';
+    avatar.textContent = 'A2';
+    div.appendChild(avatar);
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-body';
+    div.appendChild(wrap);
+
     let labelEl = null;
     if (label) {
       labelEl = document.createElement('div');
       labelEl.className = 'brain-label';
       labelEl.textContent = label;
-      div.appendChild(labelEl);
+      wrap.appendChild(labelEl);
     }
     div.setLabel = (t) => {
       if (!labelEl) {
         labelEl = document.createElement('div');
         labelEl.className = 'brain-label';
-        div.insertBefore(labelEl, div.firstChild);
+        wrap.insertBefore(labelEl, wrap.firstChild);
       }
       labelEl.textContent = t;
     };
     const body = document.createElement('div');
     body.className = 'md';
-    div.appendChild(body);
+    wrap.appendChild(body);
+
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    wrap.appendChild(actions);
     let raw = text;
     const speakBtn = document.createElement('button');
-    speakBtn.className = 'copy-btn speak-btn';
-    speakBtn.innerHTML = svgIcon('volume');
+    speakBtn.className = 'act-btn';
+    speakBtn.innerHTML = svgIcon('volume', 'ico-sm');
     speakBtn.title = 'Read aloud / អានឮៗ';
     speakBtn.addEventListener('click', () => speakText(raw));
-    div.appendChild(speakBtn);
+    actions.appendChild(speakBtn);
     const copy = document.createElement('button');
-    copy.className = 'copy-btn';
-    copy.innerHTML = svgIcon('copy');
+    copy.className = 'act-btn';
+    copy.innerHTML = svgIcon('copy', 'ico-sm');
     copy.title = 'Copy';
-    div.appendChild(copy);
+    actions.appendChild(copy);
     copy.addEventListener('click', () => {
       navigator.clipboard?.writeText(raw);
-      copy.innerHTML = svgIcon('check');
-      setTimeout(() => { copy.innerHTML = svgIcon('copy'); }, 1200);
+      copy.innerHTML = svgIcon('check', 'ico-sm');
+      setTimeout(() => { copy.innerHTML = svgIcon('copy', 'ico-sm'); }, 1200);
     });
+
     div.update = (t) => {
       raw = t;
-      body.innerHTML = renderMarkdown(t);
+      // A bare ellipsis means "waiting for the first token": show a live
+      // typing indicator instead of a static character.
+      body.innerHTML = (t === '…')
+        ? '<span class="typing" aria-label="thinking"><i></i><i></i><i></i></span>'
+        : renderMarkdown(t);
       log.scrollTop = log.scrollHeight;
     };
     div.update(text);
