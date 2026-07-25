@@ -352,7 +352,11 @@
   .add-brain { display: grid; grid-template-columns: 1fr 1.3fr auto; gap: .45rem; }
   .add-brain input { padding: .55rem .7rem; border-radius: 11px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: .82rem; font-family: inherit; }
   .add-brain input:focus { outline: none; border-color: var(--accent); }
-  @media (max-width: 520px) { .add-brain { grid-template-columns: 1fr; } }
+  .add-brain-2 { grid-template-columns: 1fr 1fr; }
+  .add-brain-2 .btn { grid-column: 1 / -1; }
+  .provider-presets { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .7rem; }
+  .brain-row .key { font-size: .72rem; color: #3ecf8e; }
+  @media (max-width: 520px) { .add-brain, .add-brain-2 { grid-template-columns: 1fr; } }
 
   /* ---- Image attachments (vision) ---- */
   #attach-preview { display: none; max-width: 46rem; margin: 0 auto .5rem; gap: .5rem; flex-wrap: wrap; }
@@ -507,14 +511,22 @@
       </section>
 
       <section class="setblock">
-        <div class="setblock-h"><span class="ic">🖥️</span> Local / self-hosted servers</div>
-        <p class="hint">A2I Core, Ollama, LM Studio, or any OpenAI-compatible URL.
-          Add your local brain — runs with no external API.</p>
+        <div class="setblock-h"><span class="ic">⚡</span> AI providers — local & free</div>
+        <p class="hint">Famous, strong models for free: get a key, paste it, Add. Keys stay in this browser.<br>
+          • Groq — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> (Llama 3.3 70B, very fast)<br>
+          • OpenRouter — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> (DeepSeek R1, Llama 70B — <code>:free</code>)</p>
+        <div class="provider-presets">
+          <button type="button" class="btn" id="preset-groq">⚡ Groq (free)</button>
+          <button type="button" class="btn" id="preset-openrouter">🌐 OpenRouter (free)</button>
+          <button type="button" class="btn" id="preset-a2icore">🖥️ A2I Core (local)</button>
+        </div>
         <div id="set-brain-list" class="brain-list"></div>
-        <div class="add-brain">
-          <input id="set-brain-name" placeholder="Name (e.g. A2I Core)" autocomplete="off">
-          <input id="set-brain-url" placeholder="http://127.0.0.1:8990" autocomplete="off">
-          <button id="set-brain-add" class="btn primary">Add</button>
+        <div class="add-brain add-brain-2">
+          <input id="set-brain-name" placeholder="Name" autocomplete="off">
+          <input id="set-brain-url" placeholder="Base URL (…/v1)" autocomplete="off">
+          <input id="set-brain-model" placeholder="Model (optional)" autocomplete="off">
+          <input id="set-brain-key" type="password" placeholder="API key (optional)" autocomplete="off">
+          <button id="set-brain-add" class="btn primary">➕ Add provider</button>
         </div>
       </section>
 
@@ -1083,11 +1095,19 @@ function rebuildEngineSelect(selected) {
     (savedValid ? saved : (cloudAvailable ? 'cloud' : hasGemini ? 'gemini' : 'browser'));
 }
 
+// Base URLs may or may not already end in /v1 (A2I Core/Ollama use bare host;
+// Groq/OpenRouter include /v1). Normalise so we never double it.
+function apiBase(url) {
+  const base = (url || '').replace(/\/+$/, '');
+  return /\/v\d+$/.test(base) ? base : base + '/v1';
+}
+
 async function checkBrains() {
   await Promise.all(serverBrains.map(async (brain) => {
     try {
-      const res = await fetch(brain.url + '/v1/models',
-        { signal: AbortSignal.timeout(2500) });
+      const headers = brain.apiKey ? { Authorization: 'Bearer ' + brain.apiKey } : {};
+      const res = await fetch(apiBase(brain.url) + '/models',
+        { headers, signal: AbortSignal.timeout(2500) });
       brain.online = res.ok;
     } catch {
       brain.online = false;
@@ -1516,6 +1536,13 @@ async function askGemini(messages, onDelta, signal) {
     if (signal?.aborted) return '';
     throw new Error('មិនអាចភ្ជាប់ Gemini បានទេ។ (Could not reach Gemini.)');
   }
+  if (res.status === 429) {
+    throw new Error(
+      'Gemini៖ quota free-tier អស់ (429) — សូម (1) រង់ចាំ ១ នាទី, ' +
+      '(2) ប្តូរ model ទៅ gemini-2.5-flash / gemini-2.0-flash, ឬ ' +
+      '(3) ប្រើ ⚡ Groq/OpenRouter (free) ក្នុង Settings។ ' +
+      '(Free-tier quota hit — wait, switch to a flash model, or use Groq/OpenRouter.)');
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Gemini error ${res.status}: ${text.slice(0, 160)}`);
@@ -1563,19 +1590,33 @@ async function askCloud(messages, onDelta, signal) {
 async function askServer(brain, messages, onDelta, signal) {
   let res;
   try {
-    res = await fetch(brain.url + '/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: toOpenAIMessages(messages), stream: true, max_tokens: 1024 }),
-      signal,
+    const headers = { 'Content-Type': 'application/json' };
+    if (brain.apiKey) headers.Authorization = 'Bearer ' + brain.apiKey;
+    // OpenRouter recommends these; harmless elsewhere.
+    if (/openrouter\.ai/.test(brain.url)) {
+      headers['HTTP-Referer'] = location.origin;
+      headers['X-Title'] = 'A2I';
+    }
+    const body = { messages: toOpenAIMessages(messages), stream: true, max_tokens: 1024 };
+    if (brain.model) body.model = brain.model;
+    res = await fetch(apiBase(brain.url) + '/chat/completions', {
+      method: 'POST', headers, body: JSON.stringify(body), signal,
     });
   } catch (err) {
     if (signal?.aborted) return '';
     throw new Error(
-      `មិនអាចភ្ជាប់ទៅ ${brain.name} (${brain.url}) បានទេ — server ត្រូវតែកំពុងរត់។ ` +
+      `មិនអាចភ្ជាប់ទៅ ${brain.name} (${brain.url}) បានទេ។ ` +
       `(Could not reach ${brain.name}.)`);
   }
-  if (!res.ok) throw new Error(`${brain.name} returned ${res.status}`);
+  if (res.status === 429) {
+    throw new Error(
+      `${brain.name}: quota/rate-limit អស់ (429) — រង់ចាំបន្តិច ឬប្តូរ provider ផ្សេង។ ` +
+      `(Rate limit — wait a moment or switch provider.)`);
+  }
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`${brain.name} error ${res.status}: ${t.slice(0, 160)}`);
+  }
   return readSSE(res, onDelta, signal);
 }
 
@@ -1884,13 +1925,16 @@ function renderBrainList() {
     const row = document.createElement('div');
     row.className = 'brain-row';
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = b.name;
-    const u = document.createElement('span'); u.className = 'u'; u.textContent = b.url;
+    const u = document.createElement('span'); u.className = 'u';
+    u.textContent = b.url + (b.model ? ' · ' + b.model : '');
     const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑'; rm.title = 'Remove';
     rm.addEventListener('click', () => {
       serverBrains.splice(i, 1); saveBrains();
       rebuildEngineSelect(engineSel.value); refreshBar(); renderBrainList();
     });
-    row.append(nm, u, rm);
+    row.append(nm, u);
+    if (b.apiKey) { const k = document.createElement('span'); k.className = 'key'; k.textContent = '🔑'; row.append(k); }
+    row.append(rm);
     list.appendChild(row);
   });
 }
@@ -1936,12 +1980,31 @@ $('set-gemini-clear').addEventListener('click', () => {
 $('set-brain-add').addEventListener('click', () => {
   const name = $('set-brain-name').value.trim();
   const url = $('set-brain-url').value.trim().replace(/\/+$/, '');
+  const model = $('set-brain-model').value.trim();
+  const apiKey = $('set-brain-key').value.trim();
   if (!name || !url) return;
-  serverBrains.push({ name, url }); saveBrains();
-  $('set-brain-name').value = ''; $('set-brain-url').value = '';
+  const brain = { name, url };
+  if (model) brain.model = model;
+  if (apiKey) brain.apiKey = apiKey;
+  serverBrains.push(brain); saveBrains();
+  ['set-brain-name', 'set-brain-url', 'set-brain-model', 'set-brain-key'].forEach((id) => { $(id).value = ''; });
   rebuildEngineSelect('server:' + (serverBrains.length - 1)); refreshBar();
   checkBrains(); renderBrainList();
 });
+
+// Free-provider quick presets: fill the form, focus the key field.
+function fillProvider(name, url, model) {
+  $('set-brain-name').value = name;
+  $('set-brain-url').value = url;
+  $('set-brain-model').value = model || '';
+  $('set-brain-key').focus();
+}
+$('preset-groq').addEventListener('click', () =>
+  fillProvider('Groq', 'https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile'));
+$('preset-openrouter').addEventListener('click', () =>
+  fillProvider('OpenRouter', 'https://openrouter.ai/api/v1', 'meta-llama/llama-3.3-70b-instruct:free'));
+$('preset-a2icore').addEventListener('click', () =>
+  fillProvider('A2I Core', 'http://127.0.0.1:8990', ''));
 
 $('set-theme').addEventListener('click', () =>
   applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
