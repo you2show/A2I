@@ -60,12 +60,19 @@ file at `models/model.gguf`, or pass `--model /path/to/model.gguf` to `run.sh`.
 
 ## Answer questions from your own documents (local RAG)
 
-Point A2I Core at a folder of `.txt` / `.md` files and it grounds its answers
-in them — retrieval is computed locally with TF-IDF, no embedding API:
+Point A2I Core at a folder of documents and it grounds its answers in them —
+retrieval is computed locally with BM25, no embedding API:
 
 ```bash
 ./run.sh --knowledge-dir ~/my-documents
 ```
+
+Readable formats: text and Markdown, source code, **HTML, XML, CSV/TSV,
+JSON and .docx** — all parsed with the standard library, so nothing extra to
+install. PDF and .xlsx are recognised and reported as needing conversion
+first, rather than being skipped silently. Documents are split on structure
+(paragraphs, then sentences — including Khmer `។`) instead of at a fixed
+width, so a chunk is never cut mid-sentence.
 
 ## Use it as the brain of the whole A2I platform
 
@@ -108,9 +115,9 @@ Vane ────────┤            │ /v1/chat/...   │     │ open 
 AI SDK ──────┘            └───────┬────────┘     └──────────────────┘
                                   │
                           ┌───────▼────────┐
-                          │ local TF-IDF   │
-                          │ knowledge base │  (your .txt/.md files)
-                          └────────────────┘
+                          │ local BM25     │
+                          │ knowledge base │  (text, code, HTML,
+                          └────────────────┘   CSV, JSON, .docx)
 ```
 
 Everything above runs in one process on your hardware. The only network

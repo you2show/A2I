@@ -588,7 +588,14 @@
     </select>
     <input id="server-url" placeholder="http://127.0.0.1:8990 (OpenAI-compatible URL)">
     <button type="button" id="coder-btn" title="Coder mode — expert coding assistant">💻 Coder</button>
-    <label class="wiki"><input type="checkbox" id="wiki-toggle" checked> 🌐 Wikipedia</label>
+    <label class="wiki"><input type="checkbox" id="wiki-toggle" checked> 🌐 Web</label>
+    <select id="search-mode" title="Which sources to search">
+      <option value="auto">🔎 Auto sources</option>
+      <option value="web">📖 Encyclopedia</option>
+      <option value="academic">🎓 Academic (arXiv)</option>
+      <option value="discussions">💬 Discussions (HN)</option>
+      <option value="off">🚫 No search</option>
+    </select>
     <a href="live.html" id="live-link" title="3D voice AI — talk to A2I">🤖 Live</a>
     <div class="menu-wrap">
       <button type="button" id="export-btn" title="Export / share this chat">⤓</button>
@@ -1079,6 +1086,18 @@ wikiToggle.checked = localStorage.getItem('a2i-wiki') !== 'off';
 wikiToggle.addEventListener('change', () =>
   localStorage.setItem('a2i-wiki', wikiToggle.checked ? 'on' : 'off'));
 
+// Which sources to consult — vane's focus modes. "auto" lets each action
+// decide from the query; the others force or disable a source.
+let searchMode = localStorage.getItem('a2i-search-mode') || 'auto';
+const searchModeSel = $('search-mode');
+searchModeSel.value = searchMode;
+searchModeSel.addEventListener('change', () => {
+  searchMode = searchModeSel.value;
+  localStorage.setItem('a2i-search-mode', searchMode);
+  wikiToggle.checked = searchMode !== 'off';
+  localStorage.setItem('a2i-wiki', wikiToggle.checked ? 'on' : 'off');
+});
+
 async function searchWikipedia(query) {
   if (!wikiToggle.checked) return [];
   const langs = /[ក-៿]/.test(query) ? ['km', 'en'] : ['en'];
@@ -1102,6 +1121,56 @@ async function searchWikipedia(query) {
   }
   return results.slice(0, 2);
 }
+
+// ---- Source-specific search (vane's academic / discussion modes) -------
+// vane routes a query to different sources depending on what it is asking
+// for. Both endpoints below are keyless and CORS-open, so this keeps A2I's
+// "no API key" promise. Each fails silently — grounding is a bonus, never a
+// requirement for answering.
+
+async function searchAcademic(query) {
+  try {
+    const url = 'https://export.arxiv.org/api/query?search_query=all:' +
+      encodeURIComponent(query) + '&max_results=3&sortBy=relevance';
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return [];
+    const xml = new DOMParser().parseFromString(await res.text(), 'text/xml');
+    return [...xml.querySelectorAll('entry')].slice(0, 3).map((entry) => {
+      const title = entry.querySelector('title')?.textContent?.trim() || 'paper';
+      const summary = entry.querySelector('summary')?.textContent?.trim() || '';
+      const published = entry.querySelector('published')?.textContent?.slice(0, 4) || '';
+      return { source: `arXiv (${published}): ${title}`, text: summary.slice(0, 900) };
+    });
+  } catch { return []; }
+}
+
+async function searchDiscussions(query) {
+  try {
+    const url = 'https://hn.algolia.com/api/v1/search?tags=story&hitsPerPage=4&query=' +
+      encodeURIComponent(query);
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.hits || [])
+      .filter((hit) => hit.title)
+      .slice(0, 3)
+      .map((hit) => ({
+        source: `Hacker News (${hit.points || 0} points, ${hit.num_comments || 0} comments): ${hit.title}`,
+        text: (hit.story_text || hit.title || '').slice(0, 700) +
+          (hit.url ? `\n${hit.url}` : ''),
+      }));
+  } catch { return []; }
+}
+
+// Which sources a query calls for. Declarative, like looksLikeCode(), rather
+// than vane's LLM classifier — small local models classify unreliably.
+const wantsAcademic = (q) =>
+  /\b(paper|papers|study|studies|research|arxiv|citation|cite|journal|scholar|thesis|preprint)\b/i.test(q) ||
+  /\b(ស្រាវជ្រាវ|អត្ថបទវិទ្យាសាស្ត្រ)\b/.test(q);
+
+const wantsDiscussions = (q) =>
+  /\b(opinion|opinions|experience|experiences|review|reviews|people think|think about|recommend|recommendation|vs\.?|versus|pros and cons|best practice)\b/i.test(q) ||
+  /\b(យោបល់|បទពិសោធ)\b/.test(q);
 
 // ---- Calculator tool (idea from ai-sdk tools) ---------------------------
 
@@ -1181,8 +1250,25 @@ ActionRegistry.register({
 
 ActionRegistry.register({
   name: 'wikipedia',
-  enabled: (ctx) => wikiToggle.checked && !looksLikeCode(ctx.query),
+  enabled: (ctx) => wikiToggle.checked && !looksLikeCode(ctx.query) &&
+    (searchMode === 'auto' || searchMode === 'web'),
   run: async (ctx) => (await searchWikipedia(ctx.query)).map((w, i) => ({ p: 20 - i, text: `[${w.source}]\n${w.text}` })),
+});
+
+// Academic and discussion sources outrank Wikipedia when the query asks for
+// them: a request for papers wants papers, not an encyclopedia summary.
+ActionRegistry.register({
+  name: 'academic',
+  enabled: (ctx) => wikiToggle.checked && (searchMode === 'academic' ||
+    (searchMode === 'auto' && wantsAcademic(ctx.query))),
+  run: async (ctx) => (await searchAcademic(ctx.query)).map((r, i) => ({ p: 35 - i, text: `[${r.source}]\n${r.text}` })),
+});
+
+ActionRegistry.register({
+  name: 'discussions',
+  enabled: (ctx) => wikiToggle.checked && (searchMode === 'discussions' ||
+    (searchMode === 'auto' && wantsDiscussions(ctx.query))),
+  run: async (ctx) => (await searchDiscussions(ctx.query)).map((r, i) => ({ p: 30 - i, text: `[${r.source}]\n${r.text}` })),
 });
 
 async function withKnowledge(messages) {
