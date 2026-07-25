@@ -293,6 +293,10 @@
     font-size: .88rem; font-weight: 600; transition: transform .12s, box-shadow .15s;
   }
   #settings-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px var(--ring); }
+  /* The `hidden` attribute must always win: an author `display` (grid/flex on
+     .overlay / .popmenu) otherwise overrides the UA [hidden]{display:none},
+     leaving modals stuck open. This makes hidden reliably hide. */
+  [hidden] { display: none !important; }
   .overlay {
     position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
     background: rgba(10,10,14,.55); backdrop-filter: blur(6px); padding: 1rem;
