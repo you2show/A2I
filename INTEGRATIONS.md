@@ -88,6 +88,19 @@ One model describes the change, the other turns it into edits — reasoning
 and editing are different skills. If planning fails the agent just edits
 directly.
 
+Read web pages mentioned in the task:
+
+```bash
+python3 agent.py "port this to match https://peps.python.org/pep-0008/" \
+    --dir ../my-project --read-urls
+```
+
+`--read-urls` fetches any http(s) links and includes their text — the
+useful half of OpenHands' browsing without a headless browser. It does not
+run JavaScript, so it suits articles and docs rather than web apps, and it
+refuses private/loopback addresses so a page cannot steer the agent into
+your internal network.
+
 Use `--url`/`--model`/`--api-key` to target vLLM, Ollama, or a hosted
 provider instead of the default `http://127.0.0.1:8990/v1`.
 

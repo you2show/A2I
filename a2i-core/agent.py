@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
 
+from browse import browse, find_urls
 from editblock import EditResult, apply_blocks, find_edit_blocks
 from repomap import build_repo_map, extract_refs, rank_files
 
@@ -146,14 +147,22 @@ def openai_llm(
 
 
 def build_context(
-    task: str, files: dict[str, str], max_file_chars: int = 12_000
+    task: str, files: dict[str, str], max_file_chars: int = 12_000, read_urls: bool = False
 ) -> str:
     """Assemble the user message: a repo map plus the most relevant files.
 
     Files are ordered by repo-map relevance to the task, so when the budget
     runs out it is the least relevant file that is dropped.
+
+    When ``read_urls`` is set, any http(s) links in the task are fetched and
+    their text included — the useful half of OpenHands' browsing, without a
+    headless browser. Fetching is opt-in because it makes network requests.
     """
     parts: list[str] = []
+    if read_urls:
+        for page in browse(find_urls(task)):
+            heading = page.title or page.url
+            parts.append(f"--- web: {heading} ({page.url}) ---\n{page.text}")
     repo_map = build_repo_map(files, mentioned_idents=extract_refs(task), max_chars=2000)
     if repo_map:
         parts.append("Repository map (most relevant first):\n" + repo_map)
@@ -171,16 +180,19 @@ def build_context(
     return "\n".join(parts)
 
 
-def ask(question: str, files: dict[str, str], llm: LLM) -> str:
+def ask(
+    question: str, files: dict[str, str], llm: LLM, read_urls: bool = False
+) -> str:
     """Answer a question about the code without changing anything.
 
     The same ranked context the editing agent uses, but read-only — the
-    "answer engine" role that tools like Tabby expose over a codebase.
+    "answer engine" role that tools like Tabby expose over a codebase. With
+    ``read_urls``, any links in the question are fetched and included.
     """
     return llm(
         [
             {"role": "system", "content": ASK_PROMPT},
-            {"role": "user", "content": build_context(question, files)},
+            {"role": "user", "content": build_context(question, files, read_urls=read_urls)},
         ]
     )
 
@@ -208,6 +220,7 @@ def run_agent(
     on_progress: Callable[[str], None] | None = None,
     verify: Callable[[dict[str, str]], tuple[bool, str]] | None = None,
     architect: LLM | None = None,
+    read_urls: bool = False,
 ) -> AgentResult:
     """Ask the model for edits and apply them, retrying what fails.
 
@@ -248,7 +261,7 @@ def run_agent(
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": build_context(instruction, working)},
+        {"role": "user", "content": build_context(instruction, working, read_urls=read_urls)},
     ]
 
     for round_number in range(1, max_rounds + 1):
@@ -424,6 +437,11 @@ def main() -> None:
         metavar="MODEL",
         help="plan the change first; optionally with a different model id",
     )
+    parser.add_argument(
+        "--read-urls",
+        action="store_true",
+        help="fetch any http(s) links in the task and include their text",
+    )
     args = parser.parse_args()
 
     if args.test and not args.write:
@@ -438,7 +456,14 @@ def main() -> None:
 
     if args.ask:
         print()
-        print(ask(args.task, files, openai_llm(args.url, args.model, args.api_key)))
+        print(
+            ask(
+                args.task,
+                files,
+                openai_llm(args.url, args.model, args.api_key),
+                read_urls=args.read_urls,
+            )
+        )
         return
 
     # With --test the files must exist on disk for the command to see them, so
@@ -461,6 +486,7 @@ def main() -> None:
             if args.architect is not None
             else None
         ),
+        read_urls=args.read_urls,
     )
     if result.plan:
         print(f"\nPlan:\n{result.plan}\n")
