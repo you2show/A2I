@@ -1139,24 +1139,62 @@ function fitHistory(systemMsg, turns) {
   return [systemMsg, ...kept];
 }
 
+// ---- Action registry (pattern borrowed from vane's researcher agent) ----
+// Each action declares when it applies (`enabled`) and what context it
+// contributes (`run`). Gating is declarative rather than model-driven,
+// because the small local models A2I supports cannot be relied on for
+// function calling — yet we still get the benefit: tools run only when
+// relevant, so a coding question is not polluted with Wikipedia text.
+
+const ActionRegistry = {
+  actions: [],
+  register(action) { this.actions.push(action); },
+  available(ctx) { return this.actions.filter((a) => { try { return a.enabled(ctx); } catch { return false; } }); },
+  // Run every applicable action in parallel; failures never break the turn.
+  async gather(ctx) {
+    const results = await Promise.all(this.available(ctx).map(async (a) => {
+      try { return (await a.run(ctx)) || []; } catch { return []; }
+    }));
+    return results.flat().filter(Boolean);
+  },
+};
+
+// Queries that are clearly about code shouldn't pull encyclopedia articles.
+const looksLikeCode = (q) =>
+  coderMode ||
+  /```|\b(function|const|let|var|def |class |import |return|async|await|=>|null|undefined)\b/.test(q) ||
+  /\b(bug|error|exception|stack ?trace|compile|refactor|regex|api|sql|css|html)\b/i.test(q) ||
+  /\b(python|javascript|typescript|java|rust|golang|c\+\+|bash|shell)\b/i.test(q);
+
+ActionRegistry.register({
+  name: 'calculator',
+  enabled: (ctx) => calculate(ctx.query) !== null,
+  run: (ctx) => [{ p: 100, text: '[Calculator — exact result, trust this]\n' + calculate(ctx.query) }],
+});
+
+ActionRegistry.register({
+  name: 'knowledge',
+  // Only worth running when documents were actually loaded.
+  enabled: () => knowledgeChunks.length > 0,
+  run: (ctx) => searchKnowledge(ctx.query).map((h, i) => ({ p: 50 - i, text: `[${h.source}]\n${h.text}` })),
+});
+
+ActionRegistry.register({
+  name: 'wikipedia',
+  enabled: (ctx) => wikiToggle.checked && !looksLikeCode(ctx.query),
+  run: async (ctx) => (await searchWikipedia(ctx.query)).map((w, i) => ({ p: 20 - i, text: `[${w.source}]\n${w.text}` })),
+});
+
 async function withKnowledge(messages) {
   const turns = messages.filter((m) => m.role !== 'system');
   const lastUser = [...turns].reverse().find((m) => m.role === 'user');
   let systemContent = activePrompt();
 
   if (lastUser) {
-    // Collect candidate context with a priority (higher = keep first). Idea
-    // borrowed from PR-Agent's compression strategy: rank by relevance BEFORE
-    // spending the budget, instead of truncating in arbitrary arrival order.
-    const parts = [];
-    const calc = calculate(lastUser.content);
-    if (calc) parts.push({ p: 100, text: '[Calculator — exact result, trust this]\n' + calc });
-    // Local knowledge outranks Wikipedia: it is the user's own material.
-    searchKnowledge(lastUser.content).forEach((h, i) =>
-      parts.push({ p: 50 - i, text: `[${h.source}]\n${h.text}` }));
-    (await searchWikipedia(lastUser.content)).forEach((w, i) =>
-      parts.push({ p: 20 - i, text: `[${w.source}]\n${w.text}` }));
-
+    // Gather context from the applicable actions, then rank by priority
+    // (higher = keep first) before spending the budget — PR-Agent's
+    // compression idea: prioritise, then truncate.
+    const parts = await ActionRegistry.gather({ query: lastUser.content });
     parts.sort((a, b) => b.p - a.p);
 
     // Fill the budget with whole pieces. A piece that does not fit is

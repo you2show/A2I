@@ -150,11 +150,21 @@ Vane implements a proper agent loop with an **action registry**:
   by query classification, mode, and sources;
 - the registry converts enabled actions into tool definitions for the model.
 
-**Takeaway for A2I:** this is the blueprint for A2I's next tier. Our
-Wikipedia + calculator + knowledge lookups are *hardcoded and always-on*; a
-registry with capability gating would let A2I decide **when** to search,
-scrape, or compute — and is the natural home for future tools (image
-generation already exists as a manual toggle).
+**Adopted.** `a2i-web` now has an `ActionRegistry` with the same shape:
+actions declare `enabled(ctx)` and `run(ctx)`, and `gather()` runs every
+applicable action **in parallel**, so tools no longer run unconditionally.
+
+Two deliberate differences from vane, both because A2I must work with tiny
+local models that cannot be trusted to emit tool calls:
+
+- gating is **declarative**, not model-driven — no function-calling required;
+- a failing action returns nothing instead of breaking the turn (each
+  `enabled`/`run` is individually guarded).
+
+The immediate win: `looksLikeCode()` gates Wikipedia off for coding
+questions and in 💻 Coder mode, so code prompts are no longer polluted with
+encyclopedia text — and the freed budget goes to the user's own knowledge
+base. Adding a future tool is now one `ActionRegistry.register({…})` call.
 
 ## 8. Dify / Flowise / AI SDK / Sweep — the surrounding layers
 
@@ -192,7 +202,7 @@ value is that one local engine now serves all of them.
 | 2 | Weight retrieval by identifier quality + user-mentioned terms | `a2i-core/knowledge.py` | S | High |
 | 3 | Repo-level FIM (`<|repo_name|>`/`<|file_sep|>`) for `/v1/completions` | `a2i-core/server.py` | M | High for Tabby |
 | 4 | tree-sitter + PageRank repo map | `a2i-core` (new module) | L | High, Python-only |
-| 5 | Action registry with capability gating (Vane pattern) | `a2i-web` | M | High — real tool use |
+| ~~5~~ | ~~Action registry with capability gating (Vane pattern)~~ | ~~`a2i-web`~~ | — | ✅ **done** |
 | 6 | SEARCH/REPLACE edit format with a fallback cascade | future A2I agent | L | Only if A2I edits files |
 
 Items 1–2 are cheap and improve answer quality immediately; 3–4 turn A2I Core
