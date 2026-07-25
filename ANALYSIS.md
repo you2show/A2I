@@ -180,6 +180,70 @@ value is that one local engine now serves all of them.
 
 ---
 
+## 9. Coverage — what was read, and what was not
+
+Being explicit, because depth varied a lot:
+
+| Repo | Depth | What was actually read |
+| ---- | ----- | ---------------------- |
+| aider | **deep** | `repomap.py` (PageRank + heuristics), `coders/editblock_coder.py` (fallback cascade), `args.py`/`main.py` |
+| pr-agent | **deep** | `compression_strategy.md`, settings templates |
+| tabby | **deep** | `models-http-api/*.md` (chat + completion config) |
+| qwen3-coder | **deep** | `README.md`, `examples/*fim*.py` (FIM + repo-level FIM) |
+| vllm | **deep** | `entrypoints/openai/{chat_completion,completion}/api_router.py`, `cli_args.py` |
+| vane | **deep** | `agents/search/researcher/` (action registry) |
+| **dify** | **deep** | `core/rag/rerank/weight_rerank.py`, `rerank_type.py`, `core/rag/` layout |
+| glm-5 | medium | `README.md` (GLM-5.2 capabilities, SGLang serving), `skills/` |
+| openhands | medium | layout, `pyproject.toml` — agent runtime is an external SDK |
+| sweep | shallow | `README.md`, layout |
+| wizardlm | shallow | `README.md`, directory layout |
+| transformers | shallow | package layout only |
+
+### dify — hybrid retrieval (`core/rag/rerank/weight_rerank.py`)
+
+The find worth acting on. Dify supports two rerank modes
+(`RerankMode`): a dedicated **reranking model**, or a **weighted score** that
+blends two signals:
+
+```
+score = vector_weight × cosine(query, chunk) + keyword_weight × bm25(query, chunk)
+```
+
+So dify does **hybrid retrieval** — dense (embeddings) *and* sparse (BM25) —
+with tunable weights and a score threshold, and its RAG stack is fully
+layered (`extractor` → `splitter` → `index_processor` → `retrieval` →
+`rerank` → `data_post_processor`).
+
+**Takeaway for A2I:** `a2i-core/knowledge.py` scores with plain TF-IDF
+cosine. **BM25 is a strictly better sparse ranker** — it saturates term
+frequency and normalises by document length, which matters for our uneven
+800-char chunks. It is a small, dependency-free change and does not require
+embeddings, so it fits A2I's no-API constraint exactly. Dify's *dense* half
+needs an embedding model, which A2I Core could serve later via llama.cpp.
+
+### glm-5 — a strong model, not a library
+
+GLM-5.2 is an open flagship (1M context, strong coding, `IndexShare`
+attention). It ships no serving code of its own — the README points at
+**SGLang**, and it is OpenAI-compatible in practice, so for A2I it is a
+*model to serve* (via vLLM/SGLang) rather than code to adopt. Its `skills/`
+directory is documentation-only.
+
+### openhands / sweep / wizardlm / transformers — nothing to adopt
+
+- **openhands**: the agent runtime now lives in external packages
+  (`openhands-sdk`, `openhands-agent-server` pinned in `pyproject.toml`);
+  this fork keeps server/enterprise/frontend. Integration stays at the
+  `[llm] base_url` level.
+- **sweep**: the README states the project moved to a JetBrains plugin — it
+  is effectively archived, so it is not a live integration target.
+- **wizardlm**: research repo (Evol-Instruct training method, WizardCoder /
+  WizardMath). Relevant as *models to run*, and its Evol-Instruct method
+  matters only if A2I ever fine-tunes.
+- **transformers**: the underlying library for running original weights;
+  A2I uses GGUF via llama.cpp instead, so it is a dependency of the model
+  world, not of A2I.
+
 ## How the strengths converge into one A2I
 
 | Strength | Source | Where it lives in A2I |
@@ -203,7 +267,8 @@ value is that one local engine now serves all of them.
 | ~~3~~ | ~~Repo-level FIM for `/v1/completions`~~ | ~~`a2i-core/fim.py`~~ | — | ✅ **done** |
 | ~~4~~ | ~~PageRank repo map~~ | ~~`a2i-core/repomap.py`~~ | — | ✅ **done** (no deps) |
 | ~~5~~ | ~~Action registry with capability gating (Vane pattern)~~ | ~~`a2i-web`~~ | — | ✅ **done** |
-| 6 | SEARCH/REPLACE edit format with a fallback cascade | future A2I agent | L | Only if A2I edits files |
+| 6 | BM25 instead of plain TF-IDF (dify's sparse half) | `a2i-core/knowledge.py` | S | High |
+| 7 | SEARCH/REPLACE edit format with a fallback cascade | future A2I agent | L | Only if A2I edits files |
 
 Items 1–2 are cheap and improve answer quality immediately; 3–4 turn A2I Core
 into a genuine coding backend; 5 matters only once A2I writes to disk.
