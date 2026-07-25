@@ -24,8 +24,48 @@ def tokenize_raw(text: str) -> list[str]:
     return _WORD_RE.findall(text)
 
 
+# Splits an identifier into word parts: FooBar -> Foo, Bar; HTTPServer -> HTTP,
+# Server. Same pattern sweep uses for its code index.
+_VARIABLE_RE = re.compile(r"[A-Z][a-z]+|[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+")
+
+
+def _is_meaningful(part: str) -> bool:
+    """Reject junk tokens such as ``aaaa`` or base64 blobs.
+
+    Heuristic from sweep's code tokenizer: a real word is mostly
+    alphanumeric and does not repeat a tiny alphabet.
+    """
+    if len(part) < 2:
+        return False
+    alnum = sum(1 for c in part if c.isalnum())
+    return alnum > len(part) // 2 and len(part) / len(set(part)) < 4
+
+
+def split_identifier(token: str) -> list[str]:
+    """Split ``parse_config_file`` / ``parseConfigFile`` into word parts."""
+    parts: list[str] = []
+    for section in token.split("_"):
+        for part in _VARIABLE_RE.findall(section):
+            if _is_meaningful(part):
+                parts.append(part.lower())
+    return parts
+
+
 def tokenize(text: str) -> list[str]:
-    return [t.lower() for t in tokenize_raw(text)]
+    """Index tokens: the whole word plus its identifier parts.
+
+    Keeping both means an exact search for ``parse_config_file`` still scores
+    highest, while a search for "config parser" can also reach it — the
+    behaviour sweep's code index provides.
+    """
+    tokens: list[str] = []
+    for raw in tokenize_raw(text):
+        lowered = raw.lower()
+        tokens.append(lowered)
+        parts = split_identifier(raw)
+        if len(parts) > 1:  # only add parts for compound identifiers
+            tokens.extend(p for p in parts if p != lowered)
+    return tokens
 
 
 def identifier_weight(term: str) -> float:
@@ -73,15 +113,30 @@ class Chunk:
         return f"{self.source}: {self.text[:60]}..."
 
 
+#: BM25 term-frequency saturation. Above this, extra repeats add little.
+BM25_K1 = 1.5
+#: BM25 length normalisation: 0 = off, 1 = full.
+BM25_B = 0.75
+
+
 class KnowledgeBase:
-    """TF-IDF retrieval over local text documents."""
+    """BM25 retrieval over local text documents.
+
+    BM25 rather than plain TF-IDF cosine: it saturates term frequency (a word
+    repeated 20 times is not 20× more relevant) and normalises by document
+    length, which matters because chunks vary in size. Both dify's weighted
+    reranker and sweep's code index use BM25 for the same reasons.
+    """
 
     def __init__(self, chunks: list[Chunk]) -> None:
         self._chunks = chunks
         self._doc_freq: Counter[str] = Counter()
+        self._lengths: list[int] = []
         for chunk in chunks:
             chunk.term_counts = Counter(tokenize(chunk.text))
             self._doc_freq.update(chunk.term_counts.keys())
+            self._lengths.append(sum(chunk.term_counts.values()))
+        self._avg_len = (sum(self._lengths) / len(self._lengths)) if self._lengths else 0.0
 
     @classmethod
     def from_directory(cls, directory: Path) -> "KnowledgeBase":
@@ -98,8 +153,10 @@ class KnowledgeBase:
         return len(self._chunks)
 
     def _idf(self, term: str) -> float:
+        """BM25 inverse document frequency (always positive)."""
         df = self._doc_freq.get(term, 0)
-        return math.log((1 + len(self._chunks)) / (1 + df)) + 1
+        n = len(self._chunks)
+        return math.log(1 + (n - df + 0.5) / (df + 0.5))
 
     def search(self, query: str, top_k: int = 3) -> list[Chunk]:
         query_counts = Counter(tokenize(query))
@@ -111,22 +168,29 @@ class KnowledgeBase:
         weights: dict[str, float] = {}
         for raw in tokenize_raw(query):
             lowered = raw.lower()
-            weights[lowered] = max(weights.get(lowered, 0.0), identifier_weight(raw))
+            weight = identifier_weight(raw)
+            weights[lowered] = max(weights.get(lowered, 0.0), weight)
+            # Parts of a compound identifier inherit a share of its weight.
+            for part in split_identifier(raw):
+                weights.setdefault(part, weight * 0.5)
 
-        def score(chunk: Chunk) -> float:
-            dot = 0.0
-            for term, q_count in query_counts.items():
-                if term in chunk.term_counts:
-                    idf = self._idf(term)
-                    weight = weights.get(term, 1.0)
-                    dot += (q_count * idf * weight) * (chunk.term_counts[term] * idf)
-            norm = math.sqrt(
-                sum((c * self._idf(t)) ** 2 for t, c in chunk.term_counts.items())
-            )
-            return dot / norm if norm else 0.0
+        def score(chunk: Chunk, length: int) -> float:
+            total = 0.0
+            for term in query_counts:
+                freq = chunk.term_counts.get(term, 0)
+                if not freq:
+                    continue
+                norm = 1 - BM25_B + BM25_B * (length / self._avg_len if self._avg_len else 1)
+                saturated = (freq * (BM25_K1 + 1)) / (freq + BM25_K1 * norm)
+                total += self._idf(term) * saturated * weights.get(term, 1.0)
+            return total
 
-        ranked = sorted(self._chunks, key=score, reverse=True)
-        return [c for c in ranked[:top_k] if score(c) > 0]
+        scored = [
+            (score(chunk, length), index, chunk)
+            for index, (chunk, length) in enumerate(zip(self._chunks, self._lengths))
+        ]
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        return [chunk for value, _index, chunk in scored[:top_k] if value > 0]
 
     def __repr__(self) -> str:
         return f"KnowledgeBase(chunks={len(self._chunks)})"

@@ -193,11 +193,11 @@ Being explicit, because depth varied a lot:
 | vllm | **deep** | `entrypoints/openai/{chat_completion,completion}/api_router.py`, `cli_args.py` |
 | vane | **deep** | `agents/search/researcher/` (action registry) |
 | **dify** | **deep** | `core/rag/rerank/weight_rerank.py`, `rerank_type.py`, `core/rag/` layout |
-| glm-5 | medium | `README.md` (GLM-5.2 capabilities, SGLang serving), `skills/` |
-| openhands | medium | layout, `pyproject.toml` — agent runtime is an external SDK |
-| sweep | shallow | `README.md`, layout |
-| wizardlm | shallow | `README.md`, directory layout |
-| transformers | shallow | package layout only |
+| **glm-5** | **deep** | standalone clone: `README.md`, `skills/`, runtimes |
+| **openhands** | **deep** | layout, `pyproject.toml`, `skills/` trigger front-matter |
+| **sweep** | **deep** | `core/lexical_search.py`, `core/context_pruning.py`, full `sweepai/` |
+| **wizardlm** | **deep** | `Evol_Instruct/{depth,breadth}.py` |
+| **transformers** | **deep** | `src/transformers/cli/serving/` (OpenAI server) |
 
 ### dify — hybrid retrieval (`core/rag/rerank/weight_rerank.py`)
 
@@ -224,12 +224,83 @@ needs an embedding model, which A2I Core could serve later via llama.cpp.
 ### glm-5 — a strong model, not a library
 
 GLM-5.2 is an open flagship (1M context, strong coding, `IndexShare`
-attention). It ships no serving code of its own — the README points at
-**SGLang**, and it is OpenAI-compatible in practice, so for A2I it is a
-*model to serve* (via vLLM/SGLang) rather than code to adopt. Its `skills/`
-directory is documentation-only.
+attention). The standalone clone confirms it is docs + resources only — no
+serving code. The README lists supported runtimes, and two of them are
+already A2I providers: **vLLM v0.23.0+** and **Transformers**. So GLM-5.2 is
+a *model to serve*, and A2I can serve it today. Its `skills/` directory is
+documentation-only.
 
-### openhands / sweep / wizardlm / transformers — nothing to adopt
+### sweep — full source (deep pass)
+
+The copy vendored in the A2I monorepo is partial; the standalone clone has
+the whole `sweepai/` package (185 Python files). Three things stand out:
+
+**Code-aware tokenizer** (`core/lexical_search.py`) — the single most
+directly reusable piece in the repo:
+
+```python
+variable_pattern = re.compile(r"([A-Z][a-z]+|[a-z]+|[A-Z]+(?=[A-Z]|$))")
+# split on _, then split camelCase, then keep a part only if
+#   >half its chars are alphanumeric, and len(part)/len(set(part)) < 4
+```
+
+So `parse_config_file` and `parseConfigFile` both index as
+`parse config file` — a query for "config parser" matches either. The
+`len/len(set)` ratio cheaply rejects junk like `aaaaaa` or base64 blobs.
+
+**BM25, again** — the index is `tantivy` (a Rust BM25 engine). Together with
+dify's weighted BM25 half, that is two independent code-search systems
+choosing BM25 over plain TF-IDF.
+
+**Import graph** (`core/context_pruning.py`) — sweep builds an
+`nx.DiGraph` of imports and traverses it to pull in related files
+(`build_import_trees`, `graph_retrieval`). Same insight as aider's symbol
+graph, reached from a different direction: *code relevance is a graph
+problem, not a text-similarity problem.*
+
+### openhands — trigger-based microagents (deep pass)
+
+Beyond the server/frontend layers, the interesting part is `skills/`:
+knowledge files with front-matter declaring **triggers**.
+
+```yaml
+name: add_agent
+type: knowledge
+triggers: [new agent, create microagent, add agent, …]
+```
+
+Knowledge is injected only when a trigger phrase appears — the same idea as
+A2I's new action registry, but for *content* rather than *tools*. A natural
+future extension: let `knowledge/` files declare triggers so they load
+conditionally instead of always.
+
+### wizardlm — Evol-Instruct (deep pass)
+
+`Evol_Instruct/` is the actual method, and it is just prompts:
+`createConstraintsPrompt`, `createDeepenPrompt`, `createConcretizingPrompt`,
+`createReasoningPrompt` (depth) and `createBreadthPrompt`. Each rewrites an
+instruction into a harder variant to grow a training set. This is a
+**dataset-generation** technique — relevant to A2I only if it ever
+fine-tunes (`a2i-train/`), not to serving.
+
+### transformers — it ships an OpenAI server (deep pass)
+
+The important discovery: `src/transformers/cli/serving/` implements
+`transformers serve`, exposing **`/v1/chat/completions`, `/v1/completions`**,
+plus `/v1/responses` and `/v1/audio/transcriptions`.
+
+That is A2I Core's exact contract, so **any HuggingFace model** — including
+GLM-5.2 — can back A2I without GGUF conversion:
+
+```bash
+transformers serve        # OpenAI-compatible, add it as a provider
+```
+
+Three interchangeable local backends now exist for A2I: **A2I Core**
+(llama.cpp/GGUF, runs anywhere), **vLLM** (GPU, fastest), and
+**transformers serve** (any HF model).
+
+### glm-5 — confirmed a model, not a library
 
 - **openhands**: the agent runtime now lives in external packages
   (`openhands-sdk`, `openhands-agent-server` pinned in `pyproject.toml`);
@@ -267,7 +338,7 @@ directory is documentation-only.
 | ~~3~~ | ~~Repo-level FIM for `/v1/completions`~~ | ~~`a2i-core/fim.py`~~ | — | ✅ **done** |
 | ~~4~~ | ~~PageRank repo map~~ | ~~`a2i-core/repomap.py`~~ | — | ✅ **done** (no deps) |
 | ~~5~~ | ~~Action registry with capability gating (Vane pattern)~~ | ~~`a2i-web`~~ | — | ✅ **done** |
-| 6 | BM25 instead of plain TF-IDF (dify's sparse half) | `a2i-core/knowledge.py` | S | High |
+| ~~6~~ | ~~BM25 + code-aware tokenizer (dify + sweep)~~ | ~~`a2i-core/knowledge.py`~~ | — | ✅ **done** |
 | 7 | SEARCH/REPLACE edit format with a fallback cascade | future A2I agent | L | Only if A2I edits files |
 
 Items 1–2 are cheap and improve answer quality immediately; 3–4 turn A2I Core
