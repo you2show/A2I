@@ -605,7 +605,23 @@
 </main>
 
 <script type="module">
-const $ = (id) => document.getElementById(id);
+// Robust element lookup: if an element is ever missing (typo, markup change),
+// return a harmless no-op stub instead of null so a single bad id can never
+// crash init and take the whole app down with it.
+const _elStub = new Proxy({}, {
+  get(_t, p) {
+    if (p === 'classList') return { add() {}, remove() {}, toggle() {}, contains() { return false; } };
+    if (p === 'style' || p === 'dataset') return {};
+    if (p === 'querySelector') return () => _elStub;
+    if (p === 'querySelectorAll') return () => [];
+    if (p === 'value' || p === 'textContent' || p === 'innerHTML') return '';
+    if (p === 'hidden' || p === 'disabled') return false;
+    if (p === 'files' || p === 'options' || p === 'children') return [];
+    return () => _elStub; // methods (addEventListener, append, focus, …) → no-op
+  },
+  set() { return true; },
+});
+const $ = (id) => document.getElementById(id) || _elStub;
 const log = $('log'), col = $('col'), form = $('form'), input = $('input');
 const send = $('send'), stopBtn = $('stop'), regenBtn = $('regen');
 const engineSel = $('engine'), modelSel = $('model'), serverUrl = $('server-url');

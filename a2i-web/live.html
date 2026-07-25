@@ -198,7 +198,16 @@
 </div>
 
 <script type="module">
-const $ = (id) => document.getElementById(id);
+const _elStub = new Proxy({}, {
+  get(_t, p) {
+    if (p === 'classList') return { add() {}, remove() {}, toggle() {}, contains() { return false; } };
+    if (p === 'style' || p === 'dataset') return {};
+    if (p === 'value' || p === 'textContent') return '';
+    return () => _elStub;
+  },
+  set() { return true; },
+});
+const $ = (id) => document.getElementById(id) || _elStub;
 const body = document.body;
 const capUser = $('cap-user'), capAI = $('cap-ai'), statusEl = $('status');
 const micBtn = $('mic'), form = $('form'), input = $('input');
@@ -457,12 +466,13 @@ refreshGeminiBtn();
 // synthetic wave. Everything degrades gracefully if the mic/AudioContext is
 // unavailable — the ring still breathes so the scene always feels alive.
 const viz = $('viz');
-const vctx = viz.getContext('2d');
+const vctx = viz && viz.getContext ? viz.getContext('2d') : null;
 let audioCtx = null, analyser = null, freqData = null, micStream = null, micLive = false;
 const N = 84;
 const smooth = new Float32Array(N);
 
 function sizeViz() {
+  if (!vctx) return;
   const r = viz.getBoundingClientRect();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   viz.width = Math.max(2, r.width * dpr);
@@ -492,6 +502,7 @@ function stopMicAnalyser() {
 const STATE_COLOR = { idle: [108,140,255], listening: [74,168,255], thinking: [240,180,41], speaking: [62,207,142] };
 
 function drawViz() {
+  if (!vctx) return;
   requestAnimationFrame(drawViz);
   const W = viz.width, H = viz.height, cx = W / 2, cy = H / 2;
   vctx.clearRect(0, 0, W, H);
