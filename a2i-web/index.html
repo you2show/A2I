@@ -1351,7 +1351,14 @@ async function withKnowledge(messages) {
       const piece = text.length <= room ? text : text.slice(0, room - 1) + '…';
       ctx += sep + piece;
     }
-    if (ctx) systemContent = activePrompt() + '\n\nContext documents:\n' + ctx;
+    // A small model drifts unless told plainly to stay on the sources, so
+    // the grounding instruction is explicit rather than implied.
+    if (ctx) {
+      systemContent = activePrompt() +
+        '\n\nAnswer USING ONLY the context documents below. Do not add facts ' +
+        'that are not in them. If they do not answer the question, say you ' +
+        'do not know.\n\nContext documents:\n' + ctx;
+    }
   }
 
   return fitHistory({ role: 'system', content: systemContent }, turns);
@@ -2050,6 +2057,25 @@ stopBtn.addEventListener('click', () => {
   webllmEngine?.stop?.();
 });
 
+// Sub-2B models have almost no Khmer in their training data: they emit
+// fluent-looking Khmer that means nothing. Better to say so once, up front,
+// than to let someone read a confident, invented answer.
+let smallModelWarned = false;
+
+function warnIfModelTooSmall(question, mode) {
+  if (smallModelWarned || mode !== 'browser') return;
+  if (!/[ក-៿]/.test(question)) return;
+  const model = loadedModel || modelSel.value || '';
+  if (!/\b(0\.5B|1B|1\.5B)\b/i.test(model)) return;
+  smallModelWarned = true;
+  addMsg('note',
+    '⚠️ Model តូច (' + model + ') សរសេរខ្មែរមិនល្អទេ — ចម្លើយអាចមើលទៅត្រឹមត្រូវ ' +
+    'តែពិតជាខុស។ សូមប្តូរទៅ model ធំជាង (Qwen2.5 7B ក្នុងបញ្ជីខាងលើ), ' +
+    'A2I Core, ឬ ✨ Gemini។ (Small models cannot write Khmer reliably — ' +
+    'their answers can look fluent but be invented. Switch to a larger model, ' +
+    'A2I Core, or Gemini.)');
+}
+
 async function generate() {
   const question = [...history].reverse().find((m) => m.role === 'user')?.content || '';
   let mode = engineSel.value;
@@ -2057,6 +2083,7 @@ async function generate() {
   currentAbort = new AbortController();
   const signal = currentAbort.signal;
   const messages = await withKnowledge(history);
+  warnIfModelTooSmall(question, mode);
 
   const chosenBrain = currentServerBrain();
   if (chosenBrain && chosenBrain.online === false) {
