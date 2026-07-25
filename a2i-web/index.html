@@ -1247,16 +1247,26 @@ function calculate(query) {
 // Rough char budgets so the whole prompt stays within a small local model's
 // context window (CPU engine uses n_ctx 4096; ~1 token ≈ 2.5 chars for mixed
 // Khmer/English, so keep the prompt well under that).
-const CONTEXT_CHAR_BUDGET = 1500; // injected knowledge + Wikipedia
-const HISTORY_CHAR_BUDGET = 4000; // conversation turns
+//
+// The single-thread compat engine (browsers without JSPI) prefills the whole
+// prompt on one core, so its wait time is dominated by prompt length far more
+// than the multi-thread path. Smaller budgets there trade a little grounding
+// depth for a much shorter time-to-first-token — the actual complaint people
+// have ("it's slow") is almost always this wait, not the generation speed.
+function usingCompatEngine() {
+  return engineSel.value === 'browser' && needsWllamaCompat();
+}
+function contextCharBudget() { return usingCompatEngine() ? 500 : 1500; }
+function historyCharBudget() { return usingCompatEngine() ? 1200 : 4000; }
 
 // Keep the system message plus the most recent turns that fit the budget.
 function fitHistory(systemMsg, turns) {
+  const budget = historyCharBudget();
   const kept = [];
   let used = 0;
   for (let i = turns.length - 1; i >= 0; i--) {
     const len = turns[i].content.length + 8;
-    if (used + len > HISTORY_CHAR_BUDGET && kept.length) break;
+    if (used + len > budget && kept.length) break;
     kept.unshift(turns[i]);
     used += len;
   }
@@ -1341,11 +1351,12 @@ async function withKnowledge(messages) {
     // Fill the budget with whole pieces. A piece that does not fit is
     // truncated only if a useful amount survives; otherwise it is skipped so
     // the model never receives a meaningless fragment.
-    const MIN_USEFUL = 200;
+    const budget = contextCharBudget();
+    const MIN_USEFUL = Math.min(200, Math.floor(budget / 2));
     let ctx = '';
     for (const { text } of parts) {
       const sep = ctx ? '\n\n' : '';
-      const room = CONTEXT_CHAR_BUDGET - ctx.length - sep.length;
+      const room = budget - ctx.length - sep.length;
       if (room < MIN_USEFUL) break;
       // Reserve one char for the ellipsis when truncating.
       const piece = text.length <= room ? text : text.slice(0, room - 1) + '…';
@@ -1643,13 +1654,17 @@ async function loadCpuEngine(forceCompat = false) {
     compat,
     stop: () => {},
     ask(messages, onDelta, signal, maxTokens = 1024) {
+      // Single-thread compat generation is slow per token; a shorter cap
+      // means a full answer finishes sooner instead of a longer one being
+      // cut off by the user losing patience.
+      const cap = compat ? 180 : 300;
       return new Promise((resolve, reject) => {
         let answer = '';
         wllama.createChatCompletion({
           messages,
           stream: true,
           abortSignal: signal,
-          max_tokens: Math.min(maxTokens, 300),
+          max_tokens: Math.min(maxTokens, cap),
           onData: (chunk) => {
             const delta =
               chunk?.choices?.[0]?.delta?.content ?? chunk?.currentText ?? '';
@@ -2114,6 +2129,12 @@ async function generate() {
       if (!(webllmEngine && loadedModel)) {
         aiDiv.update('⬇ កំពុងរៀបចំ AI ជាលើកដំបូង… (setting up the AI for the first time — this downloads a model once, then works instantly)');
         loadingReporter = (t) => aiDiv.update(t);
+      } else if (webllmEngine.compat) {
+        // Single-thread prefill has no incremental progress to show, so the
+        // wait before the first token can otherwise look identical to a
+        // frozen page. Say plainly that it is working.
+        aiDiv.update('🐢 កំពុងគិត (យឺត ព្រោះ browser នេះប្រើ CPU តែ១ core)… ' +
+          'thinking… (slow — this browser runs single-core CPU inference)');
       }
       try {
         answer = await askBrowser(messages, (t) => aiDiv.update(t), signal);
