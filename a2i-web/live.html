@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>A2I Live — 3D Voice AI</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#05060a">
+<link rel="apple-touch-icon" href="icons/apple-touch-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="A2I Live">
+<script>if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));</script>
 <style>
   :root {
     --bg: #05060a; --panel: rgba(20, 22, 34, .55); --text: #eef1ff;
@@ -71,6 +78,10 @@
   body[data-state="speaking"]  .halo { background: radial-gradient(circle, var(--speak), transparent 60%); opacity: .85; animation: pulse .7s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { transform: scale(.86); } 50% { transform: scale(1.02); } }
 
+  .viz {
+    position: absolute; inset: 0; margin: auto; z-index: 0; pointer-events: none;
+    width: min(94vmin, 780px); height: min(94vmin, 780px);
+  }
   .robot { position: relative; z-index: 1; width: min(88vmin, 680px); height: min(72vh, 620px); }
   spline-viewer, .robot canvas { width: 100%; height: 100%; }
   /* fallback orb when Spline can't load (offline / blocked) */
@@ -98,6 +109,12 @@
   .caption.ai {
     bottom: 8.2rem; font-size: 1.15rem; line-height: 1.5;
     text-shadow: 0 2px 24px rgba(0,0,0,.6);
+    max-height: 34vh; overflow: hidden;
+  }
+  .caption.ai:not(:empty) {
+    padding: .7rem 1.1rem; border-radius: 16px;
+    background: rgba(10, 12, 20, .5); backdrop-filter: blur(10px);
+    border: 1px solid var(--border); pointer-events: auto;
   }
   .status-chip {
     position: absolute; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 2;
@@ -157,6 +174,7 @@
 
   <div class="stage">
     <div class="halo"></div>
+    <canvas class="viz" id="viz"></canvas>
     <div class="status-chip" id="status">tap the mic and speak</div>
     <div class="caption user" id="cap-user"></div>
 
@@ -180,7 +198,16 @@
 </div>
 
 <script type="module">
-const $ = (id) => document.getElementById(id);
+const _elStub = new Proxy({}, {
+  get(_t, p) {
+    if (p === 'classList') return { add() {}, remove() {}, toggle() {}, contains() { return false; } };
+    if (p === 'style' || p === 'dataset') return {};
+    if (p === 'value' || p === 'textContent') return '';
+    return () => _elStub;
+  },
+  set() { return true; },
+});
+const $ = (id) => document.getElementById(id) || _elStub;
 const body = document.body;
 const capUser = $('cap-user'), capAI = $('cap-ai'), statusEl = $('status');
 const micBtn = $('mic'), form = $('form'), input = $('input');
@@ -368,7 +395,7 @@ function buildRecog() {
   r.lang = lang === 'km' ? 'km-KH' : 'en-US';
   r.interimResults = true;
   r.continuous = false;
-  r.onstart = () => { listening = true; setState('listening', 'listening…'); micBtn.classList.remove('off'); };
+  r.onstart = () => { listening = true; setState('listening', 'listening…'); micBtn.classList.remove('off'); startMicAnalyser(); };
   r.onresult = (e) => {
     let txt = '';
     for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
@@ -376,11 +403,11 @@ function buildRecog() {
     if (e.results[e.results.length - 1].isFinal) { listening = false; handle(txt); }
   };
   r.onerror = (e) => {
-    listening = false;
+    listening = false; stopMicAnalyser();
     setState('idle', e.error === 'not-allowed'
       ? 'microphone blocked — allow mic access' : 'tap the mic and speak');
   };
-  r.onend = () => { listening = false; if (body.dataset.state === 'listening') setState('idle', 'tap the mic and speak'); };
+  r.onend = () => { listening = false; stopMicAnalyser(); if (body.dataset.state === 'listening') setState('idle', 'tap the mic and speak'); };
   return r;
 }
 
@@ -432,6 +459,84 @@ geminiBtn.addEventListener('click', () => {
   setState('idle', '✨ Gemini ready — tap the mic and speak');
 });
 refreshGeminiBtn();
+
+// ---- Audio-reactive visualizer -----------------------------------------
+// A ring of bars around the robot. While you speak it reacts to your real
+// voice (Web Audio analyser); while the robot thinks/speaks it animates with a
+// synthetic wave. Everything degrades gracefully if the mic/AudioContext is
+// unavailable — the ring still breathes so the scene always feels alive.
+const viz = $('viz');
+const vctx = viz && viz.getContext ? viz.getContext('2d') : null;
+let audioCtx = null, analyser = null, freqData = null, micStream = null, micLive = false;
+const N = 84;
+const smooth = new Float32Array(N);
+
+function sizeViz() {
+  if (!vctx) return;
+  const r = viz.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  viz.width = Math.max(2, r.width * dpr);
+  viz.height = Math.max(2, r.height * dpr);
+}
+sizeViz();
+addEventListener('resize', sizeViz);
+
+async function startMicAnalyser() {
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256; analyser.smoothingTimeConstant = 0.82;
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    audioCtx.createMediaStreamSource(micStream).connect(analyser);
+    micLive = true;
+  } catch { micLive = false; }
+}
+function stopMicAnalyser() {
+  micLive = false; analyser = null;
+  if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
+}
+
+const STATE_COLOR = { idle: [108,140,255], listening: [74,168,255], thinking: [240,180,41], speaking: [62,207,142] };
+
+function drawViz() {
+  if (!vctx) return;
+  requestAnimationFrame(drawViz);
+  const W = viz.width, H = viz.height, cx = W / 2, cy = H / 2;
+  vctx.clearRect(0, 0, W, H);
+  const state = body.dataset.state || 'idle';
+  const [r, g, b] = STATE_COLOR[state] || STATE_COLOR.idle;
+  const baseR = Math.min(W, H) * 0.315;
+  const maxLen = Math.min(W, H) * 0.14;
+
+  let live = false;
+  if (micLive && analyser && state === 'listening') { analyser.getByteFrequencyData(freqData); live = true; }
+  const now = performance.now();
+  const speed = state === 'speaking' ? 300 : state === 'thinking' ? 620 : 1400;
+  const gain = state === 'speaking' ? 0.72 : state === 'thinking' ? 0.34 : state === 'listening' ? 0.5 : 0.16;
+
+  vctx.save();
+  vctx.translate(cx, cy);
+  vctx.lineCap = 'round';
+  vctx.shadowBlur = 18; vctx.shadowColor = `rgba(${r},${g},${b},.9)`;
+  for (let i = 0; i < N; i++) {
+    let target;
+    if (live) target = freqData[Math.floor(i * freqData.length / N)] / 255;
+    else target = gain * (0.45 + 0.55 * Math.abs(Math.sin(now / speed + i * 0.4)));
+    smooth[i] += (target - smooth[i]) * 0.28;
+    const len = maxLen * (0.12 + smooth[i]);
+    const ang = (i / N) * Math.PI * 2 - Math.PI / 2;
+    const x1 = Math.cos(ang) * baseR, y1 = Math.sin(ang) * baseR;
+    const x2 = Math.cos(ang) * (baseR + len), y2 = Math.sin(ang) * (baseR + len);
+    vctx.strokeStyle = `rgba(${r},${g},${b},${0.35 + smooth[i] * 0.6})`;
+    vctx.lineWidth = Math.max(2, W * 0.004);
+    vctx.beginPath(); vctx.moveTo(x1, y1); vctx.lineTo(x2, y2); vctx.stroke();
+  }
+  vctx.restore();
+}
+requestAnimationFrame(drawViz);
 
 // ---- Init --------------------------------------------------------------
 $('foot').innerHTML = SR
