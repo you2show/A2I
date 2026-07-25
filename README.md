@@ -104,6 +104,13 @@ cd a2i-core
 ./run.sh                        # chat at http://127.0.0.1:8990
 ```
 
+## Coding tools — Aider, OpenHands, Tabby, PR-Agent
+
+A2I Core can be the local brain for the open-source coding assistants in this
+org: it serves both `/v1/chat/completions` (chat + agents) and
+`/v1/completions` (code completion / fill-in-the-middle). Verified setup for
+each tool is in **[`INTEGRATIONS.md`](INTEGRATIONS.md)**.
+
 ## Getting started
 
 Each component keeps its own build system, documentation, and license — see

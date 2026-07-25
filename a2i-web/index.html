@@ -370,6 +370,22 @@
   .msg.user .msg-imgs { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .45rem; }
   .msg.user .msg-imgs img { max-width: 220px; max-height: 220px; border-radius: 12px; display: block; }
 
+  /* ---- Coder mode ---- */
+  #coder-btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--muted);
+    border-radius: 999px; padding: .35rem .7rem; cursor: pointer; font-size: .82rem;
+    font-weight: 600; transition: all .15s;
+  }
+  #coder-btn:hover { border-color: var(--accent); color: var(--text); }
+  #coder-btn.on { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 4px 12px var(--ring); }
+  body.coder .msg.ai .md pre { border-color: var(--accent); }
+
+  /* ---- Image generation ---- */
+  #img-btn.on { color: #fff; background: var(--grad); box-shadow: 0 4px 12px var(--ring); }
+  .gen-img { max-width: 100%; border-radius: 14px; display: block; box-shadow: var(--shadow); }
+  .gen-img-wrap a { display: inline-block; margin-top: .45rem; font-size: .8rem; color: var(--accent); text-decoration: none; }
+  .gen-img-wrap a:hover { text-decoration: underline; }
+
   /* ---- Voice in chat ---- */
   .speak-btn { right: 1.7rem; }
   #mic-btn.rec { color: #b3403f; animation: a2i-mic 1.2s ease-in-out infinite; }
@@ -568,6 +584,7 @@
       </optgroup>
     </select>
     <input id="server-url" placeholder="http://127.0.0.1:8990 (OpenAI-compatible URL)">
+    <button type="button" id="coder-btn" title="Coder mode — expert coding assistant">💻 Coder</button>
     <label class="wiki"><input type="checkbox" id="wiki-toggle" checked> 🌐 Wikipedia</label>
     <a href="live.html" id="live-link" title="3D voice AI — talk to A2I">🤖 Live</a>
     <div class="menu-wrap">
@@ -593,6 +610,7 @@
       <div id="composer">
         <button type="button" id="attach-btn" class="icon-btn ghost" title="Attach image / ភ្ជាប់រូប (best with Gemini)">🖼️</button>
         <button type="button" id="mic-btn" class="icon-btn ghost" title="Dictate / និយាយបញ្ចូល">🎤</button>
+        <button type="button" id="img-btn" class="icon-btn ghost" title="Generate image (free) / បង្កើតរូប">🎨</button>
         <textarea id="input" rows="1" placeholder="សួរអ្វីក៏បាន… Ask anything…"></textarea>
         <button type="button" id="regen" class="icon-btn ghost" title="Regenerate / បង្កើតចម្លើយម្តងទៀត" style="display:none">↻</button>
         <button type="button" id="stop" class="icon-btn" title="Stop / បញ្ឈប់">■</button>
@@ -629,6 +647,46 @@ const statusEl = $('status'), dot = $('dot'), progress = $('progress');
 const SYSTEM_PROMPT =
   'You are A2I, a helpful all-in-one AI assistant. Answer clearly and accurately. ' +
   'If context documents are provided, ground your answer in them.';
+
+// 💻 Coder mode — a coding-specialist persona. Kept deliberately concrete so
+// small local models (Qwen2.5-Coder, DeepSeek-Coder, Code Llama) follow it.
+const CODER_PROMPT =
+  'You are A2I Coder, an expert programming assistant. Rules:\n' +
+  '1. Always put code in fenced blocks with the language tag ' +
+  '(```python, ```ts, ```bash, …).\n' +
+  '2. Write complete, runnable code — no "..." placeholders — and keep it ' +
+  'idiomatic for the language.\n' +
+  '3. Explain briefly BEFORE the code, not line by line after it.\n' +
+  '4. Point out bugs, edge cases and security issues you notice.\n' +
+  '5. When debugging, state the root cause first, then the fix.\n' +
+  '6. If the request is ambiguous, state your assumption and proceed.\n' +
+  'Reply in the language of the question (Khmer or English), but keep code, ' +
+  'identifiers and error messages in English.';
+
+let coderMode = localStorage.getItem('a2i-coder') === '1';
+const activePrompt = () => (coderMode ? CODER_PROMPT : SYSTEM_PROMPT);
+// Coding benefits from low randomness; general chat from a bit more.
+const activeTemperature = () => (coderMode ? 0.2 : 0.7);
+
+// ---- Coder mode --------------------------------------------------------
+
+function refreshCoderUI() {
+  const btn = $('coder-btn');
+  btn.classList.toggle('on', coderMode);
+  document.body?.classList.toggle('coder', coderMode);
+  btn.title = coderMode
+    ? 'Coder mode ON — expert coding assistant (click to turn off)'
+    : 'Coder mode — expert coding assistant';
+  input.placeholder = coderMode
+    ? 'សួរអំពីកូដ… Ask about code, paste an error, request a function…'
+    : 'សួរអ្វីក៏បាន… Ask anything…';
+}
+$('coder-btn').addEventListener('click', () => {
+  coderMode = !coderMode;
+  localStorage.setItem('a2i-coder', coderMode ? '1' : '0');
+  refreshCoderUI();
+  if (typeof showWelcome === 'function' && $('welcome')) showWelcome();
+});
 
 // ---- Theme -------------------------------------------------------------
 
@@ -833,21 +891,34 @@ function renderMarkdown(src) {
 // ---- Chat rendering ----------------------------------------------------
 
 function showWelcome() {
+  const heading = coderMode ? '💻 A2I Coder' : 'ជម្រាបសួរ! ខ្ញុំជា A2I';
+  const sub = coderMode
+    ? 'ជំនួយការសរសេរកូដ — សរសេរ · ជួសជុល · ពន្យល់<br>' +
+      'Expert coding assistant — write, debug, explain'
+    : 'AI ផ្ទាល់ខ្លួនរបស់អ្នក — រត់ក្នុងឧបករណ៍អ្នក គ្មាន API ខាងក្រៅ<br>' +
+      'Your personal all-in-one AI — private, on your device';
   col.innerHTML = `
     <div id="welcome">
       <div class="logo-big">A2</div>
-      <h2>ជម្រាបសួរ! ខ្ញុំជា A2I</h2>
-      <p>AI ផ្ទាល់ខ្លួនរបស់អ្នក — រត់ក្នុងឧបករណ៍អ្នក គ្មាន API ខាងក្រៅ<br>
-         Your personal all-in-one AI — private, on your device</p>
+      <h2></h2>
+      <p></p>
       <div class="chips"></div>
     </div>`;
+  col.querySelector('#welcome h2').textContent = heading;
+  col.querySelector('#welcome p').innerHTML = sub;
   const chips = col.querySelector('.chips');
-  for (const text of [
+  const prompts = coderMode ? [
+    'Write a Python function to parse a CSV file',
+    'Explain this error: TypeError: undefined is not a function',
+    'សរសេរ REST API ជាមួយ FastAPI',
+    'Review this code for bugs and security issues',
+  ] : [
     'ប្រាប់ខ្ញុំអំពីប្រវត្តិអង្គរវត្ត',
     'What is 127 × 49?',
     'Write a short poem about Cambodia',
     'តើ AI ដំណើរការយ៉ាងដូចម្តេច?',
-  ]) {
+  ];
+  for (const text of prompts) {
     const chip = document.createElement('button');
     chip.className = 'chip';
     chip.textContent = text;
@@ -936,8 +1007,17 @@ function renderChat() {
   const msgs = history.filter((m) => m.role !== 'system');
   if (!msgs.length) { showWelcome(); regenBtn.style.display = 'none'; return; }
   for (const m of msgs) {
-    if (m.role === 'user') addMsg('user', m.content, null, m.images);
-    else addMsg('ai', m.content, '🧠 A2I');
+    if (m.role === 'user') { addMsg('user', m.content, null, m.images); continue; }
+    if (m.genImage) {
+      const d = addMsg('ai', '', '🎨 A2I Image');
+      const b = d.querySelector('.md');
+      b.innerHTML = '';
+      const im = new Image(); im.className = 'gen-img'; im.src = m.genImage;
+      im.alt = m.content || 'generated image';
+      b.appendChild(im);
+      continue;
+    }
+    addMsg('ai', m.content, '🧠 A2I');
   }
   regenBtn.style.display =
     msgs.at(-1)?.role === 'assistant' ? 'grid' : 'none';
@@ -1059,7 +1139,7 @@ function fitHistory(systemMsg, turns) {
 async function withKnowledge(messages) {
   const turns = messages.filter((m) => m.role !== 'system');
   const lastUser = [...turns].reverse().find((m) => m.role === 'user');
-  let systemContent = SYSTEM_PROMPT;
+  let systemContent = activePrompt();
 
   if (lastUser) {
     const parts = [];
@@ -1076,7 +1156,7 @@ async function withKnowledge(messages) {
       ctx += (ctx ? '\n\n' : '') + piece;
       used += piece.length;
     }
-    if (ctx) systemContent = SYSTEM_PROMPT + '\n\nContext documents:\n' + ctx;
+    if (ctx) systemContent = activePrompt() + '\n\nContext documents:\n' + ctx;
   }
 
   return fitHistory({ role: 'system', content: systemContent }, turns);
@@ -1506,7 +1586,10 @@ function toGeminiBody(messages, maxTokens = 1024) {
       if (!parts.length) parts.push({ text: '' });
       return { role: m.role === 'assistant' ? 'model' : 'user', parts };
     });
-  const body = { contents, generationConfig: { maxOutputTokens: maxTokens } };
+  const body = {
+    contents,
+    generationConfig: { maxOutputTokens: maxTokens, temperature: activeTemperature() },
+  };
   if (system) body.systemInstruction = { parts: [{ text: system }] };
   return body;
 }
@@ -1632,7 +1715,10 @@ async function askServer(brain, messages, onDelta, signal) {
       headers['HTTP-Referer'] = location.origin;
       headers['X-Title'] = 'A2I';
     }
-    const body = { messages: toOpenAIMessages(messages), stream: true, max_tokens: 1024 };
+    const body = {
+      messages: toOpenAIMessages(messages), stream: true, max_tokens: 1024,
+      temperature: activeTemperature(),
+    };
     if (brain.model) body.model = brain.model;
     res = await fetch(apiBase(brain.url) + '/chat/completions', {
       method: 'POST', headers, body: JSON.stringify(body), signal,
@@ -1727,7 +1813,7 @@ async function askAllBrains(question, messages, signal) {
   if (results.length === 1) return results[0].answer;
 
   const combineMessages = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: activePrompt() },
     {
       role: 'user',
       content:
@@ -1901,10 +1987,67 @@ const composerEl = $('composer');
   if (ev === 'drop' && e.dataTransfer?.files?.length) addFiles([...e.dataTransfer.files]);
 }));
 
+// ---- Image generation (free, keyless — Pollinations) -------------------
+let imageMode = false;
+const imgBtn = $('img-btn');
+imgBtn.addEventListener('click', () => {
+  imageMode = !imageMode;
+  imgBtn.classList.toggle('on', imageMode);
+  input.placeholder = imageMode
+    ? 'ពណ៌នារូបដែលចង់បាន… Describe an image to generate…'
+    : 'សួរអ្វីក៏បាន… Ask anything…';
+  input.focus();
+});
+
+async function generateImage(prompt) {
+  addMsg('user', prompt);
+  history.push({ role: 'user', content: prompt });
+  persistChat();
+  const div = addMsg('ai', '🎨 កំពុងបង្កើតរូប… (generating image, ~10s)', '🎨 A2I Image');
+  const body = div.querySelector('.md');
+  const seed = Math.floor(Math.random() * 1e6);
+  const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
+    '?width=1024&height=1024&nologo=true&seed=' + seed;
+  const img = new Image();
+  img.className = 'gen-img'; img.alt = prompt; img.loading = 'lazy';
+  const fail = setTimeout(() => img.onerror && img.onerror(), 45000);
+  img.onload = () => {
+    clearTimeout(fail);
+    body.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.className = 'gen-img-wrap';
+    wrap.appendChild(img);
+    wrap.appendChild(document.createElement('br'));
+    const dl = document.createElement('a');
+    dl.href = url; dl.target = '_blank'; dl.rel = 'noopener'; dl.textContent = '⤓ បើក/រក្សាទុក · Open / save';
+    wrap.appendChild(dl);
+    body.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+    history.push({ role: 'assistant', content: '🎨 ' + prompt, genImage: url });
+    persistChat();
+  };
+  img.onerror = () => {
+    clearTimeout(fail);
+    div.update('⚠ បង្កើតរូបមិនបានទេ — ព្យាយាមម្តងទៀត ឬពិនិត្យអ៊ីនធឺណិត។ (Image generation failed — try again.)');
+  };
+  img.src = url;
+}
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = input.value.trim();
-  if ((!text && !attachedImages.length) || currentAbort) return;
+  if (currentAbort) return;
+
+  // Image generation: via the 🎨 toggle or a /image · /imagine command.
+  const cmd = /^\/(image|imagine)\s+/i.exec(text);
+  if ((imageMode && text) || cmd) {
+    const prompt = cmd ? text.slice(cmd[0].length).trim() : text;
+    if (!prompt) return;
+    input.value = ''; input.style.height = 'auto';
+    await generateImage(prompt);
+    return;
+  }
+
+  if (!text && !attachedImages.length) return;
   const images = attachedImages.slice();
   input.value = '';
   input.style.height = 'auto';
@@ -2184,6 +2327,7 @@ let paletteItems = [], paletteSel = 0;
 function paletteActions() {
   const list = [
     { icon: '＋', label: 'New chat', run: newChat },
+    { icon: '💻', label: (coderMode ? 'Turn OFF' : 'Turn ON') + ' Coder mode', run: () => $('coder-btn').click() },
     { icon: '⚙️', label: 'Settings — API keys, servers', run: () => openSettings() },
     { icon: '✨', label: 'Add / change Gemini API key', run: () => openSettings('gemini') },
     { icon: '🤖', label: 'Open Live 3D voice', run: () => { location.href = 'live.html'; } },
@@ -2257,6 +2401,7 @@ document.addEventListener('keydown', (e) => {
 // ---- Init --------------------------------------------------------------
 
 rebuildEngineSelect(null);
+refreshCoderUI();
 refreshBar();
 renderChat();
 renderChatList();
