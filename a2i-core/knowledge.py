@@ -19,8 +19,37 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
 
 
+def tokenize_raw(text: str) -> list[str]:
+    """Tokenize preserving case, so identifier shape stays detectable."""
+    return _WORD_RE.findall(text)
+
+
 def tokenize(text: str) -> list[str]:
-    return _WORD_RE.findall(text.lower())
+    return [t.lower() for t in tokenize_raw(text)]
+
+
+def identifier_weight(term: str) -> float:
+    """How distinctive a term looks, judged by its shape.
+
+    Adapted from aider's repo-map heuristics: a long ``snake_case`` or
+    ``camelCase`` name is a strong relevance signal, while a leading
+    underscore marks an implementation detail. Applied to query terms so a
+    search for ``parse_config_file`` is not diluted by ordinary words.
+    Aider's multipliers are tuned for PageRank edge weights; TF-IDF scores
+    are far more sensitive, so the boost here is deliberately gentler.
+    """
+    has_alpha = any(c.isalpha() for c in term)
+    is_snake = "_" in term.strip("_") and has_alpha
+    is_camel = any(c.isupper() for c in term) and any(c.islower() for c in term)
+
+    weight = 1.0
+    if (is_snake or is_camel) and len(term) >= 8:
+        weight *= 3.0
+    if term.startswith("_"):
+        weight *= 0.5
+    if len(term) <= 2:
+        weight *= 0.5
+    return weight
 
 
 def split_into_chunks(text: str) -> list[str]:
@@ -77,12 +106,20 @@ class KnowledgeBase:
         if not query_counts or not self._chunks:
             return []
 
+        # Weight query terms by how distinctive their identifier shape is,
+        # judged on the original (pre-lowercase) spelling.
+        weights: dict[str, float] = {}
+        for raw in tokenize_raw(query):
+            lowered = raw.lower()
+            weights[lowered] = max(weights.get(lowered, 0.0), identifier_weight(raw))
+
         def score(chunk: Chunk) -> float:
             dot = 0.0
             for term, q_count in query_counts.items():
                 if term in chunk.term_counts:
                     idf = self._idf(term)
-                    dot += (q_count * idf) * (chunk.term_counts[term] * idf)
+                    weight = weights.get(term, 1.0)
+                    dot += (q_count * idf * weight) * (chunk.term_counts[term] * idf)
             norm = math.sqrt(
                 sum((c * self._idf(t)) ** 2 for t, c in chunk.term_counts.items())
             )

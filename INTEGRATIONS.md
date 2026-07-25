@@ -19,6 +19,24 @@ It serves:
 | `POST /v1/completions` | code completion / fill-in-the-middle (Tabby completion) |
 | `GET /v1/models` | model discovery |
 
+### Repo-level completion (A2I extension)
+
+`POST /v1/completions` also accepts optional `repo_name` and `files`, so a
+client can supply cross-file context. A2I Core ranks those files by relevance
+to the code around the cursor (see `repomap.py`) and builds the Qwen
+repo-level FIM prompt, keeping the most useful ones within the budget:
+
+```jsonc
+{
+  "prompt": "cfg = parse_config_file(",   // text before the cursor
+  "suffix": ")\n",                         // text after the cursor
+  "repo_name": "my-project",
+  "files": [{ "name": "config.py", "content": "def parse_config_file(p): ..." }]
+}
+```
+
+Plain clients that send only `prompt`/`suffix` are unaffected.
+
 Base URL: **`http://127.0.0.1:8990/v1`** — any non-empty API key string works.
 
 ---

@@ -198,10 +198,10 @@ value is that one local engine now serves all of them.
 
 | # | Change | Where | Effort | Value |
 | - | ------ | ----- | ------ | ----- |
-| 1 | Rank context by relevance before applying the char budget | `a2i-web/index.html` | S | High |
-| 2 | Weight retrieval by identifier quality + user-mentioned terms | `a2i-core/knowledge.py` | S | High |
-| 3 | Repo-level FIM (`<|repo_name|>`/`<|file_sep|>`) for `/v1/completions` | `a2i-core/server.py` | M | High for Tabby |
-| 4 | tree-sitter + PageRank repo map | `a2i-core` (new module) | L | High, Python-only |
+| ~~1~~ | ~~Rank context by relevance before the char budget~~ | ~~`a2i-web`~~ | — | ✅ **done** |
+| ~~2~~ | ~~Weight retrieval by identifier quality~~ | ~~`a2i-core/knowledge.py`~~ | — | ✅ **done** |
+| ~~3~~ | ~~Repo-level FIM for `/v1/completions`~~ | ~~`a2i-core/fim.py`~~ | — | ✅ **done** |
+| ~~4~~ | ~~PageRank repo map~~ | ~~`a2i-core/repomap.py`~~ | — | ✅ **done** (no deps) |
 | ~~5~~ | ~~Action registry with capability gating (Vane pattern)~~ | ~~`a2i-web`~~ | — | ✅ **done** |
 | 6 | SEARCH/REPLACE edit format with a fallback cascade | future A2I agent | L | Only if A2I edits files |
 
