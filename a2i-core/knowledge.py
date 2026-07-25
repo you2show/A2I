@@ -12,6 +12,9 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
+
+from extract import UNSUPPORTED_SUFFIXES, extract, supported_suffixes
 
 _WORD_RE = re.compile(r"[\wក-៿]+", re.UNICODE)
 
@@ -92,15 +95,67 @@ def identifier_weight(term: str) -> float:
     return weight
 
 
-def split_into_chunks(text: str) -> list[str]:
+#: Separators tried in order, coarsest first: paragraphs, then lines, then
+#: sentences (including the Khmer ។ and CJK 。), then words. Adapted from
+#: dify's recursive splitter — cutting on structure keeps each chunk
+#: self-contained, where a fixed-width cut lands mid-sentence and produces
+#: chunks that retrieve badly and read worse.
+_SEPARATORS = ["\n\n", "\n", "។ ", "។", "。", ". ", "! ", "? ", "; ", " ", ""]
+
+
+def _split_on(text: str, separator: str) -> list[str]:
+    if separator == "":
+        return list(text)
+    parts = text.split(separator)
+    # Keep the separator attached so rejoined chunks read naturally.
+    return [p + separator for p in parts[:-1]] + [parts[-1]]
+
+
+def _recursive_split(text: str, size: int, separators: list[str]) -> list[str]:
+    """Split ``text`` into pieces of at most ``size``, respecting structure."""
+    if len(text) <= size:
+        return [text] if text.strip() else []
+    if not separators:
+        return [text[i : i + size] for i in range(0, len(text), size)]
+
+    separator, rest = separators[0], separators[1:]
+    pieces: list[str] = []
+    buffer = ""
+    for piece in _split_on(text, separator):
+        if len(piece) > size:
+            if buffer:
+                pieces.append(buffer)
+                buffer = ""
+            pieces.extend(_recursive_split(piece, size, rest))
+        elif len(buffer) + len(piece) <= size:
+            buffer += piece
+        else:
+            if buffer:
+                pieces.append(buffer)
+            buffer = piece
+    if buffer:
+        pieces.append(buffer)
+    return [p for p in pieces if p.strip()]
+
+
+def split_into_chunks(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
+    """Split a document into overlapping, structure-aware chunks.
+
+    Overlap is taken from the tail of the previous chunk so a fact that
+    straddles a boundary is still retrievable from one side.
+    """
+    pieces = _recursive_split(text, size, _SEPARATORS)
+    if overlap <= 0 or len(pieces) < 2:
+        return [p.strip() for p in pieces if p.strip()]
+
     chunks: list[str] = []
-    start = 0
-    while start < len(text):
-        chunk = text[start : start + CHUNK_SIZE].strip()
-        if chunk:
-            chunks.append(chunk)
-        start += CHUNK_SIZE - CHUNK_OVERLAP
-    return chunks
+    for index, piece in enumerate(pieces):
+        if index == 0:
+            chunks.append(piece.strip())
+            continue
+        tail = pieces[index - 1][-overlap:]
+        chunks.append((tail + piece).strip())
+    return [c for c in chunks if c]
 
 
 @dataclass
@@ -139,12 +194,31 @@ class KnowledgeBase:
         self._avg_len = (sum(self._lengths) / len(self._lengths)) if self._lengths else 0.0
 
     @classmethod
-    def from_directory(cls, directory: Path) -> "KnowledgeBase":
+    def from_directory(
+        cls, directory: Path, on_skip: Callable[[str], None] | None = None
+    ) -> "KnowledgeBase":
+        """Index every document under ``directory`` that can be read as text.
+
+        Args:
+            directory: Folder to index, searched recursively.
+            on_skip: Called with a message for each file that could not be
+                read, so unreadable material is visible rather than silently
+                dropped.
+        """
         chunks: list[Chunk] = []
+        supported = supported_suffixes()
         for path in sorted(directory.rglob("*")):
-            if path.suffix.lower() not in {".txt", ".md"} or not path.is_file():
+            if not path.is_file():
                 continue
-            for text in split_into_chunks(path.read_text(errors="ignore")):
+            suffix = path.suffix.lower()
+            if suffix not in supported and suffix not in UNSUPPORTED_SUFFIXES:
+                continue
+            result = extract(path)
+            if not result.ok:
+                if on_skip and result.error:
+                    on_skip(f"{path.name}: {result.error}")
+                continue
+            for text in split_into_chunks(result.text):
                 chunks.append(Chunk(source=path.name, text=text))
         return cls(chunks)
 
