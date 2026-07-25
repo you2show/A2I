@@ -370,6 +370,12 @@
   .msg.user .msg-imgs { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .45rem; }
   .msg.user .msg-imgs img { max-width: 220px; max-height: 220px; border-radius: 12px; display: block; }
 
+  /* ---- Image generation ---- */
+  #img-btn.on { color: #fff; background: var(--grad); box-shadow: 0 4px 12px var(--ring); }
+  .gen-img { max-width: 100%; border-radius: 14px; display: block; box-shadow: var(--shadow); }
+  .gen-img-wrap a { display: inline-block; margin-top: .45rem; font-size: .8rem; color: var(--accent); text-decoration: none; }
+  .gen-img-wrap a:hover { text-decoration: underline; }
+
   /* ---- Voice in chat ---- */
   .speak-btn { right: 1.7rem; }
   #mic-btn.rec { color: #b3403f; animation: a2i-mic 1.2s ease-in-out infinite; }
@@ -593,6 +599,7 @@
       <div id="composer">
         <button type="button" id="attach-btn" class="icon-btn ghost" title="Attach image / ភ្ជាប់រូប (best with Gemini)">🖼️</button>
         <button type="button" id="mic-btn" class="icon-btn ghost" title="Dictate / និយាយបញ្ចូល">🎤</button>
+        <button type="button" id="img-btn" class="icon-btn ghost" title="Generate image (free) / បង្កើតរូប">🎨</button>
         <textarea id="input" rows="1" placeholder="សួរអ្វីក៏បាន… Ask anything…"></textarea>
         <button type="button" id="regen" class="icon-btn ghost" title="Regenerate / បង្កើតចម្លើយម្តងទៀត" style="display:none">↻</button>
         <button type="button" id="stop" class="icon-btn" title="Stop / បញ្ឈប់">■</button>
@@ -936,8 +943,17 @@ function renderChat() {
   const msgs = history.filter((m) => m.role !== 'system');
   if (!msgs.length) { showWelcome(); regenBtn.style.display = 'none'; return; }
   for (const m of msgs) {
-    if (m.role === 'user') addMsg('user', m.content, null, m.images);
-    else addMsg('ai', m.content, '🧠 A2I');
+    if (m.role === 'user') { addMsg('user', m.content, null, m.images); continue; }
+    if (m.genImage) {
+      const d = addMsg('ai', '', '🎨 A2I Image');
+      const b = d.querySelector('.md');
+      b.innerHTML = '';
+      const im = new Image(); im.className = 'gen-img'; im.src = m.genImage;
+      im.alt = m.content || 'generated image';
+      b.appendChild(im);
+      continue;
+    }
+    addMsg('ai', m.content, '🧠 A2I');
   }
   regenBtn.style.display =
     msgs.at(-1)?.role === 'assistant' ? 'grid' : 'none';
@@ -1901,10 +1917,67 @@ const composerEl = $('composer');
   if (ev === 'drop' && e.dataTransfer?.files?.length) addFiles([...e.dataTransfer.files]);
 }));
 
+// ---- Image generation (free, keyless — Pollinations) -------------------
+let imageMode = false;
+const imgBtn = $('img-btn');
+imgBtn.addEventListener('click', () => {
+  imageMode = !imageMode;
+  imgBtn.classList.toggle('on', imageMode);
+  input.placeholder = imageMode
+    ? 'ពណ៌នារូបដែលចង់បាន… Describe an image to generate…'
+    : 'សួរអ្វីក៏បាន… Ask anything…';
+  input.focus();
+});
+
+async function generateImage(prompt) {
+  addMsg('user', prompt);
+  history.push({ role: 'user', content: prompt });
+  persistChat();
+  const div = addMsg('ai', '🎨 កំពុងបង្កើតរូប… (generating image, ~10s)', '🎨 A2I Image');
+  const body = div.querySelector('.md');
+  const seed = Math.floor(Math.random() * 1e6);
+  const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
+    '?width=1024&height=1024&nologo=true&seed=' + seed;
+  const img = new Image();
+  img.className = 'gen-img'; img.alt = prompt; img.loading = 'lazy';
+  const fail = setTimeout(() => img.onerror && img.onerror(), 45000);
+  img.onload = () => {
+    clearTimeout(fail);
+    body.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.className = 'gen-img-wrap';
+    wrap.appendChild(img);
+    wrap.appendChild(document.createElement('br'));
+    const dl = document.createElement('a');
+    dl.href = url; dl.target = '_blank'; dl.rel = 'noopener'; dl.textContent = '⤓ បើក/រក្សាទុក · Open / save';
+    wrap.appendChild(dl);
+    body.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+    history.push({ role: 'assistant', content: '🎨 ' + prompt, genImage: url });
+    persistChat();
+  };
+  img.onerror = () => {
+    clearTimeout(fail);
+    div.update('⚠ បង្កើតរូបមិនបានទេ — ព្យាយាមម្តងទៀត ឬពិនិត្យអ៊ីនធឺណិត។ (Image generation failed — try again.)');
+  };
+  img.src = url;
+}
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = input.value.trim();
-  if ((!text && !attachedImages.length) || currentAbort) return;
+  if (currentAbort) return;
+
+  // Image generation: via the 🎨 toggle or a /image · /imagine command.
+  const cmd = /^\/(image|imagine)\s+/i.exec(text);
+  if ((imageMode && text) || cmd) {
+    const prompt = cmd ? text.slice(cmd[0].length).trim() : text;
+    if (!prompt) return;
+    input.value = ''; input.style.height = 'auto';
+    await generateImage(prompt);
+    return;
+  }
+
+  if (!text && !attachedImages.length) return;
   const images = attachedImages.slice();
   input.value = '';
   input.style.height = 'auto';
