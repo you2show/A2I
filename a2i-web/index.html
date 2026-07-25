@@ -530,11 +530,14 @@
         <div class="setblock-h"><span class="ic">⚡</span> AI providers — local & free</div>
         <p class="hint">Famous, strong models for free: get a key, paste it, Add. Keys stay in this browser.<br>
           • Groq — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> (Llama 3.3 70B, very fast)<br>
-          • OpenRouter — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> (DeepSeek R1, Llama 70B — <code>:free</code>)</p>
+          • OpenRouter — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> (DeepSeek R1, Llama 70B — <code>:free</code>)<br>
+          • Local, no API at all: A2I Core (any machine), vLLM (GPU, fastest), Ollama</p>
         <div class="provider-presets">
           <button type="button" class="btn" id="preset-groq">⚡ Groq (free)</button>
           <button type="button" class="btn" id="preset-openrouter">🌐 OpenRouter (free)</button>
           <button type="button" class="btn" id="preset-a2icore">🖥️ A2I Core (local)</button>
+          <button type="button" class="btn" id="preset-vllm">🚀 vLLM (GPU, local)</button>
+          <button type="button" class="btn" id="preset-ollama">🦙 Ollama (local)</button>
         </div>
         <div id="set-brain-list" class="brain-list"></div>
         <div class="add-brain add-brain-2">
@@ -1136,25 +1139,76 @@ function fitHistory(systemMsg, turns) {
   return [systemMsg, ...kept];
 }
 
+// ---- Action registry (pattern borrowed from vane's researcher agent) ----
+// Each action declares when it applies (`enabled`) and what context it
+// contributes (`run`). Gating is declarative rather than model-driven,
+// because the small local models A2I supports cannot be relied on for
+// function calling — yet we still get the benefit: tools run only when
+// relevant, so a coding question is not polluted with Wikipedia text.
+
+const ActionRegistry = {
+  actions: [],
+  register(action) { this.actions.push(action); },
+  available(ctx) { return this.actions.filter((a) => { try { return a.enabled(ctx); } catch { return false; } }); },
+  // Run every applicable action in parallel; failures never break the turn.
+  async gather(ctx) {
+    const results = await Promise.all(this.available(ctx).map(async (a) => {
+      try { return (await a.run(ctx)) || []; } catch { return []; }
+    }));
+    return results.flat().filter(Boolean);
+  },
+};
+
+// Queries that are clearly about code shouldn't pull encyclopedia articles.
+const looksLikeCode = (q) =>
+  coderMode ||
+  /```|\b(function|const|let|var|def |class |import |return|async|await|=>|null|undefined)\b/.test(q) ||
+  /\b(bug|error|exception|stack ?trace|compile|refactor|regex|api|sql|css|html)\b/i.test(q) ||
+  /\b(python|javascript|typescript|java|rust|golang|c\+\+|bash|shell)\b/i.test(q);
+
+ActionRegistry.register({
+  name: 'calculator',
+  enabled: (ctx) => calculate(ctx.query) !== null,
+  run: (ctx) => [{ p: 100, text: '[Calculator — exact result, trust this]\n' + calculate(ctx.query) }],
+});
+
+ActionRegistry.register({
+  name: 'knowledge',
+  // Only worth running when documents were actually loaded.
+  enabled: () => knowledgeChunks.length > 0,
+  run: (ctx) => searchKnowledge(ctx.query).map((h, i) => ({ p: 50 - i, text: `[${h.source}]\n${h.text}` })),
+});
+
+ActionRegistry.register({
+  name: 'wikipedia',
+  enabled: (ctx) => wikiToggle.checked && !looksLikeCode(ctx.query),
+  run: async (ctx) => (await searchWikipedia(ctx.query)).map((w, i) => ({ p: 20 - i, text: `[${w.source}]\n${w.text}` })),
+});
+
 async function withKnowledge(messages) {
   const turns = messages.filter((m) => m.role !== 'system');
   const lastUser = [...turns].reverse().find((m) => m.role === 'user');
   let systemContent = activePrompt();
 
   if (lastUser) {
-    const parts = [];
-    const calc = calculate(lastUser.content);
-    if (calc) parts.push('[Calculator — exact result, trust this]\n' + calc);
-    for (const h of searchKnowledge(lastUser.content)) parts.push(`[${h.source}]\n${h.text}`);
-    for (const w of await searchWikipedia(lastUser.content)) parts.push(`[${w.source}]\n${w.text}`);
+    // Gather context from the applicable actions, then rank by priority
+    // (higher = keep first) before spending the budget — PR-Agent's
+    // compression idea: prioritise, then truncate.
+    const parts = await ActionRegistry.gather({ query: lastUser.content });
+    parts.sort((a, b) => b.p - a.p);
 
-    // Cap total injected context so it cannot overflow the context window.
-    let ctx = '', used = 0;
-    for (const p of parts) {
-      if (used >= CONTEXT_CHAR_BUDGET) break;
-      const piece = p.slice(0, CONTEXT_CHAR_BUDGET - used);
-      ctx += (ctx ? '\n\n' : '') + piece;
-      used += piece.length;
+    // Fill the budget with whole pieces. A piece that does not fit is
+    // truncated only if a useful amount survives; otherwise it is skipped so
+    // the model never receives a meaningless fragment.
+    const MIN_USEFUL = 200;
+    let ctx = '';
+    for (const { text } of parts) {
+      const sep = ctx ? '\n\n' : '';
+      const room = CONTEXT_CHAR_BUDGET - ctx.length - sep.length;
+      if (room < MIN_USEFUL) break;
+      // Reserve one char for the ellipsis when truncating.
+      const piece = text.length <= room ? text : text.slice(0, room - 1) + '…';
+      ctx += sep + piece;
     }
     if (ctx) systemContent = activePrompt() + '\n\nContext documents:\n' + ctx;
   }
@@ -2217,6 +2271,12 @@ $('preset-openrouter').addEventListener('click', () =>
   fillProvider('OpenRouter', 'https://openrouter.ai/api/v1', 'meta-llama/llama-3.3-70b-instruct:free'));
 $('preset-a2icore').addEventListener('click', () =>
   fillProvider('A2I Core', 'http://127.0.0.1:8990', ''));
+// vLLM serves /v1/chat/completions and /v1/completions on port 8000 — the
+// same contract as A2I Core, but GPU-accelerated for big models.
+$('preset-vllm').addEventListener('click', () =>
+  fillProvider('vLLM', 'http://127.0.0.1:8000/v1', 'Qwen/Qwen2.5-Coder-7B-Instruct'));
+$('preset-ollama').addEventListener('click', () =>
+  fillProvider('Ollama', 'http://127.0.0.1:11434/v1', 'qwen2.5-coder'));
 
 $('set-theme').addEventListener('click', () =>
   applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
