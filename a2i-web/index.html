@@ -1142,19 +1142,32 @@ async function withKnowledge(messages) {
   let systemContent = activePrompt();
 
   if (lastUser) {
+    // Collect candidate context with a priority (higher = keep first). Idea
+    // borrowed from PR-Agent's compression strategy: rank by relevance BEFORE
+    // spending the budget, instead of truncating in arbitrary arrival order.
     const parts = [];
     const calc = calculate(lastUser.content);
-    if (calc) parts.push('[Calculator — exact result, trust this]\n' + calc);
-    for (const h of searchKnowledge(lastUser.content)) parts.push(`[${h.source}]\n${h.text}`);
-    for (const w of await searchWikipedia(lastUser.content)) parts.push(`[${w.source}]\n${w.text}`);
+    if (calc) parts.push({ p: 100, text: '[Calculator — exact result, trust this]\n' + calc });
+    // Local knowledge outranks Wikipedia: it is the user's own material.
+    searchKnowledge(lastUser.content).forEach((h, i) =>
+      parts.push({ p: 50 - i, text: `[${h.source}]\n${h.text}` }));
+    (await searchWikipedia(lastUser.content)).forEach((w, i) =>
+      parts.push({ p: 20 - i, text: `[${w.source}]\n${w.text}` }));
 
-    // Cap total injected context so it cannot overflow the context window.
-    let ctx = '', used = 0;
-    for (const p of parts) {
-      if (used >= CONTEXT_CHAR_BUDGET) break;
-      const piece = p.slice(0, CONTEXT_CHAR_BUDGET - used);
-      ctx += (ctx ? '\n\n' : '') + piece;
-      used += piece.length;
+    parts.sort((a, b) => b.p - a.p);
+
+    // Fill the budget with whole pieces. A piece that does not fit is
+    // truncated only if a useful amount survives; otherwise it is skipped so
+    // the model never receives a meaningless fragment.
+    const MIN_USEFUL = 200;
+    let ctx = '';
+    for (const { text } of parts) {
+      const sep = ctx ? '\n\n' : '';
+      const room = CONTEXT_CHAR_BUDGET - ctx.length - sep.length;
+      if (room < MIN_USEFUL) break;
+      // Reserve one char for the ellipsis when truncating.
+      const piece = text.length <= room ? text : text.slice(0, room - 1) + '…';
+      ctx += sep + piece;
     }
     if (ctx) systemContent = activePrompt() + '\n\nContext documents:\n' + ctx;
   }
