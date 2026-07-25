@@ -530,11 +530,14 @@
         <div class="setblock-h"><span class="ic">⚡</span> AI providers — local & free</div>
         <p class="hint">Famous, strong models for free: get a key, paste it, Add. Keys stay in this browser.<br>
           • Groq — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> (Llama 3.3 70B, very fast)<br>
-          • OpenRouter — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> (DeepSeek R1, Llama 70B — <code>:free</code>)</p>
+          • OpenRouter — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> (DeepSeek R1, Llama 70B — <code>:free</code>)<br>
+          • Local, no API at all: A2I Core (any machine), vLLM (GPU, fastest), Ollama</p>
         <div class="provider-presets">
           <button type="button" class="btn" id="preset-groq">⚡ Groq (free)</button>
           <button type="button" class="btn" id="preset-openrouter">🌐 OpenRouter (free)</button>
           <button type="button" class="btn" id="preset-a2icore">🖥️ A2I Core (local)</button>
+          <button type="button" class="btn" id="preset-vllm">🚀 vLLM (GPU, local)</button>
+          <button type="button" class="btn" id="preset-ollama">🦙 Ollama (local)</button>
         </div>
         <div id="set-brain-list" class="brain-list"></div>
         <div class="add-brain add-brain-2">
@@ -2230,6 +2233,12 @@ $('preset-openrouter').addEventListener('click', () =>
   fillProvider('OpenRouter', 'https://openrouter.ai/api/v1', 'meta-llama/llama-3.3-70b-instruct:free'));
 $('preset-a2icore').addEventListener('click', () =>
   fillProvider('A2I Core', 'http://127.0.0.1:8990', ''));
+// vLLM serves /v1/chat/completions and /v1/completions on port 8000 — the
+// same contract as A2I Core, but GPU-accelerated for big models.
+$('preset-vllm').addEventListener('click', () =>
+  fillProvider('vLLM', 'http://127.0.0.1:8000/v1', 'Qwen/Qwen2.5-Coder-7B-Instruct'));
+$('preset-ollama').addEventListener('click', () =>
+  fillProvider('Ollama', 'http://127.0.0.1:11434/v1', 'qwen2.5-coder'));
 
 $('set-theme').addEventListener('click', () =>
   applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));

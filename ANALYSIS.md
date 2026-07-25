@@ -121,6 +121,69 @@ would supply the `<|file_sep|>` files.
 
 ---
 
+## 6. vLLM — the high-performance backend (`vllm/entrypoints/openai/`)
+
+vLLM's OpenAI server exposes **exactly the contract A2I Core now speaks**:
+
+- `POST /v1/chat/completions` (`chat_completion/api_router.py`)
+- `POST /v1/completions` (`completion/api_router.py`)
+- default port **8000** (`cli_args.py`)
+
+So vLLM is a **drop-in replacement for A2I Core** on machines with a GPU —
+same clients, same config, but continuous batching and PagedAttention make
+large models (70B) genuinely fast.
+
+```bash
+vllm serve Qwen/Qwen2.5-Coder-7B-Instruct     # → http://127.0.0.1:8000/v1
+```
+
+**Adopted:** the A2I web app now ships **🚀 vLLM** and **🦙 Ollama** presets
+next to A2I Core in *Settings → AI providers*, so the strongest local backend
+is one click away. Still zero external API.
+
+## 7. Vane — the researcher agent (`src/lib/agents/search/researcher/`)
+
+Vane implements a proper agent loop with an **action registry**:
+
+- actions are `plan`, `search`, `scrapeURL`, `uploadsSearch`, `done`;
+- each action declares `enabled(config)`, so the available tool set is gated
+  by query classification, mode, and sources;
+- the registry converts enabled actions into tool definitions for the model.
+
+**Takeaway for A2I:** this is the blueprint for A2I's next tier. Our
+Wikipedia + calculator + knowledge lookups are *hardcoded and always-on*; a
+registry with capability gating would let A2I decide **when** to search,
+scrape, or compute — and is the natural home for future tools (image
+generation already exists as a manual toggle).
+
+## 8. Dify / Flowise / AI SDK / Sweep — the surrounding layers
+
+- **Dify** contributes the production RAG + workflow orchestration model, and
+  can use A2I Core as an OpenAI-compatible provider.
+- **Flowise** is the visual builder for the same idea.
+- **AI SDK** is the unified provider abstraction — conceptually what A2I's
+  own `askAuto` failover chain does in miniature.
+- **Sweep** is the issue → PR agent, the same family as OpenHands/Aider.
+
+These are *consumers* of A2I Core rather than sources of code to copy: the
+value is that one local engine now serves all of them.
+
+---
+
+## How the strengths converge into one A2I
+
+| Strength | Source | Where it lives in A2I |
+| -------- | ------ | --------------------- |
+| Fast local serving, big models | vLLM | provider preset → any GPU box |
+| Portable local serving | llama.cpp | `a2i-core` (`run.sh`, one command) |
+| Code completion / FIM | Tabby + Qwen Coder | `a2i-core` `/v1/completions` |
+| Coding persona & low temperature | Aider / Qwen Coder | 💻 Coder mode |
+| Relevance-ranked context | Aider + PR-Agent | `withKnowledge` ranking |
+| Graceful degradation | Aider edit cascade | GPU→CPU→compat, `askAuto` failover |
+| Multi-provider fallback | AI SDK | 🔄 Auto engine |
+| Research/grounding | Vane | Wikipedia + knowledge base |
+| RAG & orchestration | Dify / Flowise | consume A2I Core as provider |
+
 ## Ranked recommendations for A2I
 
 | # | Change | Where | Effort | Value |
@@ -129,7 +192,8 @@ would supply the `<|file_sep|>` files.
 | 2 | Weight retrieval by identifier quality + user-mentioned terms | `a2i-core/knowledge.py` | S | High |
 | 3 | Repo-level FIM (`<|repo_name|>`/`<|file_sep|>`) for `/v1/completions` | `a2i-core/server.py` | M | High for Tabby |
 | 4 | tree-sitter + PageRank repo map | `a2i-core` (new module) | L | High, Python-only |
-| 5 | SEARCH/REPLACE edit format with a fallback cascade | future A2I agent | L | Only if A2I edits files |
+| 5 | Action registry with capability gating (Vane pattern) | `a2i-web` | M | High — real tool use |
+| 6 | SEARCH/REPLACE edit format with a fallback cascade | future A2I agent | L | Only if A2I edits files |
 
 Items 1–2 are cheap and improve answer quality immediately; 3–4 turn A2I Core
 into a genuine coding backend; 5 matters only once A2I writes to disk.

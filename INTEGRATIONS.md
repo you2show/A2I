@@ -87,6 +87,20 @@ model = "openai/qwen2.5-coder-7b-instruct-q4_k_m"
 Add an OpenAI-compatible provider with
 `apiBase: http://127.0.0.1:8990/v1` and any `apiKey`.
 
+## vLLM — the fastest local backend (needs a GPU)
+
+[`you2show/vllm`](https://github.com/you2show/vllm) serves the *same* API as
+A2I Core (`/v1/chat/completions` + `/v1/completions`, port 8000), so every
+tool above works unchanged — just point it at vLLM instead:
+
+```bash
+vllm serve Qwen/Qwen2.5-Coder-7B-Instruct     # → http://127.0.0.1:8000/v1
+```
+
+In the web app: **⚙️ Settings → AI providers → 🚀 vLLM**.
+Use A2I Core when you want it to run anywhere; use vLLM when you have a GPU
+and want large models fast. Both are fully local — no external API.
+
 ## Models — Qwen3-Coder, WizardLM, transformers
 
 - [`you2show/qwen3-coder`](https://github.com/you2show/qwen3-coder) and
