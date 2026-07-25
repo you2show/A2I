@@ -26,7 +26,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from llama_cpp import Llama
 
+from fim import RepoFile, build_repo_fim_prompt
 from knowledge import KnowledgeBase
+from repomap import extract_refs, rank_files
 
 DEFAULT_MODEL_PATH = Path(__file__).parent / "models" / "model.gguf"
 DEFAULT_SYSTEM_PROMPT = (
@@ -136,6 +138,27 @@ def chat_completions(body: dict) -> JSONResponse | StreamingResponse:
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+def _rank_repo_files(
+    files: list[RepoFile] | None, prefix: str, suffix: str
+) -> list[RepoFile] | None:
+    """Order supporting files most-relevant-first for repo-level FIM.
+
+    ``build_repo_fim_prompt`` drops whatever exceeds its budget, so the order
+    decides what the model actually sees. Relevance is computed with the repo
+    map, using identifiers around the cursor as the focus signal.
+    """
+    if not files or len(files) < 2:
+        return files
+    try:
+        contents = {f["name"]: f.get("content", "") for f in files if f.get("name")}
+        mentioned = extract_refs(prefix + "\n" + suffix)
+        order = rank_files(contents, mentioned_idents=mentioned)
+        position = {name: i for i, name in enumerate(order)}
+        return sorted(files, key=lambda f: position.get(f.get("name", ""), len(order)))
+    except Exception:
+        return files  # ranking is an optimisation, never a hard dependency
+
+
 @app.post("/v1/completions", response_model=None)
 def completions(body: dict) -> JSONResponse | StreamingResponse:
     """Raw (non-chat) completion — what code-completion tools speak.
@@ -155,13 +178,29 @@ def completions(body: dict) -> JSONResponse | StreamingResponse:
     stream: bool = body.get("stream", False)
     model_name = Path(state.llm.model_path).stem
 
+    # Optional repo-level context (A2I extension, ignored by plain clients):
+    # ``files`` supplies cross-file context and ``repo_name`` the repo header,
+    # following the Qwen coder repo-level FIM format. When present we build
+    # the FIM prompt ourselves, so ``suffix`` must not also be passed to
+    # llama.cpp — it is already embedded in the prompt.
+    files: list[RepoFile] | None = body.get("files")
+    repo_name: str | None = body.get("repo_name")
+
     kwargs: dict[str, object] = {
-        "prompt": prompt,
         "max_tokens": max_tokens,
         "temperature": temperature,
     }
-    if suffix:
-        kwargs["suffix"] = suffix
+    if files or repo_name:
+        kwargs["prompt"] = build_repo_fim_prompt(
+            prefix=prompt,
+            suffix=suffix or "",
+            files=_rank_repo_files(files, prompt, suffix or ""),
+            repo_name=repo_name,
+        )
+    else:
+        kwargs["prompt"] = prompt
+        if suffix:
+            kwargs["suffix"] = suffix
     if stop:
         kwargs["stop"] = stop
 

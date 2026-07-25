@@ -65,7 +65,7 @@ Models rarely reproduce the original text byte-perfectly, so aider applies a
 5. `replace_closest_edit_distance` — fuzzy match above a similarity threshold.
 6. `find_similar_lines` — on total failure, show the user the closest lines.
 
-**Takeaway for A2I:** this is the single best lesson in the repo set —
+**Adopted** in `a2i-core/editblock.py`. This is the single best lesson in the repo set —
 *robustness comes from graceful degradation, not from a stricter prompt.* It
 matches what we already did for the CPU engine (GPU → compat → warmup retry)
 and for the Auto provider failover.
@@ -180,6 +180,178 @@ value is that one local engine now serves all of them.
 
 ---
 
+## 9. Coverage — what was read, and what was not
+
+Being explicit, because depth varied a lot:
+
+| Repo | Depth | What was actually read |
+| ---- | ----- | ---------------------- |
+| aider | **deep** | `repomap.py` (PageRank + heuristics), `coders/editblock_coder.py` (fallback cascade), `args.py`/`main.py` |
+| pr-agent | **deep** | `compression_strategy.md`, settings templates |
+| tabby | **deep** | `models-http-api/*.md` (chat + completion config) |
+| qwen3-coder | **deep** | `README.md`, `examples/*fim*.py` (FIM + repo-level FIM) |
+| vllm | **deep** | `entrypoints/openai/{chat_completion,completion}/api_router.py`, `cli_args.py` |
+| vane | **deep** | `agents/search/researcher/` (action registry) |
+| **dify** | **deep** | `core/rag/rerank/weight_rerank.py`, `rerank_type.py`, `core/rag/` layout |
+| **glm-5** | **deep** | standalone clone: `README.md`, `skills/`, runtimes |
+| **openhands** | **deep** | layout, `pyproject.toml`, `skills/` trigger front-matter |
+| **sweep** | **deep** | `core/lexical_search.py`, `core/context_pruning.py`, full `sweepai/` |
+| **wizardlm** | **deep** | `Evol_Instruct/{depth,breadth}.py` |
+| **transformers** | **deep** | `src/transformers/cli/serving/` (OpenAI server) |
+
+### dify — hybrid retrieval (`core/rag/rerank/weight_rerank.py`)
+
+The find worth acting on. Dify supports two rerank modes
+(`RerankMode`): a dedicated **reranking model**, or a **weighted score** that
+blends two signals:
+
+```
+score = vector_weight × cosine(query, chunk) + keyword_weight × bm25(query, chunk)
+```
+
+So dify does **hybrid retrieval** — dense (embeddings) *and* sparse (BM25) —
+with tunable weights and a score threshold, and its RAG stack is fully
+layered (`extractor` → `splitter` → `index_processor` → `retrieval` →
+`rerank` → `data_post_processor`).
+
+**Takeaway for A2I:** `a2i-core/knowledge.py` scores with plain TF-IDF
+cosine. **BM25 is a strictly better sparse ranker** — it saturates term
+frequency and normalises by document length, which matters for our uneven
+800-char chunks. It is a small, dependency-free change and does not require
+embeddings, so it fits A2I's no-API constraint exactly. Dify's *dense* half
+needs an embedding model, which A2I Core could serve later via llama.cpp.
+
+### glm-5 — a strong model, not a library
+
+GLM-5.2 is an open flagship (1M context, strong coding, `IndexShare`
+attention). The standalone clone confirms it is docs + resources only — no
+serving code. The README lists supported runtimes, and two of them are
+already A2I providers: **vLLM v0.23.0+** and **Transformers**. So GLM-5.2 is
+a *model to serve*, and A2I can serve it today. Its `skills/` directory is
+documentation-only.
+
+### sweep — full source (deep pass)
+
+The copy vendored in the A2I monorepo is partial; the standalone clone has
+the whole `sweepai/` package (185 Python files). Three things stand out:
+
+**Code-aware tokenizer** (`core/lexical_search.py`) — the single most
+directly reusable piece in the repo:
+
+```python
+variable_pattern = re.compile(r"([A-Z][a-z]+|[a-z]+|[A-Z]+(?=[A-Z]|$))")
+# split on _, then split camelCase, then keep a part only if
+#   >half its chars are alphanumeric, and len(part)/len(set(part)) < 4
+```
+
+So `parse_config_file` and `parseConfigFile` both index as
+`parse config file` — a query for "config parser" matches either. The
+`len/len(set)` ratio cheaply rejects junk like `aaaaaa` or base64 blobs.
+
+**BM25, again** — the index is `tantivy` (a Rust BM25 engine). Together with
+dify's weighted BM25 half, that is two independent code-search systems
+choosing BM25 over plain TF-IDF.
+
+**Import graph** (`core/context_pruning.py`) — sweep builds an
+`nx.DiGraph` of imports and traverses it to pull in related files
+(`build_import_trees`, `graph_retrieval`). Same insight as aider's symbol
+graph, reached from a different direction: *code relevance is a graph
+problem, not a text-similarity problem.*
+
+### openhands — trigger-based microagents (deep pass)
+
+Beyond the server/frontend layers, the interesting part is `skills/`:
+knowledge files with front-matter declaring **triggers**.
+
+```yaml
+name: add_agent
+type: knowledge
+triggers: [new agent, create microagent, add agent, …]
+```
+
+Knowledge is injected only when a trigger phrase appears — the same idea as
+A2I's new action registry, but for *content* rather than *tools*. A natural
+future extension: let `knowledge/` files declare triggers so they load
+conditionally instead of always.
+
+### wizardlm — Evol-Instruct (deep pass)
+
+`Evol_Instruct/` is the actual method, and it is just prompts:
+`createConstraintsPrompt`, `createDeepenPrompt`, `createConcretizingPrompt`,
+`createReasoningPrompt` (depth) and `createBreadthPrompt`. Each rewrites an
+instruction into a harder variant to grow a training set. This is a
+**dataset-generation** technique — relevant to A2I only if it ever
+fine-tunes (`a2i-train/`), not to serving.
+
+### transformers — it ships an OpenAI server (deep pass)
+
+The important discovery: `src/transformers/cli/serving/` implements
+`transformers serve`, exposing **`/v1/chat/completions`, `/v1/completions`**,
+plus `/v1/responses` and `/v1/audio/transcriptions`.
+
+That is A2I Core's exact contract, so **any HuggingFace model** — including
+GLM-5.2 — can back A2I without GGUF conversion:
+
+```bash
+transformers serve        # OpenAI-compatible, add it as a provider
+```
+
+Three interchangeable local backends now exist for A2I: **A2I Core**
+(llama.cpp/GGUF, runs anywhere), **vLLM** (GPU, fastest), and
+**transformers serve** (any HF model).
+
+### glm-5 — confirmed a model, not a library
+
+- **openhands**: the agent runtime now lives in external packages
+  (`openhands-sdk`, `openhands-agent-server` pinned in `pyproject.toml`);
+  this fork keeps server/enterprise/frontend. Integration stays at the
+  `[llm] base_url` level.
+- **sweep**: the README states the project moved to a JetBrains plugin — it
+  is effectively archived, so it is not a live integration target.
+- **wizardlm**: research repo (Evol-Instruct training method, WizardCoder /
+  WizardMath). Relevant as *models to run*, and its Evol-Instruct method
+  matters only if A2I ever fine-tunes.
+- **transformers**: the underlying library for running original weights;
+  A2I uses GGUF via llama.cpp instead, so it is a dependency of the model
+  world, not of A2I.
+
+## 10. Feature sweep — what each repo *does* that A2I did not
+
+The earlier sections extracted architectural patterns. This one is a
+straight feature inventory, and what came of it.
+
+**aider** exposes ~40 in-chat commands (`/add /drop /undo /diff /test /run
+/lint /commit /architect /voice /map …`). Two of them are not UI sugar but
+change how well the agent works:
+
+- **`--auto-test`** — run a test command after edits and feed failures back
+  to the model (`base_coder.py`, `auto_test`/`test_outcome`). This closes
+  the loop from *"the edit applied"* to *"the change is correct"*.
+- **git integration** — aider commits each change, which is what makes
+  `/undo` possible.
+
+**Adopted.** `agent.py` now takes an injected `verify` callback, wired by the
+CLI to `--test CMD`: after edits apply cleanly the command runs, and on
+failure its output goes back to the model to fix its own change. `--commit`
+git-commits the changed files. Both require `--write`, since a command can
+only see files that exist; the CLI refuses the combination otherwise.
+
+The rest of aider's commands are session UX for a terminal chat (`/add`,
+`/drop`, `/tokens`, `/voice`), which A2I already covers in the web app or
+which do not apply to a one-shot CLI.
+
+**pr-agent** (`/describe /review /improve /ask`) and **sweep** (issue → PR)
+are both *GitHub workflow* surfaces rather than local capabilities; they are
+consumers of a model endpoint, which A2I Core already provides.
+
+**tabby** is editor completion — served, not reimplemented (`/v1/completions`).
+
+**openhands** contributes trigger-gated knowledge (`skills/*.md`
+front-matter), a natural future step for A2I's `knowledge/` folder.
+
+**dify / flowise** are orchestration UIs; **vane** contributes the researcher
+loop already adopted as the action registry.
+
 ## How the strengths converge into one A2I
 
 | Strength | Source | Where it lives in A2I |
@@ -198,12 +370,13 @@ value is that one local engine now serves all of them.
 
 | # | Change | Where | Effort | Value |
 | - | ------ | ----- | ------ | ----- |
-| 1 | Rank context by relevance before applying the char budget | `a2i-web/index.html` | S | High |
-| 2 | Weight retrieval by identifier quality + user-mentioned terms | `a2i-core/knowledge.py` | S | High |
-| 3 | Repo-level FIM (`<|repo_name|>`/`<|file_sep|>`) for `/v1/completions` | `a2i-core/server.py` | M | High for Tabby |
-| 4 | tree-sitter + PageRank repo map | `a2i-core` (new module) | L | High, Python-only |
+| ~~1~~ | ~~Rank context by relevance before the char budget~~ | ~~`a2i-web`~~ | — | ✅ **done** |
+| ~~2~~ | ~~Weight retrieval by identifier quality~~ | ~~`a2i-core/knowledge.py`~~ | — | ✅ **done** |
+| ~~3~~ | ~~Repo-level FIM for `/v1/completions`~~ | ~~`a2i-core/fim.py`~~ | — | ✅ **done** |
+| ~~4~~ | ~~PageRank repo map~~ | ~~`a2i-core/repomap.py`~~ | — | ✅ **done** (no deps) |
 | ~~5~~ | ~~Action registry with capability gating (Vane pattern)~~ | ~~`a2i-web`~~ | — | ✅ **done** |
-| 6 | SEARCH/REPLACE edit format with a fallback cascade | future A2I agent | L | Only if A2I edits files |
+| ~~6~~ | ~~BM25 + code-aware tokenizer (dify + sweep)~~ | ~~`a2i-core/knowledge.py`~~ | — | ✅ **done** |
+| ~~7~~ | ~~SEARCH/REPLACE edit format with a fallback cascade~~ | ~~`a2i-core/editblock.py`~~ | — | ✅ **done** |
 
 Items 1–2 are cheap and improve answer quality immediately; 3–4 turn A2I Core
 into a genuine coding backend; 5 matters only once A2I writes to disk.
