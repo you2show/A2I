@@ -315,6 +315,43 @@ Three interchangeable local backends now exist for A2I: **A2I Core**
   A2I uses GGUF via llama.cpp instead, so it is a dependency of the model
   world, not of A2I.
 
+## 10. Feature sweep — what each repo *does* that A2I did not
+
+The earlier sections extracted architectural patterns. This one is a
+straight feature inventory, and what came of it.
+
+**aider** exposes ~40 in-chat commands (`/add /drop /undo /diff /test /run
+/lint /commit /architect /voice /map …`). Two of them are not UI sugar but
+change how well the agent works:
+
+- **`--auto-test`** — run a test command after edits and feed failures back
+  to the model (`base_coder.py`, `auto_test`/`test_outcome`). This closes
+  the loop from *"the edit applied"* to *"the change is correct"*.
+- **git integration** — aider commits each change, which is what makes
+  `/undo` possible.
+
+**Adopted.** `agent.py` now takes an injected `verify` callback, wired by the
+CLI to `--test CMD`: after edits apply cleanly the command runs, and on
+failure its output goes back to the model to fix its own change. `--commit`
+git-commits the changed files. Both require `--write`, since a command can
+only see files that exist; the CLI refuses the combination otherwise.
+
+The rest of aider's commands are session UX for a terminal chat (`/add`,
+`/drop`, `/tokens`, `/voice`), which A2I already covers in the web app or
+which do not apply to a one-shot CLI.
+
+**pr-agent** (`/describe /review /improve /ask`) and **sweep** (issue → PR)
+are both *GitHub workflow* surfaces rather than local capabilities; they are
+consumers of a model endpoint, which A2I Core already provides.
+
+**tabby** is editor completion — served, not reimplemented (`/v1/completions`).
+
+**openhands** contributes trigger-gated knowledge (`skills/*.md`
+front-matter), a natural future step for A2I's `knowledge/` folder.
+
+**dify / flowise** are orchestration UIs; **vane** contributes the researcher
+loop already adopted as the action registry.
+
 ## How the strengths converge into one A2I
 
 | Strength | Source | Where it lives in A2I |

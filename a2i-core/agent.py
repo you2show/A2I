@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -66,6 +67,8 @@ class AgentResult:
     results: list[EditResult] = field(default_factory=list)
     rounds: int = 0
     log: list[str] = field(default_factory=list)
+    #: ``None`` when no verification ran, otherwise whether it passed.
+    verified: bool | None = None
 
     @property
     def applied(self) -> int:
@@ -155,6 +158,7 @@ def run_agent(
     llm: LLM,
     max_rounds: int = 3,
     on_progress: Callable[[str], None] | None = None,
+    verify: Callable[[dict[str, str]], tuple[bool, str]] | None = None,
 ) -> AgentResult:
     """Ask the model for edits and apply them, retrying what fails.
 
@@ -164,6 +168,11 @@ def run_agent(
         llm: The model callable.
         max_rounds: How many times to retry failed edits.
         on_progress: Optional callback for status lines.
+        verify: Optional check run after edits apply cleanly — typically a
+            test or lint command. It receives the updated files and returns
+            ``(ok, output)``; on failure the output is fed back to the model
+            so it can fix its own change. Injected rather than hardcoded so
+            the loop stays testable and side-effect free by default.
 
     Returns:
         An :class:`AgentResult` holding the updated file contents.
@@ -205,26 +214,42 @@ def run_agent(
             f"round {round_number}: applied {len(applied)}, failed {len(failed)}"
         )
 
+        feedback = ""
         if not failed:
-            break
+            if verify is None:
+                break
+            report("running verification…")
+            try:
+                ok, output = verify(working)
+            except Exception as exc:
+                outcome.log.append(f"round {round_number}: verification errored: {exc}")
+                report(f"verification errored: {exc}")
+                break
+            outcome.verified = ok
+            if ok:
+                outcome.log.append(f"round {round_number}: verification passed")
+                report("verification passed")
+                break
+            outcome.log.append(f"round {round_number}: verification failed")
+            report("verification failed — asking the model to fix it")
+            feedback = (
+                "The edits applied, but the verification command failed:\n\n"
+                f"{output[-2000:]}\n\n"
+                "Fix the cause with further SEARCH/REPLACE edits."
+            )
+        else:
+            # Retry what failed, showing the model the real surrounding text.
+            feedback = "\n\n".join(
+                f"This edit to {r.block.path} did not match the file:\n"
+                f"<<<<<<< SEARCH\n{r.block.search}\n=======\n{r.block.replace}\n>>>>>>> REPLACE\n"
+                f"The closest text actually in the file is:\n{r.hint}"
+                for r in failed
+            ) + "\n\nRe-issue ONLY the failed edits, matching the file exactly."
+
         if round_number == max_rounds:
             break
-
-        # Retry only what failed, showing the model the real surrounding text.
-        detail = "\n\n".join(
-            f"This edit to {r.block.path} did not match the file:\n"
-            f"<<<<<<< SEARCH\n{r.block.search}\n=======\n{r.block.replace}\n>>>>>>> REPLACE\n"
-            f"The closest text actually in the file is:\n{r.hint}"
-            for r in failed
-        )
         messages.append({"role": "assistant", "content": reply})
-        messages.append(
-            {
-                "role": "user",
-                "content": detail
-                + "\n\nRe-issue ONLY the failed edits, matching the file exactly.",
-            }
-        )
+        messages.append({"role": "user", "content": feedback})
 
     outcome.files = working
     return outcome
@@ -241,6 +266,44 @@ def write_files(files: dict[str, str], root: Path, only: list[str] | None = None
         target.write_text(content)
         written.append(target)
     return written
+
+
+def run_command(command: str, cwd: Path, timeout: int = 300) -> tuple[bool, str]:
+    """Run a shell command, returning ``(succeeded, combined_output)``."""
+    try:
+        completed = subprocess.run(
+            command,
+            shell=True,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"Command timed out after {timeout}s: {command}"
+    except OSError as exc:
+        return False, f"Could not run {command!r}: {exc}"
+    return completed.returncode == 0, (completed.stdout + completed.stderr).strip()
+
+
+def git_commit(root: Path, paths: list[str], message: str) -> tuple[bool, str]:
+    """Stage the given paths and commit them.
+
+    Returns ``(committed, detail)``. A non-repository or an empty diff is
+    reported rather than raised — committing is a convenience, not a
+    requirement.
+    """
+    inside, _ = run_command("git rev-parse --is-inside-work-tree", root)
+    if not inside:
+        return False, "not a git repository"
+    quoted = " ".join(f"'{p}'" for p in paths)
+    ok, output = run_command(f"git add -- {quoted}", root)
+    if not ok:
+        return False, output
+    ok, output = run_command(
+        f"git commit -m {json.dumps(message)} -- {quoted}", root
+    )
+    return ok, output
 
 
 def collect_files(
@@ -272,12 +335,35 @@ def main() -> None:
     parser.add_argument(
         "--write", action="store_true", help="write the changes (default: dry run)"
     )
+    parser.add_argument(
+        "--test",
+        default=None,
+        metavar="CMD",
+        help="command to verify the edits (e.g. 'pytest -q'); failures are fed "
+        "back to the model. Requires --write, since it runs against real files",
+    )
+    parser.add_argument(
+        "--commit", action="store_true", help="git-commit the changed files (with --write)"
+    )
     args = parser.parse_args()
+
+    if args.test and not args.write:
+        raise SystemExit("--test needs --write: the command runs against the files on disk")
+    if args.commit and not args.write:
+        raise SystemExit("--commit needs --write")
 
     files = collect_files(args.dir)
     if not files:
         raise SystemExit(f"No source files found under {args.dir}")
     print(f"Loaded {len(files)} files from {args.dir}")
+
+    # With --test the files must exist on disk for the command to see them, so
+    # verification writes first and reports the command's output back.
+    def verify(updated: dict[str, str]) -> tuple[bool, str]:
+        changed = [p for p, text in updated.items() if files.get(p) != text]
+        write_files(updated, args.dir, only=changed)
+        print(f"  running: {args.test}")
+        return run_command(args.test, args.dir)
 
     result = run_agent(
         task=args.task,
@@ -285,11 +371,14 @@ def main() -> None:
         llm=openai_llm(args.url, args.model, args.api_key),
         max_rounds=args.rounds,
         on_progress=lambda message: print(f"  {message}"),
+        verify=verify if args.test else None,
     )
 
     print(f"\n{result.applied} edit(s) applied, {result.failed} failed")
     for entry in result.results:
         print(f"  {entry}")
+    if result.verified is not None:
+        print(f"verification: {'passed' if result.verified else 'FAILED'}")
 
     if not result.changed_files:
         return
@@ -302,6 +391,12 @@ def main() -> None:
     print("\nWrote:")
     for path in written:
         print(f"  {path}")
+
+    if args.commit:
+        committed, detail = git_commit(
+            args.dir, result.changed_files, f"A2I: {args.task}"
+        )
+        print(f"\ngit commit: {'done' if committed else 'skipped'} — {detail.splitlines()[0] if detail else ''}")
 
 
 if __name__ == "__main__":

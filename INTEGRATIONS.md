@@ -57,6 +57,18 @@ code, asks for `SEARCH/REPLACE` edits, applies them through `editblock.py`'s
 fallback cascade, and retries whatever fails — showing the model the real
 surrounding text. **Nothing is written without `--write`.**
 
+Verify the change and commit it:
+
+```bash
+python3 agent.py "make the failing test pass" --dir ../my-project \
+    --write --test "pytest -q" --commit
+```
+
+With `--test`, the command runs after the edits land and any failure output
+is fed back so the model can fix its own change; `--commit` git-commits the
+changed files. Both need `--write`, since a test command can only see files
+that are actually on disk.
+
 Use `--url`/`--model`/`--api-key` to target vLLM, Ollama, or a hosted
 provider instead of the default `http://127.0.0.1:8990/v1`.
 
