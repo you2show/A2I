@@ -652,9 +652,15 @@ async function repairModelCache() {
       }
     }
   } catch { /* ignore */ }
+  // Unregister service workers so a stale cached app can't come back.
+  try {
+    if (navigator.serviceWorker) {
+      for (const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister();
+    }
+  } catch { /* ignore */ }
   // Give the GPU another chance after a manual repair.
   localStorage.removeItem('a2i-gpu-broken');
-  location.reload();
+  location.reload(true);
 }
 $('repair-btn').addEventListener('click', repairModelCache);
 
@@ -2072,8 +2078,18 @@ refreshAutospeak();
 // ---- PWA: installable + offline app ------------------------------------
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () =>
-    navigator.serviceWorker.register('sw.js').catch(() => { /* offline install optional */ }));
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('sw.js');
+      reg.update();
+    } catch { /* offline install optional */ }
+  });
+  // When a new service worker takes control (updated code), reload once so the
+  // user always ends up on the freshest version instead of stale cached code.
+  let swReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (swReloaded) return; swReloaded = true; location.reload();
+  });
 }
 let deferredInstall = null;
 const installBtn = $('install-btn');
