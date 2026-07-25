@@ -65,7 +65,7 @@ Models rarely reproduce the original text byte-perfectly, so aider applies a
 5. `replace_closest_edit_distance` — fuzzy match above a similarity threshold.
 6. `find_similar_lines` — on total failure, show the user the closest lines.
 
-**Takeaway for A2I:** this is the single best lesson in the repo set —
+**Adopted** in `a2i-core/editblock.py`. This is the single best lesson in the repo set —
 *robustness comes from graceful degradation, not from a stricter prompt.* It
 matches what we already did for the CPU engine (GPU → compat → warmup retry)
 and for the Auto provider failover.
@@ -339,7 +339,7 @@ Three interchangeable local backends now exist for A2I: **A2I Core**
 | ~~4~~ | ~~PageRank repo map~~ | ~~`a2i-core/repomap.py`~~ | — | ✅ **done** (no deps) |
 | ~~5~~ | ~~Action registry with capability gating (Vane pattern)~~ | ~~`a2i-web`~~ | — | ✅ **done** |
 | ~~6~~ | ~~BM25 + code-aware tokenizer (dify + sweep)~~ | ~~`a2i-core/knowledge.py`~~ | — | ✅ **done** |
-| 7 | SEARCH/REPLACE edit format with a fallback cascade | future A2I agent | L | Only if A2I edits files |
+| ~~7~~ | ~~SEARCH/REPLACE edit format with a fallback cascade~~ | ~~`a2i-core/editblock.py`~~ | — | ✅ **done** |
 
 Items 1–2 are cheap and improve answer quality immediately; 3–4 turn A2I Core
 into a genuine coding backend; 5 matters only once A2I writes to disk.
