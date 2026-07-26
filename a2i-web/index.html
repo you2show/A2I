@@ -424,6 +424,10 @@
   .gen-img { max-width: 100%; border-radius: 14px; display: block; box-shadow: var(--shadow); }
   .gen-img-wrap a { display: inline-block; margin-top: .45rem; font-size: .8rem; color: var(--accent); text-decoration: none; }
   .gen-img-wrap a:hover { text-decoration: underline; }
+  #aud-btn.on { color: #fff; background: var(--grad); box-shadow: 0 4px 12px var(--ring); }
+  .gen-audio { width: 100%; max-width: 420px; margin-top: .2rem; }
+  .gen-audio-wrap a { display: inline-block; margin-top: .45rem; font-size: .8rem; color: var(--accent); text-decoration: none; }
+  .gen-audio-wrap a:hover { text-decoration: underline; }
 
   /* ---- Voice in chat ---- */
   #mic-btn.rec { color: #b3403f; animation: a2i-mic 1.2s ease-in-out infinite; }
@@ -738,6 +742,7 @@
         <button type="button" id="attach-btn" class="icon-btn ghost" title="Attach image / ភ្ជាប់រូប (best with Gemini)"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
         <button type="button" id="mic-btn" class="icon-btn ghost" title="Dictate / និយាយបញ្ចូល"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
         <button type="button" id="img-btn" class="icon-btn ghost" title="Generate image (free) / បង្កើតរូប"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z"/></svg></button>
+        <button type="button" id="aud-btn" class="icon-btn ghost" title="Generate audio / voice (free) / បង្កើតសំឡេង"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></button>
         <textarea id="input" rows="1" placeholder="សួរអ្វីក៏បាន… Ask anything…"></textarea>
         <button type="button" id="regen" class="icon-btn ghost" title="Regenerate / បង្កើតចម្លើយម្តងទៀត" style="display:none"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66"/><polyline points="4 4 4 8 8 8"/></svg></button>
         <button type="button" id="stop" class="icon-btn" title="Stop / បញ្ឈប់"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
@@ -1075,6 +1080,8 @@ function showWelcome() {
   ] : [
     'ប្រាប់ខ្ញុំអំពីប្រវត្តិអង្គរវត្ត',
     'What is 127 × 49?',
+    '/image sunset over Angkor Wat',
+    '/audio Welcome to A2I',
     'Write a short poem about Cambodia',
     'តើ AI ដំណើរការយ៉ាងដូចម្តេច?',
   ];
@@ -1195,6 +1202,15 @@ function renderChat() {
       const im = new Image(); im.className = 'gen-img'; im.src = m.genImage;
       im.alt = m.content || 'generated image';
       b.appendChild(im);
+      continue;
+    }
+    if (m.genAudio) {
+      const d = addMsg('ai', '', '🎵 A2I Audio');
+      const b = d.querySelector('.md');
+      b.innerHTML = '';
+      const au = document.createElement('audio');
+      au.className = 'gen-audio'; au.controls = true; au.src = m.genAudio;
+      b.appendChild(au);
       continue;
     }
     addMsg('ai', m.content, '🧠 A2I');
@@ -2347,13 +2363,28 @@ const composerEl = $('composer');
 
 // ---- Image generation (free, keyless — Pollinations) -------------------
 let imageMode = false;
+let audioMode = false;
 const imgBtn = $('img-btn');
-imgBtn.addEventListener('click', () => {
-  imageMode = !imageMode;
+const audBtn = $('aud-btn');
+function refreshComposerMode() {
   imgBtn.classList.toggle('on', imageMode);
+  audBtn.classList.toggle('on', audioMode);
   input.placeholder = imageMode
     ? 'ពណ៌នារូបដែលចង់បាន… Describe an image to generate…'
-    : 'សួរអ្វីក៏បាន… Ask anything…';
+    : audioMode
+      ? 'ពណ៌នាសំឡេង/អត្ថបទ… Describe audio or text to voice…'
+      : 'សួរអ្វីក៏បាន… Ask anything…';
+}
+imgBtn.addEventListener('click', () => {
+  imageMode = !imageMode;
+  if (imageMode) audioMode = false;
+  refreshComposerMode();
+  input.focus();
+});
+audBtn.addEventListener('click', () => {
+  audioMode = !audioMode;
+  if (audioMode) imageMode = false;
+  refreshComposerMode();
   input.focus();
 });
 
@@ -2391,6 +2422,42 @@ async function generateImage(prompt) {
   img.src = url;
 }
 
+// Free, keyless voice/audio generation. Unlike the browser's read-aloud
+// (which is ephemeral), this returns a real audio file the user can save.
+const AUDIO_VOICE = 'nova';
+async function generateAudio(prompt) {
+  addMsg('user', prompt);
+  history.push({ role: 'user', content: prompt });
+  persistChat();
+  const div = addMsg('ai', '🎵 កំពុងបង្កើតសំឡេង… (generating audio, ~10s)', '🎵 A2I Audio');
+  const body = div.querySelector('.md');
+  const url = 'https://text.pollinations.ai/' + encodeURIComponent(prompt) +
+    '?model=openai-audio&voice=' + AUDIO_VOICE;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    if (!blob.type.startsWith('audio')) throw new Error('not audio');
+    const obj = URL.createObjectURL(blob);
+    body.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.className = 'gen-audio-wrap';
+    const audio = document.createElement('audio');
+    audio.className = 'gen-audio'; audio.controls = true; audio.src = obj;
+    wrap.appendChild(audio);
+    wrap.appendChild(document.createElement('br'));
+    const dl = document.createElement('a');
+    dl.href = obj; dl.download = 'a2i-audio.mp3';
+    dl.innerHTML = svgIcon('download', 'ico-sm') + ' រក្សាទុក · Save audio';
+    wrap.appendChild(dl);
+    body.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+    history.push({ role: 'assistant', content: '🎵 ' + prompt, genAudio: url });
+    persistChat();
+  } catch {
+    div.update('⚠ បង្កើតសំឡេងមិនបានទេ — ព្យាយាមម្តងទៀត ឬពិនិត្យអ៊ីនធឺណិត។ (Audio generation failed — try again.)');
+  }
+}
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = input.value.trim();
@@ -2403,6 +2470,16 @@ form.addEventListener('submit', async (e) => {
     if (!prompt) return;
     input.value = ''; input.style.height = 'auto';
     await generateImage(prompt);
+    return;
+  }
+
+  // Audio / voice generation: via the 🎵 toggle or a /audio · /speak · /voice command.
+  const audCmd = /^\/(audio|speak|voice)\s+/i.exec(text);
+  if ((audioMode && text) || audCmd) {
+    const prompt = audCmd ? text.slice(audCmd[0].length).trim() : text;
+    if (!prompt) return;
+    input.value = ''; input.style.height = 'auto';
+    await generateAudio(prompt);
     return;
   }
 
