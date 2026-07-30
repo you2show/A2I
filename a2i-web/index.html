@@ -1162,6 +1162,28 @@ function addMsg(cls, text, label, images) {
     speakBtn.title = 'Read aloud / អានឮៗ';
     speakBtn.addEventListener('click', () => speakText(raw));
     actions.appendChild(speakBtn);
+    // Chain the answer into a saveable narration (chat → audio, n8n-style).
+    const voiceBtn = document.createElement('button');
+    voiceBtn.className = 'act-btn';
+    voiceBtn.innerHTML = svgIcon('download', 'ico-sm');
+    voiceBtn.title = 'Voice this answer → audio file / បំប្លែងជាសំឡេង';
+    voiceBtn.addEventListener('click', async () => {
+      if (voiceBtn.disabled || !raw) return;
+      voiceBtn.disabled = true;
+      voiceBtn.innerHTML = '<span class="typing" aria-label="generating"><i></i><i></i><i></i></span>';
+      const clean = raw.replace(/[#*`>_~]/g, '').slice(0, AUDIO_MAX_CHARS);
+      try {
+        const player = await buildAudioWrap(audioUrl(clean));
+        wrap.appendChild(player);
+        log.scrollTop = log.scrollHeight;
+        voiceBtn.innerHTML = svgIcon('check', 'ico-sm');
+      } catch {
+        voiceBtn.innerHTML = svgIcon('download', 'ico-sm');
+        voiceBtn.disabled = false;
+        voiceBtn.title = '⚠ Failed — try again / បរាជ័យ ព្យាយាមម្តងទៀត';
+      }
+    });
+    actions.appendChild(voiceBtn);
     const copy = document.createElement('button');
     copy.className = 'act-btn';
     copy.innerHTML = svgIcon('copy', 'ico-sm');
@@ -2425,30 +2447,44 @@ async function generateImage(prompt) {
 // Free, keyless voice/audio generation. Unlike the browser's read-aloud
 // (which is ephemeral), this returns a real audio file the user can save.
 const AUDIO_VOICE = 'nova';
+// The service reads the prompt back as speech, so keep chained answers within
+// a sane length rather than posting an essay at the endpoint.
+const AUDIO_MAX_CHARS = 900;
+
+function audioUrl(prompt) {
+  return 'https://text.pollinations.ai/' + encodeURIComponent(prompt) +
+    '?model=openai-audio&voice=' + AUDIO_VOICE;
+}
+
+// Fetch generated audio and return a ready-to-insert player wrap, or throw.
+async function buildAudioWrap(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const blob = await res.blob();
+  if (!blob.type.startsWith('audio')) throw new Error('not audio');
+  const obj = URL.createObjectURL(blob);
+  const wrap = document.createElement('div'); wrap.className = 'gen-audio-wrap';
+  const audio = document.createElement('audio');
+  audio.className = 'gen-audio'; audio.controls = true; audio.src = obj;
+  wrap.appendChild(audio);
+  wrap.appendChild(document.createElement('br'));
+  const dl = document.createElement('a');
+  dl.href = obj; dl.download = 'a2i-audio.mp3';
+  dl.innerHTML = svgIcon('download', 'ico-sm') + ' រក្សាទុក · Save audio';
+  wrap.appendChild(dl);
+  return wrap;
+}
+
 async function generateAudio(prompt) {
   addMsg('user', prompt);
   history.push({ role: 'user', content: prompt });
   persistChat();
   const div = addMsg('ai', '🎵 កំពុងបង្កើតសំឡេង… (generating audio, ~10s)', '🎵 A2I Audio');
   const body = div.querySelector('.md');
-  const url = 'https://text.pollinations.ai/' + encodeURIComponent(prompt) +
-    '?model=openai-audio&voice=' + AUDIO_VOICE;
+  const url = audioUrl(prompt);
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const blob = await res.blob();
-    if (!blob.type.startsWith('audio')) throw new Error('not audio');
-    const obj = URL.createObjectURL(blob);
+    const wrap = await buildAudioWrap(url);
     body.innerHTML = '';
-    const wrap = document.createElement('div'); wrap.className = 'gen-audio-wrap';
-    const audio = document.createElement('audio');
-    audio.className = 'gen-audio'; audio.controls = true; audio.src = obj;
-    wrap.appendChild(audio);
-    wrap.appendChild(document.createElement('br'));
-    const dl = document.createElement('a');
-    dl.href = obj; dl.download = 'a2i-audio.mp3';
-    dl.innerHTML = svgIcon('download', 'ico-sm') + ' រក្សាទុក · Save audio';
-    wrap.appendChild(dl);
     body.appendChild(wrap);
     log.scrollTop = log.scrollHeight;
     history.push({ role: 'assistant', content: '🎵 ' + prompt, genAudio: url });

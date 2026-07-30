@@ -196,6 +196,33 @@ In the web app: **⚙️ Settings → AI providers → 🚀 vLLM**.
 Use A2I Core when you want it to run anywhere; use vLLM when you have a GPU
 and want large models fast. Both are fully local — no external API.
 
+### vLLM ties the whole toolkit together
+
+vLLM speaks the OpenAI-compatible API (plus Anthropic Messages + gRPC) and
+accepts almost every weight format A2I produces or references, so one backend
+covers all of the model work in this repo:
+
+- **The fine-tuned SEA-LION adapter — no merge needed.** vLLM serves LoRA
+  adapters directly, so the output of
+  [`a2i-train/khmer_sealion_finetune.ipynb`](a2i-train/khmer_sealion_finetune.ipynb)
+  is usable as-is — you can skip the awkward "reload base in fp16 → merge →
+  GGUF" step that overflows free-tier RAM:
+
+  ```bash
+  vllm serve you2show/Llama-SEA-LION-v3-8B-IT-bucket \
+      --enable-lora --lora-modules khmer=./sealion-khmer-lora
+  # then request model "khmer"
+  ```
+
+- **GGUF** — the same big single-file quants A2I Core runs (e.g. the DavidAU
+  27B) also load in vLLM: `vllm serve ./model.gguf`.
+- **compressed-tensors / MXFP4** — the format Kimi-K3 ships in (see below).
+- Runs on **NVIDIA/AMD GPUs and x86/ARM/PowerPC CPUs**, so it is not strictly
+  GPU-only when you just need compatibility.
+
+Whichever you serve, add its `http://HOST:8000/v1` in **⚙️ Settings → AI
+providers** and A2I uses it like any other brain.
+
 ## Models — Qwen3-Coder, WizardLM, transformers
 
 - [`you2show/qwen3-coder`](https://github.com/you2show/qwen3-coder) and
@@ -206,6 +233,38 @@ and want large models fast. Both are fully local — no external API.
   library for running/fine-tuning the original weights.
 - Prefer Ollama? Run it, then add it in the A2I web app:
   **⚙️ Settings → AI providers → `http://127.0.0.1:11434/v1`**.
+
+### Frontier models too big to self-host (e.g. Kimi-K3)
+
+Some open-weight models are simply too large for any single machine —
+`you2show/Kimi-K3`, for instance, is a **2.8T-parameter MoE** (104B active,
+multimodal, `compressed-tensors`/MXFP4). It is served by **vLLM** or **SGLang**,
+not llama.cpp/GGUF, and needs a large multi-GPU host — not Colab, not a laptop.
+
+Two realistic ways to use it from A2I, both OpenAI-compatible:
+
+- **Self-host on a big GPU server** with [`you2show/vllm`](https://github.com/you2show/vllm)
+  (`vllm serve moonshotai/Kimi-K3` — see the model's vLLM recipe), then add that
+  endpoint in **⚙️ Settings → AI providers**. Fully local, but the hardware is
+  substantial.
+- **Hosted API** at `https://platform.kimi.ai` (model `kimi-k3`), which exposes
+  an OpenAI-compatible endpoint — add it like any other provider. This is an
+  external API, so it falls outside A2I's "no external API" default; use it only
+  when you accept that trade-off.
+
+Note: Kimi-K3 always returns `reasoning_content` and expects the full assistant
+message (reasoning + tool_calls) echoed back on multi-turn calls — a client
+detail to preserve if you wire it in directly.
+
+### Run a big GGUF on a free Colab GPU → use it in A2I
+
+No GPU at home but want a famous 20–30B model (e.g.
+`DavidAU/Qwen3.6-27B-Fable-Fusion-…-GGUF`)? Open
+[`a2i-core/serve_gguf_colab.ipynb`](a2i-core/serve_gguf_colab.ipynb) in Colab.
+It serves any GGUF over the OpenAI-compatible API on Colab's GPU and exposes a
+public URL, so you can add it in **⚙️ Settings → AI providers** and chat with
+it from A2I web — no local hardware, no paid API. A 27B IQ4 (~17 GB) runs on a
+free T4 with CPU+GPU split, or fully on GPU with Colab Pro's A100.
 
 ---
 
