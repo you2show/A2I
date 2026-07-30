@@ -207,6 +207,28 @@ and want large models fast. Both are fully local — no external API.
 - Prefer Ollama? Run it, then add it in the A2I web app:
   **⚙️ Settings → AI providers → `http://127.0.0.1:11434/v1`**.
 
+### Frontier models too big to self-host (e.g. Kimi-K3)
+
+Some open-weight models are simply too large for any single machine —
+`you2show/Kimi-K3`, for instance, is a **2.8T-parameter MoE** (104B active,
+multimodal, `compressed-tensors`/MXFP4). It is served by **vLLM** or **SGLang**,
+not llama.cpp/GGUF, and needs a large multi-GPU host — not Colab, not a laptop.
+
+Two realistic ways to use it from A2I, both OpenAI-compatible:
+
+- **Self-host on a big GPU server** with [`you2show/vllm`](https://github.com/you2show/vllm)
+  (`vllm serve moonshotai/Kimi-K3` — see the model's vLLM recipe), then add that
+  endpoint in **⚙️ Settings → AI providers**. Fully local, but the hardware is
+  substantial.
+- **Hosted API** at `https://platform.kimi.ai` (model `kimi-k3`), which exposes
+  an OpenAI-compatible endpoint — add it like any other provider. This is an
+  external API, so it falls outside A2I's "no external API" default; use it only
+  when you accept that trade-off.
+
+Note: Kimi-K3 always returns `reasoning_content` and expects the full assistant
+message (reasoning + tool_calls) echoed back on multi-turn calls — a client
+detail to preserve if you wire it in directly.
+
 ### Run a big GGUF on a free Colab GPU → use it in A2I
 
 No GPU at home but want a famous 20–30B model (e.g.
