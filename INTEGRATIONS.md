@@ -196,6 +196,33 @@ In the web app: **⚙️ Settings → AI providers → 🚀 vLLM**.
 Use A2I Core when you want it to run anywhere; use vLLM when you have a GPU
 and want large models fast. Both are fully local — no external API.
 
+### vLLM ties the whole toolkit together
+
+vLLM speaks the OpenAI-compatible API (plus Anthropic Messages + gRPC) and
+accepts almost every weight format A2I produces or references, so one backend
+covers all of the model work in this repo:
+
+- **The fine-tuned SEA-LION adapter — no merge needed.** vLLM serves LoRA
+  adapters directly, so the output of
+  [`a2i-train/khmer_sealion_finetune.ipynb`](a2i-train/khmer_sealion_finetune.ipynb)
+  is usable as-is — you can skip the awkward "reload base in fp16 → merge →
+  GGUF" step that overflows free-tier RAM:
+
+  ```bash
+  vllm serve you2show/Llama-SEA-LION-v3-8B-IT-bucket \
+      --enable-lora --lora-modules khmer=./sealion-khmer-lora
+  # then request model "khmer"
+  ```
+
+- **GGUF** — the same big single-file quants A2I Core runs (e.g. the DavidAU
+  27B) also load in vLLM: `vllm serve ./model.gguf`.
+- **compressed-tensors / MXFP4** — the format Kimi-K3 ships in (see below).
+- Runs on **NVIDIA/AMD GPUs and x86/ARM/PowerPC CPUs**, so it is not strictly
+  GPU-only when you just need compatibility.
+
+Whichever you serve, add its `http://HOST:8000/v1` in **⚙️ Settings → AI
+providers** and A2I uses it like any other brain.
+
 ## Models — Qwen3-Coder, WizardLM, transformers
 
 - [`you2show/qwen3-coder`](https://github.com/you2show/qwen3-coder) and
