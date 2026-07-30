@@ -23,9 +23,15 @@ For A2I Core (self-hosted), the same idea: `./run.sh --knowledge-dir ~/my-docs`.
 ### 🇰🇭 សម្រាប់ភាសាខ្មែរ — ប្រើ notebook SEA-LION (ណែនាំ)
 
 សម្រាប់ AI ខ្មែរខ្លាំង សូមប្រើ [`khmer_sealion_finetune.ipynb`](khmer_sealion_finetune.ipynb) —
-QLoRA 4-bit លើ `Llama-SEA-LION-v3-8B-IT` (model ដែល pretrain ជាមួយខ្មែរផ្ទាល់)។
+QLoRA 4-bit លើ SEA-LION 8B (model ដែល pretrain ជាមួយខ្មែរផ្ទាល់)។
 រត់បានលើ Colab/Kaggle T4 ឥតគិតថ្លៃ។ បើក notebook → Runtime → T4 GPU → Run all។
 Model ៨B នេះសរសេរខ្មែរបានល្អជាង Qwen-0.5B ក្នុង `finetune.py` ច្រើន។
+
+Notebook default ចង្អុលទៅ repo របស់អ្នកនៅ https://huggingface.co/you2show ៖
+- **Model**: `you2show/Llama-SEA-LION-v3-8B-IT-bucket` (copy សាធារណៈ → មិនត្រូវ gated login)
+- **Dataset**: distillation dataset របស់អ្នក — ជំហានទី ៣ **auto-detect** ទម្រង់ column
+  (chat `messages`, ShareGPT `conversations`, Alpaca `instruction/output`, `prompt/completion`,
+  `question/answer`, ឬ `text`) ដូច្នេះមិនចាំបាច់កែ code ទោះ dataset ប្រើ schema ណាក៏ដោយ។
 
 ### Store dataset/model លើ Hugging Face (កុំ download ម្តងទៀត)
 
