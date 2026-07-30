@@ -207,6 +207,16 @@ and want large models fast. Both are fully local — no external API.
 - Prefer Ollama? Run it, then add it in the A2I web app:
   **⚙️ Settings → AI providers → `http://127.0.0.1:11434/v1`**.
 
+### Run a big GGUF on a free Colab GPU → use it in A2I
+
+No GPU at home but want a famous 20–30B model (e.g.
+`DavidAU/Qwen3.6-27B-Fable-Fusion-…-GGUF`)? Open
+[`a2i-core/serve_gguf_colab.ipynb`](a2i-core/serve_gguf_colab.ipynb) in Colab.
+It serves any GGUF over the OpenAI-compatible API on Colab's GPU and exposes a
+public URL, so you can add it in **⚙️ Settings → AI providers** and chat with
+it from A2I web — no local hardware, no paid API. A 27B IQ4 (~17 GB) runs on a
+free T4 with CPU+GPU split, or fully on GPU with Colab Pro's A100.
+
 ---
 
 ## Media generation — image, voice/audio (and the local model path)
