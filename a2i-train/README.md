@@ -20,6 +20,35 @@ For A2I Core (self-hosted), the same idea: `./run.sh --knowledge-dir ~/my-docs`.
 
 ## វិធីទី២ (កម្រិតខ្ពស់): Fine-tune model ពិតៗ / Real fine-tuning
 
+### 🇰🇭 សម្រាប់ភាសាខ្មែរ — ប្រើ notebook SEA-LION (ណែនាំ)
+
+សម្រាប់ AI ខ្មែរខ្លាំង សូមប្រើ [`khmer_sealion_finetune.ipynb`](khmer_sealion_finetune.ipynb) —
+QLoRA 4-bit លើ `Llama-SEA-LION-v3-8B-IT` (model ដែល pretrain ជាមួយខ្មែរផ្ទាល់)។
+រត់បានលើ Colab/Kaggle T4 ឥតគិតថ្លៃ។ បើក notebook → Runtime → T4 GPU → Run all។
+Model ៨B នេះសរសេរខ្មែរបានល្អជាង Qwen-0.5B ក្នុង `finetune.py` ច្រើន។
+
+### Store dataset/model លើ Hugging Face (កុំ download ម្តងទៀត)
+
+មិនចង់រៀបចំ ឬ upload ទិន្នន័យរាល់ session? ដាក់វានៅ **Hugging Face Hub** ម្តង
+រួច notebook ទាញវាដោយ cache (download តែម្តងក្នុង session មួយ)៖
+
+```python
+# ១. Upload dataset របស់អ្នក (ធ្វើម្តងគត់)
+from huggingface_hub import login; login()          # token ពី huggingface.co/settings/tokens
+from datasets import load_dataset
+ds = load_dataset("json", data_files="train.jsonl")
+ds.push_to_hub("your-username/my-khmer-data")        # → private dataset repo
+
+# ២. ក្រោយមក គ្រាន់តែ៖ (កែ DATASET_ID ក្នុង notebook)
+DATASET_ID = "your-username/my-khmer-data"
+```
+
+Model/adapter ក៏ដូចគ្នា៖ `model.push_to_hub("your-username/sealion-khmer-lora")`
+រក្សាទុកអចិន្ត្រៃយ៍ (Colab លុប file មូលដ្ឋានពេល session ចប់ តែ HF Hub នៅ)។
+HF cache ដាក់ file នៅ `~/.cache/huggingface` ដូច្នេះក្នុង session មួយវាមិន re-download ទេ។
+
+### finetune.py — script សាមញ្ញ (model តូច)
+
 ការ train ត្រូវការ **GPU** — GitHub គ្រាន់តែផ្ទុកទិន្នន័យ មិន train ឱ្យទេ។
 ប្រើ GPU ឥតគិតថ្លៃរបស់ **Google Colab** (T4):
 
