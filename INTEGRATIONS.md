@@ -209,6 +209,69 @@ and want large models fast. Both are fully local — no external API.
 
 ---
 
+## Media generation — image, voice/audio (and the local model path)
+
+A2I can create media, not just text. Two paths, matching A2I's usual split
+between *works everywhere with no setup* and *runs fully local*.
+
+### In the web app (keyless, no install)
+
+- **🎨 Image** — toggle the star button in the composer, or type
+  `/image a red bicycle` / `/imagine …`. Generates a 1024×1024 image you can
+  open or save. No API key.
+- **🎵 Audio / voice** — toggle the audio button, or type `/audio …`,
+  `/speak …`, `/voice …`. Generates a real, downloadable audio file (spoken
+  from your text), distinct from the ephemeral browser read-aloud.
+
+Both use free, keyless services and need only a network connection — nothing
+to install, consistent with A2I's in-browser story.
+
+### Locally with `transformers` (no external service)
+
+[`you2show/transformers`](https://github.com/you2show/transformers) ships the
+pipelines for the media tasks, so you can run them entirely offline once the
+weights are downloaded:
+
+```python
+from transformers import pipeline
+
+# Text -> speech / music (e.g. Bark, MusicGen)
+tts = pipeline("text-to-audio", model="suno/bark-small")
+audio = tts("Hello from A2I")            # audio["audio"], audio["sampling_rate"]
+
+# Speech -> text (also served over HTTP, see below)
+asr = pipeline("automatic-speech-recognition", model="openai/whisper-base")
+text = asr("clip.wav")["text"]
+```
+
+For **image generation** the models live in the companion `diffusers`
+library (Stable Diffusion / SDXL), which shares the same weights ecosystem:
+
+```python
+from diffusers import StableDiffusionPipeline
+pipe = StableDiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-2-1")
+pipe("a red bicycle").images[0].save("out.png")
+```
+
+### Speech-to-text over HTTP
+
+`transformers serve` exposes an OpenAI-compatible **`POST /v1/audio/transcriptions`**
+endpoint (alongside `/v1/chat/completions`, `/v1/completions`, `/v1/responses`,
+`/v1/models`), so A2I's voice input can be backed by a local Whisper model
+instead of the browser recognizer:
+
+```bash
+transformers serve                       # → http://127.0.0.1:8000/v1
+curl http://127.0.0.1:8000/v1/audio/transcriptions \
+  -F model=openai/whisper-base -F file=@clip.wav
+```
+
+> Note: `transformers serve` serves chat, completions and transcription over
+> HTTP; image and text-to-audio *generation* run through the Python pipelines
+> above rather than an HTTP route. The web app covers the keyless HTTP case.
+
+---
+
 ## Use them from the A2I web app
 
 Any of the servers above can be added as a brain in
