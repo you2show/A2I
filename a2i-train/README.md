@@ -33,6 +33,21 @@ Notebook default ចង្អុលទៅ repo របស់អ្នកនៅ ht
   (chat `messages`, ShareGPT `conversations`, Alpaca `instruction/output`, `prompt/completion`,
   `question/answer`, ឬ `text`) ដូច្នេះមិនចាំបាច់កែ code ទោះ dataset ប្រើ schema ណាក៏ដោយ។
 
+### ទាញ adapter ពី Kaggle → serve ក្នុង A2I (មួយ command)
+
+Train លើ Kaggle រួច? [`pull_and_serve.sh`](pull_and_serve.sh) ទាញ output នៃ kernel
+(LoRA adapter) មក រួច serve វាតាម vLLM (គ្មាន merge)៖
+
+```bash
+cd a2i-train
+./pull_and_serve.sh you2show/notebook75c11cd48c ./kaggle-out
+# download-only៖ SERVE=0 ./pull_and_serve.sh ...
+```
+
+វាប្រើ Kaggle auth ដែលមានស្រាប់ ([kaggle-cli](https://github.com/you2show/kaggle-cli)៖
+`kaggle auth login` / `KAGGLE_API_TOKEN` / `~/.kaggle/…`) ហើយ **មិនរក្សាទុក token ទេ**។
+បន្ទាប់មក A2I web → ⚙️ Settings → AI providers → `http://127.0.0.1:8000/v1`។
+
 ### Store dataset/model លើ Hugging Face (កុំ download ម្តងទៀត)
 
 មិនចង់រៀបចំ ឬ upload ទិន្នន័យរាល់ session? ដាក់វានៅ **Hugging Face Hub** ម្តង
