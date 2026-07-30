@@ -53,6 +53,9 @@ const MODEL_URL =
   'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
 
 let bad = 0, warn = 0;
+// Which fast paths this device has — the compat CPU engine is only a fallback,
+// so test 9 uses these to decide whether a compat failure is actually blocking.
+let webgpuOk = false, fastCpu = false;
 const mark = (r, state, detail) => { if (state === 'bad') bad++; if (state === 'warn') warn++; r.set(state, detail); };
 
 // 1. Environment
@@ -80,6 +83,7 @@ await (async () => {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) { mark(r, 'warn', 'adapter null — will use CPU mode'); return; }
     const dev = await adapter.requestDevice();
+    webgpuOk = true;
     mark(r, 'ok', 'WebGPU works (device created) — fast path available');
     dev.destroy?.();
   } catch (e) {
@@ -154,6 +158,7 @@ await (async () => {
   const hasJSPI = typeof WebAssembly.Suspending === 'function';
   let hasMem64 = false;
   try { new WebAssembly.Memory({ address: 'i64', initial: 1n }); hasMem64 = true; } catch { /* no */ }
+  fastCpu = hasJSPI && hasMem64;
   if (hasJSPI && hasMem64) {
     mark(r, 'ok', 'JSPI + Memory64 supported — fast native wllama build used');
   } else {
@@ -206,8 +211,17 @@ await (async () => {
     // which wasm op crashed — the real cause behind a bare "(ABORT)").
     const trace = logs.filter((l) => l.startsWith('E:') || /trace|abort|assert|ggml|wasm|Aborted/i.test(l))
       .slice(-4).join(' ⏎ ').slice(0, 600);
-    mark(r, 'bad', 'compat generation FAILED: ' + String(e.message || e).slice(0, 100) +
-      (trace ? ' — LOG: ' + trace : ' — (no extra log captured; open DevTools console)'));
+    const why = String(e.message || e).slice(0, 100) + (trace ? ' — LOG: ' + trace : '');
+    // The compat engine is only a FALLBACK for devices lacking a fast path. If
+    // this device has WebGPU or native CPU (JSPI+Memory64), A2I uses that
+    // instead, so a compat failure here does NOT block chat — report a warning.
+    if (webgpuOk || fastCpu) {
+      mark(r, 'warn', 'compat (fallback) engine did not run, but this device has a fast path (' +
+        (webgpuOk ? 'WebGPU' : 'native CPU') + ') which A2I uses — chat still works. (' + why + ')');
+    } else {
+      mark(r, 'bad', 'compat generation FAILED: ' + why +
+        (trace ? '' : ' — (no extra log captured; open DevTools console)'));
+    }
   }
 })();
 

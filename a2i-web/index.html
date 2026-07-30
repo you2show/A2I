@@ -670,6 +670,16 @@
       </section>
 
       <section class="setblock">
+        <div class="setblock-h"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg> Local model file — SSD / disk (no download)</div>
+        <p class="hint">Keep a GGUF model on your SSD and load it straight from disk — <b>no download, works offline</b>, and new preview URLs never re-download. Big models fit too. Get GGUF files from Hugging Face (Qwen, Llama, …).</p>
+        <div class="row-btns">
+          <button type="button" id="set-local-model" class="btn primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/></svg> Choose model (.gguf)</button>
+          <button type="button" id="set-local-model-clear" class="btn">Clear</button>
+          <span id="set-local-model-state" class="statetag"></span>
+        </div>
+      </section>
+
+      <section class="setblock">
         <div class="setblock-h"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> AI providers — local & free</div>
         <p class="hint">Famous, strong models for free: get a key, paste it, Add. Keys stay in this browser.<br>
           • Groq — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> (Llama 3.3 70B, very fast)<br>
@@ -1778,6 +1788,99 @@ function needsWllamaCompat() {
   return !hasJSPI || !hasMem64;
 }
 
+// ---- Load a model from the user's disk / SSD (no download, works offline) ----
+// wllama.loadModel([file]) reads the weights straight from a File object, so a
+// GGUF kept on an external SSD needs zero network — and a new preview URL never
+// triggers a re-download. The File System Access API lets the chosen file
+// persist across reloads; browsers without it fall back to a per-session picker.
+const LOCAL_MODEL_DB = 'a2i-local-model';
+let localModelFile = null; // File for this session (just picked, or reopened)
+
+function idbModelOp(mode, run) {
+  return new Promise((resolve, reject) => {
+    let req;
+    try { req = indexedDB.open(LOCAL_MODEL_DB, 1); }
+    catch (e) { reject(e); return; }
+    req.onupgradeneeded = () => req.result.createObjectStore('h');
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      try {
+        const tx = req.result.transaction('h', mode);
+        const rq = run(tx.objectStore('h'));
+        let out;
+        if (rq) rq.onsuccess = () => { out = rq.result; };
+        tx.oncomplete = () => resolve(out);
+        tx.onerror = () => reject(tx.error);
+      } catch (e) { reject(e); }
+    };
+  });
+}
+const putModelHandle = (h) => idbModelOp('readwrite', (s) => s.put(h, 'model')).catch(() => {});
+const getModelHandle = () => idbModelOp('readonly', (s) => s.get('model')).catch(() => null);
+const clearModelHandle = () => idbModelOp('readwrite', (s) => s.delete('model')).catch(() => {});
+
+async function pickLocalModel() {
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'GGUF model', accept: { 'application/octet-stream': ['.gguf'] } }],
+      });
+      await putModelHandle(handle);
+      localModelFile = await handle.getFile();
+      return localModelFile;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return null; // user cancelled the dialog
+      // any other error: fall through to the <input> fallback
+    }
+  }
+  return new Promise((resolve) => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.gguf';
+    inp.onchange = () => { localModelFile = (inp.files && inp.files[0]) || null; resolve(localModelFile); };
+    inp.click();
+  });
+}
+
+async function getLocalModelBlob() {
+  if (localModelFile) return localModelFile;
+  const handle = await getModelHandle();
+  if (!handle || !handle.getFile) return null;
+  try {
+    if (handle.queryPermission) {
+      let p = await handle.queryPermission({ mode: 'read' });
+      if (p !== 'granted' && handle.requestPermission) p = await handle.requestPermission({ mode: 'read' });
+      if (p !== 'granted') return null;
+    }
+    localModelFile = await handle.getFile();
+    return localModelFile;
+  } catch { return null; }
+}
+
+async function refreshLocalModelState() {
+  const tag = $('set-local-model-state');
+  if (tag === _elStub) return;
+  let name = localModelFile && localModelFile.name;
+  if (!name) { const h = await getModelHandle(); name = h && h.name; }
+  tag.textContent = name ? ('✓ ' + name + ' — no download') : 'none — uses one-time download';
+}
+
+$('set-local-model').addEventListener('click', async () => {
+  const f = await pickLocalModel();
+  if (!f) return;
+  webllmEngine = null; // drop the cached engine so the next message reloads with this file
+  setStatus('📂 Model file set: ' + f.name + ' — ចាប់ផ្ដើមឆាតដើម្បីប្រើ (no download)', false);
+  refreshLocalModelState();
+});
+$('set-local-model-clear').addEventListener('click', async () => {
+  localModelFile = null;
+  webllmEngine = null;
+  await clearModelHandle();
+  setStatus('Local model cleared — will download on next use', false);
+  refreshLocalModelState();
+});
+refreshLocalModelState();
+
 async function loadCpuEngine(forceCompat = false) {
   setStatus(forceCompat
     ? 'ប្រើ CPU (compat) / compatibility mode…'
@@ -1803,26 +1906,34 @@ async function loadCpuEngine(forceCompat = false) {
     : Math.max(2, Math.min(navigator.hardwareConcurrency || 4, 8));
   progress.hidden = false;
   const watch = stallGuard(60000);
-  await Promise.race([
-    watch.signal,
-    wllama.loadModelFromUrl(url, {
-      // 4096 is plenty once prompts are trimmed — smaller KV cache means
-      // faster prefill and less RAM than a larger window.
-      n_ctx: 4096,
-      n_threads: threads,
-      n_batch: 256,
-      // Force pure-CPU inference. wllama v3 offloads to WebGPU by default,
-      // which would hit the same broken GPU we are falling back FROM.
-      n_gpu_layers: 0,
-      progressCallback: ({ loaded, total }) => {
-        watch.ping();
-        progress.value = total ? loaded / total : 0;
-        const pct = Math.round(100 * (loaded / (total || 1)));
-        const mb = Math.round(loaded / 1048576);
-        setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
-      },
-    }),
-  ]).finally(() => watch.clear());
+  // 4096 is plenty once prompts are trimmed — smaller KV cache means faster
+  // prefill and less RAM. n_gpu_layers:0 forces pure-CPU inference (wllama v3
+  // otherwise offloads to the WebGPU we may be falling back FROM).
+  const modelCfg = { n_ctx: 4096, n_threads: threads, n_batch: 256, n_gpu_layers: 0 };
+  // Prefer a model the user picked from their own disk/SSD — it loads straight
+  // from the File, with no network download at all.
+  const localFile = await getLocalModelBlob();
+  if (localFile) {
+    setStatus('📂 ផ្ទុក model ពី file… ' + localFile.name + ' (គ្មាន download)');
+    await Promise.race([
+      watch.signal,
+      wllama.loadModel([localFile], modelCfg),
+    ]).finally(() => watch.clear());
+  } else {
+    await Promise.race([
+      watch.signal,
+      wllama.loadModelFromUrl(url, {
+        ...modelCfg,
+        progressCallback: ({ loaded, total }) => {
+          watch.ping();
+          progress.value = total ? loaded / total : 0;
+          const pct = Math.round(100 * (loaded / (total || 1)));
+          const mb = Math.round(loaded / 1048576);
+          setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
+        },
+      }),
+    ]).finally(() => watch.clear());
+  }
   progress.hidden = true;
   const engine = {
     kind: 'cpu',
@@ -1905,7 +2016,7 @@ async function ensureBrowserEngine() {
           setTimeout(() => reject(new Error('warmup timed out')), 30000)),
       ]);
       webllmEngine = engine;
-      loadedModel = CPU_MODEL_NAME + (engine.compat ? ' — compat' : '');
+      loadedModel = (localModelFile ? localModelFile.name : CPU_MODEL_NAME) + (engine.compat ? ' — compat' : '');
       setStatus(`ready: ${loadedModel} — CPU mode, slower`, true);
       return webllmEngine;
     } catch (err) {
