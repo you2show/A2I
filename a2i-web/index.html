@@ -250,6 +250,14 @@
     .icon-btn { width: 44px; height: 44px; }
     .act-btn { min-width: 40px; min-height: 40px; }
   }
+  /* "Which model fits my device?" guide in Settings */
+  .model-guide { margin-top: .7rem; font-size: .82rem; }
+  .model-guide summary { cursor: pointer; color: var(--accent); user-select: none; padding: .2rem 0; }
+  .model-guide-scroll { overflow-x: auto; }
+  .model-guide table { width: 100%; border-collapse: collapse; margin-top: .5rem; }
+  .model-guide th, .model-guide td { text-align: left; padding: .32rem .45rem; border-bottom: 1px solid var(--border); vertical-align: top; white-space: nowrap; }
+  .model-guide td:nth-child(2) { white-space: normal; }
+  .model-guide th { color: var(--muted); font-weight: 600; }
 
   /* smoother global feel */
   body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
@@ -677,6 +685,20 @@
           <button type="button" id="set-local-model-clear" class="btn">Clear</button>
           <span id="set-local-model-state" class="statetag"></span>
         </div>
+        <details class="model-guide">
+          <summary>📚 តើ model ណាសម​នឹងឧបករណ៍ខ្ញុំ? · Which model fits my device?</summary>
+          <div class="model-guide-scroll">
+          <table>
+            <tr><th>Device</th><th>Model</th><th>Size</th></tr>
+            <tr><td>📱 Phone · 2–4 GB</td><td>Qwen2.5 0.5B–1.5B (in browser)</td><td>1–2 GB</td></tr>
+            <tr><td>💻 Laptop · 8 GB</td><td>Qwen2.5 7B · Llama 3.1 8B · <b>DavidAU Fable 9B</b></td><td>5–6 GB</td></tr>
+            <tr><td>🖥️ PC · 16–32 GB</td><td>14B–32B models</td><td>9–20 GB</td></tr>
+            <tr><td>🎮 GPU</td><td>same models, much faster (WebGPU / vLLM)</td><td>—</td></tr>
+            <tr><td>☁️ No good hardware</td><td>Groq · Hugging Face (70B, free API)</td><td>—</td></tr>
+          </table>
+          </div>
+          <p class="hint">Rule: biggest model that fits your RAM = best you can run locally. Full list &amp; downloads: <a href="https://github.com/you2show/A2I/blob/main/MODELS.md" target="_blank" rel="noopener">MODELS.md</a></p>
+        </details>
       </section>
 
       <section class="setblock">
@@ -684,10 +706,12 @@
         <p class="hint">Famous, strong models for free: get a key, paste it, Add. Keys stay in this browser.<br>
           • Groq — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> (Llama 3.3 70B, very fast)<br>
           • OpenRouter — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> (DeepSeek R1, Llama 70B — <code>:free</code>)<br>
+          • Hugging Face — <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">huggingface.co/settings/tokens</a> (any HF model via <code>hf_…</code> token). Paste the newest repo id from <a href="https://huggingface.co/models?sort=trending" target="_blank" rel="noopener">huggingface.co/models</a> — e.g. Llama 4, Qwen3, DeepSeek-R1<br>
           • Local, no API at all: A2I Core (any machine), vLLM (GPU, fastest), Ollama</p>
         <div class="provider-presets">
           <button type="button" class="btn" id="preset-groq">Groq (free)</button>
           <button type="button" class="btn" id="preset-openrouter">OpenRouter (free)</button>
+          <button type="button" class="btn" id="preset-hf">Hugging Face (free)</button>
           <button type="button" class="btn" id="preset-a2icore">A2I Core (local)</button>
           <button type="button" class="btn" id="preset-vllm">vLLM (GPU, local)</button>
           <button type="button" class="btn" id="preset-ollama">Ollama (local)</button>
@@ -2823,6 +2847,11 @@ $('preset-groq').addEventListener('click', () =>
   fillProvider('Groq', 'https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile'));
 $('preset-openrouter').addEventListener('click', () =>
   fillProvider('OpenRouter', 'https://openrouter.ai/api/v1', 'meta-llama/llama-3.3-70b-instruct:free'));
+// Hugging Face's own OpenAI-compatible router — famous open models via a free
+// hf_ token. The model is only a default: paste ANY repo id, e.g. the newest
+// trending model from huggingface.co/models?sort=trending.
+$('preset-hf').addEventListener('click', () =>
+  fillProvider('Hugging Face', 'https://router.huggingface.co/v1', 'meta-llama/Llama-4-Scout-17B-16E-Instruct'));
 $('preset-a2icore').addEventListener('click', () =>
   fillProvider('A2I Core', 'http://127.0.0.1:8990', ''));
 // vLLM serves /v1/chat/completions and /v1/completions on port 8000 — the
