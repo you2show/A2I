@@ -12,7 +12,9 @@
 #   ./download-model.sh llama-3.1-8b    # Meta Llama 3.1 8B (famous, powerful)
 #   ./download-model.sh qwen-7b         # Qwen2.5 7B
 #   ./download-model.sh fable-9b        # DavidAU Qwen3.5 9B Fable (uncensored)
-#   ./download-model.sh ternary-bonsai  # Ternary Bonsai 27B->4B (compressed)
+#   ./download-model.sh qwythos-9b      # Qwythos 9B Claude-Mythos (1M context)
+#   ./download-model.sh qwen3.6-27b     # DavidAU Qwen3.6 27B Fable (needs 24 GB+/GPU)
+#   ./download-model.sh ornith-35b      # Ornith 1.0 35B (needs 32 GB+/GPU)
 #
 # Backwards-compatible aliases: small | default | large
 set -euo pipefail
@@ -42,10 +44,15 @@ declare -A CATALOG=(
   [fable-9b]="hf:DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF@Q4_K_M|DavidAU Qwen3.5 9B Fable (uncensored)|~6 GB"
   [nanbeige-3b]="hf:Nanbeige/Nanbeige4.2-3B@Q4_K_M|Nanbeige 4.2 3B|~3 GB"
   [ternary-bonsai]="hf:prism-ml/Ternary-Bonsai-27B-gguf|Ternary Bonsai 27B->4B (compressed)|~4 GB"
+  # Curated picks across device tiers (all GGUF, resolved from the repo).
+  [qwythos-9b]="hf:empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF@Q4_K_M|Qwythos 9B Claude-Mythos (1M ctx)|~6 GB (8 GB PC)"
+  [gemma-4-12b]="hf:yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF@Q4_K_M|Gemma 4 12B agentic|~8 GB (16 GB PC)"
+  [qwen3.6-27b]="hf:DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF@Q4_K_M|DavidAU Qwen3.6 27B Fable (uncensored)|~17 GB (24 GB+ / GPU)"
+  [ornith-35b]="hf:unsloth/Ornith-1.0-35B-GGUF@Q4_K_M|Ornith 1.0 35B|~21 GB (32 GB+ / GPU)"
 )
 
 # Order used when listing, and for the compatibility aliases.
-ORDER=(qwen-0.5b qwen-1.5b qwen-3b llama-3.2-3b mistral-7b qwen-7b qwen-coder-7b gemma-2-2b gemma-2-9b llama-3.1-8b nanbeige-3b ternary-bonsai fable-9b)
+ORDER=(qwen-0.5b qwen-1.5b qwen-3b llama-3.2-3b mistral-7b qwen-7b qwen-coder-7b gemma-2-2b gemma-2-9b llama-3.1-8b nanbeige-3b ternary-bonsai fable-9b qwythos-9b gemma-4-12b qwen3.6-27b ornith-35b)
 
 # Friendly aliases kept for backwards compatibility with older docs/scripts.
 declare -A ALIAS=(
