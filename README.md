@@ -64,6 +64,10 @@ visual builders, chat interfaces, and coding agents.
 
 ## Famous, powerful AI models — with no external AI API
 
+> 👉 **[MODELS.md](MODELS.md)** lists **every** model option — size and the
+> device that runs each — from a phone to a free cloud GPU. A2I is free-first,
+> but you can bring any model you like.
+
 A2I runs well-known open-weight models (Qwen2.5, Llama 3.1/3.2, Gemma 2,
 Mistral, Phi) with **no external inference API**. There are two independent
 ways to do it, and either one alone is enough:

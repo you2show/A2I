@@ -250,6 +250,14 @@
     .icon-btn { width: 44px; height: 44px; }
     .act-btn { min-width: 40px; min-height: 40px; }
   }
+  /* "Which model fits my device?" guide in Settings */
+  .model-guide { margin-top: .7rem; font-size: .82rem; }
+  .model-guide summary { cursor: pointer; color: var(--accent); user-select: none; padding: .2rem 0; }
+  .model-guide-scroll { overflow-x: auto; }
+  .model-guide table { width: 100%; border-collapse: collapse; margin-top: .5rem; }
+  .model-guide th, .model-guide td { text-align: left; padding: .32rem .45rem; border-bottom: 1px solid var(--border); vertical-align: top; white-space: nowrap; }
+  .model-guide td:nth-child(2) { white-space: normal; }
+  .model-guide th { color: var(--muted); font-weight: 600; }
 
   /* smoother global feel */
   body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
@@ -677,6 +685,20 @@
           <button type="button" id="set-local-model-clear" class="btn">Clear</button>
           <span id="set-local-model-state" class="statetag"></span>
         </div>
+        <details class="model-guide">
+          <summary>📚 តើ model ណាសម​នឹងឧបករណ៍ខ្ញុំ? · Which model fits my device?</summary>
+          <div class="model-guide-scroll">
+          <table>
+            <tr><th>Device</th><th>Model</th><th>Size</th></tr>
+            <tr><td>📱 Phone · 2–4 GB</td><td>Qwen2.5 0.5B–1.5B (in browser)</td><td>1–2 GB</td></tr>
+            <tr><td>💻 Laptop · 8 GB</td><td>Qwen2.5 7B · Llama 3.1 8B · <b>DavidAU Fable 9B</b></td><td>5–6 GB</td></tr>
+            <tr><td>🖥️ PC · 16–32 GB</td><td>14B–32B models</td><td>9–20 GB</td></tr>
+            <tr><td>🎮 GPU</td><td>same models, much faster (WebGPU / vLLM)</td><td>—</td></tr>
+            <tr><td>☁️ No good hardware</td><td>Groq · Hugging Face (70B, free API)</td><td>—</td></tr>
+          </table>
+          </div>
+          <p class="hint">Rule: biggest model that fits your RAM = best you can run locally. Full list &amp; downloads: <a href="https://github.com/you2show/A2I/blob/main/MODELS.md" target="_blank" rel="noopener">MODELS.md</a></p>
+        </details>
       </section>
 
       <section class="setblock">
