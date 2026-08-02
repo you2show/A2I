@@ -9,9 +9,11 @@
 // and is forwarded to opencode.ai unchanged - it never touches Vercel env
 // vars, so each visitor can use their own free key.
 
+// Note: keep in sync with ZEN_URL in a2i-web/index.html.
 export const config = { runtime: 'edge' };
 
 const UPSTREAM = 'https://opencode.ai/zen/v1';
+
 
 function cors() {
   return {
