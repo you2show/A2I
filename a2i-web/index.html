@@ -835,6 +835,9 @@
         <label class="field">Zen API key
           <input id="set-zen-key" type="password" placeholder="sk-…" autocomplete="off">
         </label>
+        <label class="field">Model (free: big-pickle, deepseek-v4-flash-free, …)
+          <input id="set-zen-model" list="zen-model-list" placeholder="big-pickle" autocomplete="off">
+        </label>
         <div class="row-btns">
           <button id="set-zen-test" class="btn">Test key</button>
           <button id="set-zen-save" class="btn primary">Save &amp; Activate</button>
@@ -887,13 +890,7 @@
 
       <section class="setblock">
         <div class="setblock-h"><span class="setnum">4</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> AI providers — local & free</div>
-        <p class="hint">Famous, strong models for free: get a key, paste it, Add. Keys stay in this browser.<br>
-          ⚡ <b>Easiest: OpenCode Zen</b> — press the button below, paste a free key, <b>Save &amp; Activate</b> (no card needed, 100 req/day).<br>
-          • Groq — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> (Llama 3.3 70B, very fast)<br>
-          • OpenRouter — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> (DeepSeek R1, Llama 70B — <code>:free</code>)<br>
-          • Hugging Face — <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">huggingface.co/settings/tokens</a> (any HF model via <code>hf_…</code> token). Paste the newest repo id from <a href="https://huggingface.co/models?sort=trending" target="_blank" rel="noopener">huggingface.co/models</a> — e.g. Llama 4, Qwen3, DeepSeek-R1<br>
-          • Opencode Server — the local <code>opencode serve</code> agent loop through A2I Core (<code>oc/…</code>)<br>
-          • Local, no API at all: A2I Core (any machine), vLLM (GPU, fastest), Ollama</p>
+        <p class="hint">More free APIs — keys stay in your browser, just press a preset button (form fills itself) then <b>Add provider</b>: Groq · OpenRouter · Hugging Face · Zen · Opencode Server · A2I Core · vLLM · Ollama.</p>
         <div class="provider-presets">
           <button type="button" class="btn" id="preset-groq">Groq (free)</button>
           <button type="button" class="btn" id="preset-openrouter">OpenRouter (free)</button>
@@ -1055,6 +1052,7 @@ function svgIcon(name, cls = '') {
 const log = $('log'), col = $('col'), form = $('form'), input = $('input');
 const send = $('send'), stopBtn = $('stop'), regenBtn = $('regen');
 const engineSel = $('engine'), modelSel = $('model'), serverUrl = $('server-url');
+const browserModelOptions = modelSel.innerHTML;
 const statusEl = $('status'), dot = $('dot'), progress = $('progress');
 const SYSTEM_PROMPT =
   'You are A2I, a helpful all-in-one AI assistant. Answer clearly and accurately. ' +
@@ -1884,13 +1882,61 @@ serverUrl.addEventListener('change', () => {
   }
 });
 modelSel.addEventListener('change', () => {
-  loadedModel = null; webllmEngine = null; refreshBar();
+  loadedModel = null; webllmEngine = null;
+  const mode = engineSel.value;
+  if (mode.startsWith('server:')) {
+    const brain = currentServerBrain();
+    if (brain) { brain.model = modelSel.value; saveBrains(); }
+  } else if (mode === 'gemini') {
+    localStorage.setItem('a2i-gemini-model', modelSel.value);
+    $('set-gemini-model').value = modelSel.value;
+  }
+  refreshBar();
 });
+
+// One model picker for every engine: in-browser list, Gemini models, or the
+// provider's model (Zen brains get the full free list; other servers their
+// saved model). Changes are saved to the right place automatically.
+function syncModelPicker() {
+  const mode = engineSel.value;
+  const brain = currentServerBrain();
+  if (mode === 'browser') {
+    modelSel.innerHTML = browserModelOptions;
+    modelSel.style.display = navigator.gpu ? 'inline-block' : 'none';
+    return;
+  }
+  if (mode === 'gemini') {
+    const cur = GEMINI_MODEL();
+    const gem = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro', 'gemini-2.0-flash'];
+    if (!gem.includes(cur)) gem.unshift(cur);
+    modelSel.innerHTML = gem.map((m) => '<option value="' + m + '">' + m + '</option>').join('');
+    modelSel.value = cur;
+    modelSel.style.display = 'inline-block';
+    modelSel.title = 'Gemini model';
+    return;
+  }
+  if (mode.startsWith('server:') && brain) {
+    const zen = /opencode\.ai\/zen|\/api\/zen/.test(brain.url);
+    const models = [];
+    if (brain.model) models.push(brain.model);
+    if (zen) {
+      (zenModels || []).forEach((m) => { if (!models.includes(m)) models.push(m); });
+    }
+    modelSel.innerHTML = models.length
+      ? models.map((m) => '<option value="' + m + '">' + m + '</option>').join('')
+      : '<option value="">(set model in Settings)</option>';
+    if (brain.model) modelSel.value = brain.model;
+    modelSel.style.display = 'inline-block';
+    modelSel.title = brain.name + ' model';
+    return;
+  }
+  modelSel.style.display = 'none';
+}
 
 function refreshBar() {
   const mode = engineSel.value;
   const brain = currentServerBrain();
-  modelSel.style.display = mode === 'browser' && navigator.gpu ? 'inline-block' : 'none';
+  syncModelPicker();
   serverUrl.style.display = brain ? 'inline-block' : 'none';
   if (brain) serverUrl.value = brain.url;
   if (mode === 'auto') {
@@ -2990,6 +3036,7 @@ function openSettings(focus) {
   tag.textContent = GEMINI_KEY() ? '● active' : '';
   tag.classList.toggle('on', !!GEMINI_KEY());
   $('set-zen-key').value = ZEN_KEY();
+  $('set-zen-model').value = ZEN_MODEL();
   const ztag = $('set-zen-state');
   ztag.textContent = ZEN_KEY() ? '● active' : '';
   ztag.classList.toggle('on', !!ZEN_KEY());
@@ -3081,7 +3128,7 @@ $('set-zen-test').addEventListener('click', () => {
 $('set-zen-save').addEventListener('click', async () => {
   const key = $('set-zen-key').value.trim();
   if (!key) { $('set-zen-state').textContent = 'paste a key first'; return; }
-  const model = 'big-pickle'; // free default; other models live in the datalist
+  const model = ($('set-zen-model').value.trim() || 'big-pickle'); // free default; pick any from the datalist
   localStorage.setItem('a2i-zen-key', key);
   localStorage.setItem('a2i-zen-model', model);
   const tag = $('set-zen-state');
@@ -3145,7 +3192,7 @@ $('preset-hf').addEventListener('click', () =>
     rebuildEngineSelect('server:' + zenBrainIndex()); refreshBar(); renderBrainList();
     return;
   }
-  fillProvider('OpenCode Zen', ZEN_URL, 'big-pickle');
+  fillProvider('OpenCode Zen', ZEN_URL, ZEN_MODEL() || 'big-pickle');
   openSettings('zen');
 });
 // Fetch the live model list from OpenCode Zen and fill the datalist so the
