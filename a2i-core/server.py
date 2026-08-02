@@ -31,6 +31,7 @@ from browse import browse
 from fim import RepoFile, build_repo_fim_prompt
 from knowledge import KnowledgeBase
 from repomap import build_repo_map, extract_refs, rank_files
+from zen import chat as zen_chat, is_zen_model, zen_key, zen_models
 
 DEFAULT_MODEL_PATH = Path(__file__).parent / "models" / "model.gguf"
 DEFAULT_SYSTEM_PROMPT = (
@@ -94,16 +95,16 @@ def build_messages(messages: list[ChatMessage]) -> list[ChatMessage]:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "model": Path(state.llm.model_path).name}
+    return {"status": "ok", "model": Path(state.llm.model_path).name, "zen": bool(zen_key())}
 
 
 @app.get("/v1/models")
 def list_models() -> dict[str, object]:
     name = Path(state.llm.model_path).stem
-    return {
-        "object": "list",
-        "data": [{"id": name, "object": "model", "owned_by": "a2i"}],
-    }
+    data = [{"id": name, "object": "model", "owned_by": "a2i"}]
+    for mid in zen_models():
+        data.append({"id": mid, "object": "model", "owned_by": "opencode-zen"})
+    return {"object": "list", "data": data}
 
 
 @app.post("/v1/chat/completions", response_model=None)
@@ -113,6 +114,16 @@ def chat_completions(body: dict) -> JSONResponse | StreamingResponse:
     temperature: float = body.get("temperature", 0.7)
     stream: bool = body.get("stream", False)
     model_name = Path(state.llm.model_path).stem
+
+    # Zen bridge: when the caller asks for a Zen model (big-pickle,
+    # deepseek-v4-flash-free, ...) and a key is available (auto-read from
+    # OpenCode's auth.json or A2I_ZEN_KEY), proxy to opencode.ai/zen/v1.
+    if is_zen_model(str(body.get("model") or "")):
+        status, content_type, text = zen_chat(str(body.get("model")), body)
+        if content_type == "text/event-stream":
+            return StreamingResponse(iter([text]), media_type=content_type)
+        return JSONResponse(json.loads(text), status_code=status)
+
     full_messages = build_messages(messages)
 
     if not stream:
@@ -370,3 +381,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
