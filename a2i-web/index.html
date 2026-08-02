@@ -1663,6 +1663,9 @@ function rebuildEngineSelect(selected) {
 // Groq/OpenRouter include /v1). Normalise so we never double it.
 function apiBase(url) {
   const base = (url || '').replace(/\/+$/, '');
+  // Same-origin Vercel proxy paths (/api/zen) already include the full base —
+  // never append /v1 to them.
+  if (base.startsWith('/api/')) return base;
   return /\/v\d+$/.test(base) ? base : base + '/v1';
 }
 
@@ -1671,7 +1674,7 @@ async function checkBrains() {
     try {
       const headers = brain.apiKey ? { Authorization: 'Bearer ' + brain.apiKey } : {};
       const res = await fetch(apiBase(brain.url) + '/models',
-        { headers, signal: AbortSignal.timeout(2500) });
+        { headers, signal: AbortSignal.timeout(8000) });
       brain.online = res.ok;
     } catch {
       brain.online = false;
@@ -3022,8 +3025,14 @@ $('preset-zen-refresh').addEventListener('click', () => refreshZenModels());
 // Warm the list once on load so the datalist is ready before the user looks.
 window.addEventListener('load', () => {
   refreshZenModels();
-  // If a Zen key was saved before but the brain is missing (e.g. cache
-  // cleared), recreate it automatically so the provider keeps working.
+  // Migrate brains saved with the old direct Zen URL (https://opencode.ai/zen/v1)
+  // to the same-origin proxy, then recreate a missing Zen brain if a key is saved.
+  let migrated = false;
+  serverBrains.forEach((b, i) => {
+    const u = (b.url || '').replace(/\/+$/, '');
+    if (u.includes('opencode.ai/zen')) { serverBrains[i].url = ZEN_URL; migrated = true; }
+  });
+  if (migrated) { saveBrains(); rebuildEngineSelect(engineSel.value); }
   if (ZEN_KEY() && zenBrainIndex() < 0) ensureZenBrain();
 });
 // Opencode Server bridge: A2I Core proxies oc/* models to the local
