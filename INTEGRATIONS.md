@@ -1,4 +1,4 @@
-# A2I — ភ្ជាប់ឧបករណ៍ AI សរសេរកូដ · Coding-tool integrations
+﻿# A2I — ភ្ជាប់ឧបករណ៍ AI សរសេរកូដ · Coding-tool integrations
 
 A2I Core speaks the **OpenAI-compatible API**, so the open-source coding
 tools in this org can all use it as their brain — running open models
@@ -162,6 +162,38 @@ opencode --provider custom --base-url http://127.0.0.1:8990/v1
 The Zen key can also be set explicitly with `A2I_ZEN_KEY` (or reused by
 the A2I Cloud Vercel proxy via `A2I_API_KEY`). Zen free tier:
 100 requests/day, up to 128K context.
+
+### OpenCode server bridge — drive the real agent from the chat UI
+
+`opencode serve` (default `http://127.0.0.1:4096`) exposes the full
+agent: sessions, prompts, file edits, shell, web, MCP. A2I Core tunnels
+OpenAI-style chat requests into it: any model id prefixed `oc/` runs a
+real agent loop on the local server instead of a local completion, so the
+chat UI (and any OpenAI-compatible client) gets OpenCode's coding agent
+as a "brain". `GET /v1/models` lists the server's models as `oc/<id>`.
+
+```bash
+# 1. Start the OpenCode server (agent loop; 127.0.0.1 only)
+opencode serve                                   # port 4096 by default
+# optional password: OPENCODE_SERVER_PASSWORD=... opencode serve
+
+# 2. A2I Core bridges oc/* models to it automatically (no extra config)
+cd a2i-core && python server.py
+
+# 3. Ask through the OpenAI-compatible API
+curl http://127.0.0.1:8990/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model": "oc/big-pickle", "messages": [{"role": "user", "content": "hello"}]}'
+```
+
+In the a2i-web settings panel press **Opencode Server (local)** to point
+the chat at A2I Core with an `oc/` model, or **↻ OC models** to list the
+server's models. When `opencode serve` is password-protected, set
+`A2I_OPENCODE_PASSWORD` (or reuse `OPENCODE_SERVER_PASSWORD`; username
+defaults to `opencode`, override with `A2I_OPENCODE_USERNAME`). Point the
+server elsewhere with `A2I_OPENCODE_URL`. To call `opencode serve` from a
+browser directly (instead of through A2I Core), add its origin with
+`--cors http://localhost:<a2i-port>`.
 ## Aider — AI pair programmer in the terminal
 
 [`you2show/aider`](https://github.com/you2show/aider). Aider sets
@@ -380,3 +412,4 @@ curl http://127.0.0.1:8000/v1/audio/transcriptions \
 Any of the servers above can be added as a brain in
 **⚙️ Settings → AI providers**, and the **🔄 Auto** engine will fall back
 between them automatically.
+
