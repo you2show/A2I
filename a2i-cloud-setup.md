@@ -8,6 +8,31 @@ A2I Cloud makes A2I answer **fast, high-quality, with no download** on any
 device. A Vercel serverless function (`/api/chat`) forwards your chat to a
 hosted, OpenAI-compatible model; the key stays server-side.
 
+
+## OpenCode Zen (free) - recommended provider
+
+[OpenCode Zen](https://opencode.ai/docs/zen) is the hosted model API behind
+OpenCode. It offers free models with an OpenAI-compatible endpoint and needs
+no credit card:
+
+- **Base URL:** https://opencode.ai/zen/v1
+- **Get a key:** https://opencode.ai/auth (no billing details required)
+- **Free models:** ig-pickle, deepseek-v4-flash-free, mimo-v2.5-free,
+  ling-3.0-flash-free, 
+emotron-3-ultra-free, 
+orth-mini-code-free,
+  laguna-s-2.1-free (list via GET https://opencode.ai/zen/v1/models)
+- **Rate limit (free):** 100 requests/day, up to 128K context
+
+In the A2I web app: Settings > AI providers > **OpenCode Zen (free)** preset,
+paste the key from opencode.ai/auth, and chat. Or set the Vercel env vars
+below for the A2I Cloud serverless route:
+
+| Name | Value |
+| ---- | ----- |
+| A2I_API_BASE | https://opencode.ai/zen/v1 |
+| A2I_API_KEY | your key from opencode.ai/auth |
+| A2I_MODEL | ig-pickle (or another free model id) |
 ## ជំហានតម្លើង / Steps
 
 ### 1. យក endpoint + key ពី provider មួយ (open model, មាន free tier)
