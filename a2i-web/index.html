@@ -678,6 +678,24 @@
       </section>
 
       <section class="setblock">
+        <div class="setblock-h"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg> OpenCode Zen (free — no card)</div>
+        <p class="hint">Frontier free models (Big Pickle, DeepSeek V4 Flash Free, … — see
+          <a href="https://github.com/you2show/A2I/blob/main/MODELS.md" target="_blank" rel="noopener">MODELS.md</a>).
+          Get a key free with <code>opencode auth login --provider zen</code> or on
+          <a href="https://opencode.ai" target="_blank" rel="noopener">opencode.ai</a>,
+          paste it here and press <b>Test key</b>. Free tier: 100 requests/day.</p>
+        <label class="field">Zen API key
+          <input id="set-zen-key" type="password" placeholder="sk-…" autocomplete="off">
+        </label>
+        <div class="row-btns">
+          <button id="set-zen-test" class="btn">Test key</button>
+          <button id="set-zen-save" class="btn primary">Save &amp; Activate</button>
+          <button id="set-zen-clear" class="btn">Clear</button>
+          <span id="set-zen-state" class="statetag"></span>
+        </div>
+      </section>
+
+      <section class="setblock">
         <div class="setblock-h"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg> Local model file — SSD / disk (no download)</div>
         <p class="hint">Keep a GGUF model on your SSD and load it straight from disk — <b>no download, works offline</b>, and new preview URLs never re-download. Big models fit too. Get GGUF files from Hugging Face (Qwen, Llama, …).</p>
         <div class="row-btns">
@@ -704,10 +722,10 @@
       <section class="setblock">
         <div class="setblock-h"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> AI providers — local & free</div>
         <p class="hint">Famous, strong models for free: get a key, paste it, Add. Keys stay in this browser.<br>
+          ⚡ <b>Easiest: OpenCode Zen</b> — press the button below, paste a free key, <b>Save &amp; Activate</b> (no card needed, 100 req/day).<br>
           • Groq — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> (Llama 3.3 70B, very fast)<br>
           • OpenRouter — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> (DeepSeek R1, Llama 70B — <code>:free</code>)<br>
           • Hugging Face — <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">huggingface.co/settings/tokens</a> (any HF model via <code>hf_…</code> token). Paste the newest repo id from <a href="https://huggingface.co/models?sort=trending" target="_blank" rel="noopener">huggingface.co/models</a> — e.g. Llama 4, Qwen3, DeepSeek-R1<br>
-          • OpenCode Zen — free frontier models via <code>opencode auth login</code> (see MODELS.md)<br>
           • Opencode Server — the local <code>opencode serve</code> agent loop through A2I Core (<code>oc/…</code>)<br>
           • Local, no API at all: A2I Core (any machine), vLLM (GPU, fastest), Ollama</p>
         <div class="provider-presets">
@@ -1601,7 +1619,11 @@ function loadServerBrains() {
     const saved = JSON.parse(localStorage.getItem('a2i-brains') || 'null');
     if (Array.isArray(saved) && saved.length) return saved;
   } catch { /* fall through to default */ }
-  return [{ name: 'A2I Core', url: 'http://127.0.0.1:8990' }];
+  // Only seed the local A2I Core brain when the page is served locally —
+  // on the hosted site (https) that localhost address can never be reached.
+  const localPage = location.protocol === 'http:' &&
+    /^(localhost|127\.0\.0\.1|\[::1\])/.test(location.hostname);
+  return localPage ? [{ name: 'A2I Core', url: 'http://127.0.0.1:8990' }] : [];
 }
 let serverBrains = loadServerBrains();
 const saveBrains = () => localStorage.setItem('a2i-brains', JSON.stringify(serverBrains));
@@ -2303,7 +2325,9 @@ async function askAuto(messages, aiDiv, signal) {
       }
     }
   }
-  throw lastErr || new Error('គ្មាន provider ណាឆ្លើយបានទេ។ (No provider could answer.)');
+  throw lastErr || new Error(
+    'គ្មាន provider ណាឆ្លើយបានទេ។ (No provider could answer.) — ' +
+    'ចុច Settings → OpenCode Zen បិទ key រួច Save & Activate។');
 }
 
 // ---- All brains together -----------------------------------------------
@@ -2796,10 +2820,15 @@ function openSettings(focus) {
   const tag = $('set-gemini-state');
   tag.textContent = GEMINI_KEY() ? '● active' : '';
   tag.classList.toggle('on', !!GEMINI_KEY());
+  $('set-zen-key').value = ZEN_KEY();
+  const ztag = $('set-zen-state');
+  ztag.textContent = ZEN_KEY() ? '● active' : '';
+  ztag.classList.toggle('on', !!ZEN_KEY());
   renderBrainList();
   overlay.hidden = false;
   setTimeout(() => {
     if (focus === 'gemini') $('set-gemini-key').focus();
+    else if (focus === 'zen') $('set-zen-key').focus();
     else if (focus === 'brain') $('set-brain-name').focus();
   }, 50);
 }
@@ -2826,6 +2855,75 @@ $('set-gemini-clear').addEventListener('click', () => {
   if (localStorage.getItem('a2i-engine') === 'gemini') localStorage.removeItem('a2i-engine');
   rebuildEngineSelect('browser'); refreshBar();
   const tag = $('set-gemini-state'); tag.textContent = 'cleared'; tag.classList.remove('on');
+});
+
+// ---- OpenCode Zen: one-click free provider --------------------------------
+// The key lives in localStorage (like Gemini); saving it auto-creates/updates
+// the "OpenCode Zen" server brain so the chat works with zero further steps.
+const ZEN_URL = 'https://opencode.ai/zen/v1';
+const ZEN_KEY = () => localStorage.getItem('a2i-zen-key') || '';
+const ZEN_MODEL = () => localStorage.getItem('a2i-zen-model') || 'big-pickle';
+
+function zenBrainIndex() {
+  return serverBrains.findIndex((b) => b.url && b.url.replace(/\/+$/, '').startsWith(ZEN_URL));
+}
+function ensureZenBrain() {
+  const i = zenBrainIndex();
+  const brain = { name: 'OpenCode Zen', url: ZEN_URL, model: ZEN_MODEL(), apiKey: ZEN_KEY() };
+  if (i >= 0) serverBrains[i] = brain; else serverBrains.push(brain);
+  saveBrains(); renderBrainList(); checkBrains();
+  return i >= 0 ? i : serverBrains.length - 1;
+}
+
+async function testZenKey(key, tag) {
+  tag.textContent = 'testing…'; tag.classList.remove('on');
+  try {
+    const res = await fetch(ZEN_URL + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (key || ZEN_KEY()) },
+      body: JSON.stringify({ model: 'big-pickle', messages: [{ role: 'user', content: 'Reply with OK' }], max_tokens: 10 }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status + (res.status === 401 ? ' — key rejected' : ''));
+    tag.textContent = '✓ key works'; tag.classList.add('on');
+    return true;
+  } catch (err) {
+    tag.textContent = '✗ ' + (err.message || 'failed');
+    return false;
+  }
+}
+
+$('set-zen-test').addEventListener('click', () => {
+  const key = $('set-zen-key').value.trim();
+  if (!key) { $('set-zen-state').textContent = 'paste a key first'; return; }
+  testZenKey(key, $('set-zen-state'));
+});
+$('set-zen-save').addEventListener('click', async () => {
+  const key = $('set-zen-key').value.trim();
+  if (!key) { $('set-zen-state').textContent = 'paste a key first'; return; }
+  const model = 'big-pickle'; // free default; other models live in the datalist
+  localStorage.setItem('a2i-zen-key', key);
+  localStorage.setItem('a2i-zen-model', model);
+  const tag = $('set-zen-state');
+  const ok = await testZenKey(key, tag);
+  if (ok) {
+    ensureZenBrain();
+    localStorage.setItem('a2i-engine', 'server:' + zenBrainIndex());
+    rebuildEngineSelect('server:' + zenBrainIndex()); refreshBar();
+    tag.textContent = '✓ saved & active'; tag.classList.add('on');
+  } else {
+    tag.textContent += ' — not saved'; 
+  }
+});
+$('set-zen-clear').addEventListener('click', () => {
+  localStorage.removeItem('a2i-zen-key');
+  localStorage.removeItem('a2i-zen-model');
+  $('set-zen-key').value = '';
+  const i = zenBrainIndex();
+  if (i >= 0) { serverBrains.splice(i, 1); saveBrains(); renderBrainList(); }
+  if (localStorage.getItem('a2i-engine') === 'server:' + i) localStorage.removeItem('a2i-engine');
+  rebuildEngineSelect('browser'); refreshBar();
+  const tag = $('set-zen-state'); tag.textContent = 'cleared'; tag.classList.remove('on');
 });
 
 $('set-brain-add').addEventListener('click', () => {
@@ -2858,8 +2956,18 @@ $('preset-openrouter').addEventListener('click', () =>
 // hf_ token. The model is only a default: paste ANY repo id, e.g. the newest
 // trending model from huggingface.co/models?sort=trending.
 $('preset-hf').addEventListener('click', () =>
-  fillProvider('Hugging Face', 'https://router.huggingface.co/v1', 'meta-llama/Llama-4-Scout-17B-16E-Instruct'));$('preset-zen').addEventListener('click', () =>
-  fillProvider('OpenCode Zen', 'https://opencode.ai/zen/v1', 'big-pickle'));
+  fillProvider('Hugging Face', 'https://router.huggingface.co/v1', 'meta-llama/Llama-4-Scout-17B-16E-Instruct'));$('preset-zen').addEventListener('click', () => {
+  // One click = done. If a Zen key is already saved, add/activate the brain
+  // immediately; otherwise open Settings with the Zen key field focused.
+  if (ZEN_KEY()) {
+    ensureZenBrain();
+    localStorage.setItem('a2i-engine', 'server:' + zenBrainIndex());
+    rebuildEngineSelect('server:' + zenBrainIndex()); refreshBar(); renderBrainList();
+    return;
+  }
+  fillProvider('OpenCode Zen', ZEN_URL, 'big-pickle');
+  openSettings('zen');
+});
 // Fetch the live model list from OpenCode Zen and fill the datalist so the
 // user can pick any model (free or paid) straight from the input dropdown.
 // Free-tier models end in -free; the count is shown right on the button.
@@ -2901,7 +3009,12 @@ async function refreshZenModels() {
 }
 $('preset-zen-refresh').addEventListener('click', () => refreshZenModels());
 // Warm the list once on load so the datalist is ready before the user looks.
-window.addEventListener('load', () => { refreshZenModels(); });
+window.addEventListener('load', () => {
+  refreshZenModels();
+  // If a Zen key was saved before but the brain is missing (e.g. cache
+  // cleared), recreate it automatically so the provider keeps working.
+  if (ZEN_KEY() && zenBrainIndex() < 0) ensureZenBrain();
+});
 // Opencode Server bridge: A2I Core proxies oc/* models to the local
 // `opencode serve` agent loop (session create + prompt). No key needed —
 // a2i-core reuses the server password from OPENCODE_SERVER_PASSWORD.
@@ -2911,6 +3024,12 @@ let ocModels = [];
 let ocModelsTried = false;
 async function refreshOcModels() {
   const btn = $('preset-oc-refresh');
+  // From a public https page the browser blocks plain-http localhost calls
+  // (mixed content), so only try when the page itself is local.
+  if (location.protocol !== 'http:') {
+    btn.textContent = '↻ OC models (local only)';
+    return [];
+  }
   btn.textContent = '↻ Loading…';
   btn.disabled = true;
   try {
