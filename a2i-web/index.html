@@ -556,6 +556,170 @@
   #install-btn:hover { transform: translateY(-1px); }
 </style>
 
+<!-- ============================================================
+     A2I 3.0 — modern minimal (layered over 1.0 + 2.0)
+     Neutral surfaces, single accent, standard proportions.
+     Structure, IDs and classes unchanged.
+     ============================================================ -->
+<style>
+  :root {
+    --bg: #fafafa; --panel: #ffffff; --side: #f1f2f4; --text: #16181d;
+    --muted: #69707a; --accent: #2563eb; --accent-soft: #e8effd;
+    --user: #e9ebee; --border: #e3e5e8; --code-bg: #f4f5f7;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 4px 16px rgba(16,24,40,.06);
+    --grad: linear-gradient(135deg, #2563eb 0%, #2563eb 100%);
+    --grad-soft: linear-gradient(135deg, #e8effd 0%, #e8effd 100%);
+    --ring: rgba(37,99,235,.16);
+    --radius: 14px;
+  }
+  [data-theme="dark"] {
+    --bg: #202226; --panel: #26292e; --side: #1b1d21; --text: #e9ebef;
+    --muted: #939aa5; --accent: #5b93f5; --accent-soft: #22304a;
+    --user: #2c2f35; --border: #363a41; --code-bg: #191b1f;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    --grad: linear-gradient(135deg, #5b93f5 0%, #5b93f5 100%);
+    --grad-soft: linear-gradient(135deg, #22304a 0%, #22304a 100%);
+    --ring: rgba(91,147,245,.22);
+  }
+  body { background: var(--bg); }
+  aside { background: var(--side); }
+
+  /* brand — quiet, standard */
+  .brand .logo { box-shadow: none; }
+  .brand .logo::after { display: none; }
+  #new-chat { background: var(--panel); font-weight: 600; box-shadow: none; }
+
+  /* topbar — flat, tidy */
+  #topbar {
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: .55rem .9rem; gap: .4rem; backdrop-filter: none;
+  }
+  #topbar::after { display: none; }
+  select, #server-url {
+    border-radius: 9px; font-size: .82rem; padding: .38rem .55rem;
+  }
+  #engine { font-weight: 600; }
+  #live-link { background: transparent; }
+  #status-wrap { color: var(--muted); }
+  .dot.ready { box-shadow: none; }
+  .dot { width: 8px; height: 8px; }
+  #status-wrap .dot { background: #e0b23e; }
+  #status-wrap .dot.ready { background: #34c98a; }
+  @media (max-width: 1100px) {
+    #live-link, #search-mode, .wiki { display: none !important; }
+  }
+
+  /* sidebar rows */
+  #settings-btn, #project-btn {
+    background: transparent; border-color: transparent; font-weight: 600;
+    border-radius: 9px; box-shadow: none; font-size: .86rem;
+  }
+  #settings-btn:hover, #project-btn:hover { background: var(--user); box-shadow: none; transform: none; }
+  .chat-item { border-radius: 9px; }
+  .chat-item.active { background: var(--user); box-shadow: inset 3px 0 0 var(--accent); }
+  .side-foot button { border-radius: 9px; }
+  .side-foot button:hover { background: var(--user); }
+
+  /* welcome — calm */
+  #welcome .logo-big { box-shadow: none; animation: none; }
+  #welcome h2 { background: none; -webkit-background-clip: initial; background-clip: initial; color: var(--text); font-size: 1.5rem; letter-spacing: -.01em; }
+  .chip {
+    background: var(--panel); border: 1px solid var(--border); box-shadow: none;
+    font-weight: 500; font-size: .84rem;
+  }
+  .chip:hover { transform: none; box-shadow: none; border-color: var(--accent); }
+
+  /* messages — ChatGPT-like: plain AI, filled user bubble */
+  .msg { line-height: 1.75; font-size: .97rem; }
+  .msg.user {
+    background: var(--accent); color: #fff; border-radius: 18px 18px 5px 18px;
+    box-shadow: none; padding: .65rem 1rem; max-width: 78%;
+  }
+  [data-theme="dark"] .msg.user { color: #fff; }
+  .msg.ai.combined .msg-body { border-left: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); padding-left: .85rem; }
+  .ai-avatar { box-shadow: none; background: var(--accent); }
+  .brain-label { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .md pre { box-shadow: none; border-radius: 10px; }
+  .md code { background: var(--code-bg); }
+  .note {
+    background: var(--panel); border-color: var(--border); color: var(--muted);
+    box-shadow: none;
+  }
+
+  /* composer — simple field + filled send */
+  #composer {
+    border-radius: 16px; background: var(--panel); box-shadow: var(--shadow);
+    border: 1px solid var(--border); padding: .5rem .5rem .5rem 1rem;
+  }
+  #composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  .icon-btn { background: var(--accent); color: #fff; box-shadow: none; }
+  .icon-btn.ghost { background: transparent; color: var(--muted); }
+  .icon-btn.ghost:hover { color: var(--accent); }
+  #send { background: var(--accent); box-shadow: none; }
+  #send:hover:not(:disabled) { transform: none; opacity: .9; }
+  #regen:hover { transform: none; }
+  #stop { background: #d94f4f; }
+  progress { accent-color: var(--accent); }
+  .footnote { color: var(--muted); }
+
+  /* buttons */
+  .btn { border-radius: 9px; font-size: .84rem; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); box-shadow: none; }
+  .btn.primary:hover { opacity: .92; }
+  .statetag { font-size: .74rem; color: var(--muted); }
+  .statetag.on { color: var(--accent); }
+
+  /* ---- Settings modal: numbered cards ---- */
+  .overlay { background: rgba(10,12,16,.45); backdrop-filter: blur(2px); }
+  .modal {
+    border-radius: 16px; box-shadow: var(--shadow); border: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .modal-head { padding: 1.05rem 1.25rem; border-bottom: 1px solid var(--border); }
+  .modal-head h2 { font-size: 1.02rem; letter-spacing: -.01em; }
+  .modal-body { padding: 1rem 1.25rem 1.4rem; }
+  .setup-hint {
+    background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+    color: var(--text); border-radius: 11px; padding: .6rem .85rem; font-size: .82rem;
+    margin-bottom: 1.1rem; line-height: 1.6;
+  }
+  .setup-hint b { color: var(--accent); }
+  .setblock {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 13px;
+    padding: 1rem 1.05rem 1.1rem; margin-bottom: .9rem;
+  }
+  .setblock-h {
+    display: flex; align-items: center; gap: .5rem; font-weight: 700; font-size: .9rem;
+    margin-bottom: .45rem;
+  }
+  .setblock-h .ico { color: var(--accent); }
+  .setnum {
+    display: inline-grid; place-items: center; width: 20px; height: 20px;
+    border-radius: 7px; background: var(--accent); color: #fff; font-size: .72rem;
+    font-weight: 700; flex-shrink: 0;
+  }
+  .badge-rec {
+    font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    background: var(--accent); color: #fff; border-radius: 999px; padding: .14rem .5rem;
+  }
+  .setblock .hint { font-size: .78rem; margin-bottom: .7rem; }
+  .field { font-size: .78rem; color: var(--muted); margin-bottom: .55rem; display: block; }
+  .field input {
+    width: 100%; margin-top: .25rem; padding: .5rem .7rem; font-size: .86rem;
+    border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text);
+  }
+  .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  .add-brain input {
+    padding: .5rem .65rem; border: 1px solid var(--border); border-radius: 9px;
+    background: var(--panel); color: var(--text); font-size: .84rem; min-width: 0;
+  }
+  .add-brain input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  .brain-row { border-radius: 9px; background: var(--panel); border: 1px solid var(--border); }
+  .row-btns { gap: .45rem; }
+  .model-guide summary { color: var(--accent); }
+</style>
+
+
 <!-- PWA: installable, offline-capable app -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#c96442" media="(prefers-color-scheme: light)">
@@ -659,26 +823,10 @@
     </div>
     <div class="modal-body">
 
-      <section class="setblock">
-        <div class="setblock-h"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z"/></svg> Gemini (Google)</div>
-        <p class="hint">Paste your own key — free from
-          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.
-          Stored only in this browser, sent directly to Google.</p>
-        <label class="field">API key
-          <input id="set-gemini-key" type="password" placeholder="AIzaSy…" autocomplete="off">
-        </label>
-        <label class="field">Model
-          <input id="set-gemini-model" placeholder="gemini-2.5-flash" autocomplete="off">
-        </label>
-        <div class="row-btns">
-          <button id="set-gemini-save" class="btn primary">Save Gemini</button>
-          <button id="set-gemini-clear" class="btn">Clear</button>
-          <span id="set-gemini-state" class="statetag"></span>
-        </div>
-      </section>
+      <div class="setup-hint"><b>Quick start · ចាប់ផ្ដើមងាយៗ</b> — <b>1)</b> បន្ថែម AI មួយខាងក្រោម · <b>2)</b> ជ្រើសវាក្នុងបញ្ជីខាងលើ · <b>3)</b> ចាប់ផ្ដើមជជែក។ លឿនបំផុតគឺ <b>OpenCode Zen</b> (free, គ្មានប័ណ្ណឥណទាន) — បិទ key រួចចុច <b>Save &amp; Activate</b>។</div>
 
       <section class="setblock">
-        <div class="setblock-h"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg> OpenCode Zen (free — no card)</div>
+        <div class="setblock-h"><span class="setnum">1</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg> OpenCode Zen (free — no card) <span class="badge-rec">Recommended</span></div>
         <p class="hint">Frontier free models (Big Pickle, DeepSeek V4 Flash Free, … — see
           <a href="https://github.com/you2show/A2I/blob/main/MODELS.md" target="_blank" rel="noopener">MODELS.md</a>).
           Get a key free with <code>opencode auth login --provider zen</code> or on
@@ -696,7 +844,25 @@
       </section>
 
       <section class="setblock">
-        <div class="setblock-h"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg> Local model file — SSD / disk (no download)</div>
+        <div class="setblock-h"><span class="setnum">2</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z"/></svg> Gemini (Google)</div>
+        <p class="hint">Paste your own key — free from
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.
+          Stored only in this browser, sent directly to Google.</p>
+        <label class="field">API key
+          <input id="set-gemini-key" type="password" placeholder="AIzaSy…" autocomplete="off">
+        </label>
+        <label class="field">Model
+          <input id="set-gemini-model" placeholder="gemini-2.5-flash" autocomplete="off">
+        </label>
+        <div class="row-btns">
+          <button id="set-gemini-save" class="btn primary">Save Gemini</button>
+          <button id="set-gemini-clear" class="btn">Clear</button>
+          <span id="set-gemini-state" class="statetag"></span>
+        </div>
+      </section>
+
+      <section class="setblock">
+        <div class="setblock-h"><span class="setnum">3</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg> Local model file — SSD / disk (no download)</div>
         <p class="hint">Keep a GGUF model on your SSD and load it straight from disk — <b>no download, works offline</b>, and new preview URLs never re-download. Big models fit too. Get GGUF files from Hugging Face (Qwen, Llama, …).</p>
         <div class="row-btns">
           <button type="button" id="set-local-model" class="btn primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/></svg> Choose model (.gguf)</button>
@@ -720,7 +886,7 @@
       </section>
 
       <section class="setblock">
-        <div class="setblock-h"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> AI providers — local & free</div>
+        <div class="setblock-h"><span class="setnum">4</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> AI providers — local & free</div>
         <p class="hint">Famous, strong models for free: get a key, paste it, Add. Keys stay in this browser.<br>
           ⚡ <b>Easiest: OpenCode Zen</b> — press the button below, paste a free key, <b>Save &amp; Activate</b> (no card needed, 100 req/day).<br>
           • Groq — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> (Llama 3.3 70B, very fast)<br>
@@ -752,7 +918,7 @@
       </section>
 
       <section class="setblock">
-        <div class="setblock-h"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg> Appearance & voice</div>
+        <div class="setblock-h"><span class="setnum">5</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg> Appearance & voice</div>
         <div class="row-btns">
           <button id="set-theme" class="btn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg> Toggle light / dark</button>
           <button id="set-autospeak" class="btn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg> <span id="set-autospeak-label">Auto read answers: Off</span></button>
