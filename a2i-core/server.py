@@ -1,4 +1,4 @@
-"""A2I Core — self-hosted AI server.
+﻿"""A2I Core — self-hosted AI server.
 
 Runs a local open-weight language model with llama.cpp and exposes:
 
@@ -30,6 +30,7 @@ from agent import ask, run_agent
 from browse import browse
 from fim import RepoFile, build_repo_fim_prompt
 from knowledge import KnowledgeBase
+from opencode_bridge import chat as oc_chat, is_oc_model, oc_models, oc_url
 from repomap import build_repo_map, extract_refs, rank_files
 from zen import chat as zen_chat, is_zen_model, zen_key, zen_models
 
@@ -95,7 +96,12 @@ def build_messages(messages: list[ChatMessage]) -> list[ChatMessage]:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "model": Path(state.llm.model_path).name, "zen": bool(zen_key())}
+    return {
+        "status": "ok",
+        "model": Path(state.llm.model_path).name,
+        "zen": bool(zen_key()),
+        "opencode": oc_url(),
+    }
 
 
 @app.get("/v1/models")
@@ -104,6 +110,8 @@ def list_models() -> dict[str, object]:
     data = [{"id": name, "object": "model", "owned_by": "a2i"}]
     for mid in zen_models():
         data.append({"id": mid, "object": "model", "owned_by": "opencode-zen"})
+    for info in oc_models():
+        data.append({"id": "oc/" + info["id"], "object": "model", "owned_by": "opencode-server"})
     return {"object": "list", "data": data}
 
 
@@ -120,6 +128,14 @@ def chat_completions(body: dict) -> JSONResponse | StreamingResponse:
     # OpenCode's auth.json or A2I_ZEN_KEY), proxy to opencode.ai/zen/v1.
     if is_zen_model(str(body.get("model") or "")):
         status, content_type, text = zen_chat(str(body.get("model")), body)
+        if content_type == "text/event-stream":
+            return StreamingResponse(iter([text]), media_type=content_type)
+        return JSONResponse(json.loads(text), status_code=status)
+
+    # OpenCode bridge: oc/<model> runs a full agent loop on the local
+    # `opencode serve` server instead of a local completion.
+    if is_oc_model(str(body.get("model") or "")):
+        status, content_type, text = oc_chat(str(body.get("model")), body)
         if content_type == "text/event-stream":
             return StreamingResponse(iter([text]), media_type=content_type)
         return JSONResponse(json.loads(text), status_code=status)
