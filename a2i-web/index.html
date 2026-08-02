@@ -713,6 +713,7 @@
           <button type="button" class="btn" id="preset-openrouter">OpenRouter (free)</button>
           <button type="button" class="btn" id="preset-hf">Hugging Face (free)</button>
           <button type="button" class="btn" id="preset-zen">OpenCode Zen (free)</button>
+          <button type="button" class="btn" id="preset-zen-refresh">↻ Zen models</button>
           <button type="button" class="btn" id="preset-a2icore">A2I Core (local)</button>
           <button type="button" class="btn" id="preset-vllm">vLLM (GPU, local)</button>
           <button type="button" class="btn" id="preset-ollama">Ollama (local)</button>
@@ -721,7 +722,8 @@
         <div class="add-brain add-brain-2">
           <input id="set-brain-name" placeholder="Name" autocomplete="off">
           <input id="set-brain-url" placeholder="Base URL (…/v1)" autocomplete="off">
-          <input id="set-brain-model" placeholder="Model (optional)" autocomplete="off">
+          <input id="set-brain-model" placeholder="Model (optional)" list="zen-model-list" autocomplete="off">
+          <datalist id="zen-model-list"></datalist>
           <input id="set-brain-key" type="password" placeholder="API key (optional)" autocomplete="off">
           <button id="set-brain-add" class="btn primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add provider</button>
         </div>
@@ -2854,6 +2856,48 @@ $('preset-openrouter').addEventListener('click', () =>
 $('preset-hf').addEventListener('click', () =>
   fillProvider('Hugging Face', 'https://router.huggingface.co/v1', 'meta-llama/Llama-4-Scout-17B-16E-Instruct'));$('preset-zen').addEventListener('click', () =>
   fillProvider('OpenCode Zen', 'https://opencode.ai/zen/v1', 'big-pickle'));
+// Fetch the live model list from OpenCode Zen and fill the datalist so the
+// user can pick any model (free or paid) straight from the input dropdown.
+// Free-tier models end in -free; the count is shown right on the button.
+let zenModels = [];
+let zenModelsTried = false;
+async function refreshZenModels() {
+  const btn = $('preset-zen-refresh');
+  btn.textContent = '↻ Loading…';
+  btn.disabled = true;
+  try {
+    const res = await fetch('https://opencode.ai/zen/v1/models', {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const list = (data && (data.data || data)) || [];
+    zenModels = list.map((m) => (typeof m === 'string' ? m : m.id)).filter(Boolean);
+    const dl = $('zen-model-list');
+    dl.innerHTML = '';
+    zenModels.forEach((id) => {
+      const o = document.createElement('option');
+      o.value = id;
+      dl.appendChild(o);
+    });
+    const free = zenModels.filter((id) => id.endsWith('-free') || id === 'big-pickle');
+    btn.textContent = `↻ Zen models: ${zenModels.length} (${free.length} free)`;
+    zenModelsTried = true;
+    if ($('set-brain-name').value === 'OpenCode Zen' && !$('set-brain-model').value) {
+      $('set-brain-model').value = free[0] || zenModels[0] || 'big-pickle';
+    }
+    return zenModels;
+  } catch (err) {
+    btn.textContent = '↻ Zen models (offline)';
+    zenModelsTried = true;
+    return [];
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('preset-zen-refresh').addEventListener('click', () => refreshZenModels());
+// Warm the list once on load so the datalist is ready before the user looks.
+window.addEventListener('load', () => { refreshZenModels(); });
 $('preset-a2icore').addEventListener('click', () =>
   fillProvider('A2I Core', 'http://127.0.0.1:8990', ''));
 // vLLM serves /v1/chat/completions and /v1/completions on port 8000 — the
@@ -3217,3 +3261,4 @@ checkCloud().then(() => {
 </script>
 </body>
 </html>
+
