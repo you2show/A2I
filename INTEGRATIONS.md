@@ -118,6 +118,50 @@ your internal network.
 Use `--url`/`--model`/`--api-key` to target vLLM, Ollama, or a hosted
 provider instead of the default `http://127.0.0.1:8990/v1`.
 
+
+## OpenCode - terminal coding agent + the Zen free-model gateway
+
+[OpenCode](https://github.com/anomalyco/opencode) is a terminal coding
+agent (the tool you may already know as the one that provides the free Zen
+models). It gives A2I two things:
+
+1. **A strong local coding agent** - opencode serve starts a headless
+   HTTP server (session / message / agent / file / pty / mcp endpoints with
+   an OpenAPI spec). Any client - including the A2I web app - can drive
+   it to read, write, and edit code, run commands, search the web, and use
+   MCP tools from the browser. Point it at A2I Core
+   (`http://127.0.0.1:8990/v1`) to keep everything on your machine.
+2. **The Zen free-model gateway** - OpenCode's hosted Zen API
+   (`https://opencode.ai/zen/v1`) serves free models such as Big Pickle,
+   DeepSeek V4 Flash Free, MiMo V2.5 Free, Nemotron 3 Ultra Free (see
+   `MODELS.md`). A2I Core reads the Zen key automatically from OpenCode's
+   `auth.json` (written by `opencode auth login`), so once you log in
+   to OpenCode, A2I Core can also answer with those models - no second
+   key needed. `GET /v1/models` on A2I Core lists them alongside the
+   local model, and requesting any Zen model id routes the chat through
+   the Zen bridge (`zen.py`).
+
+### Enable it
+
+`ash
+# 1. Install opencode, log in to Zen (free, no credit card)
+opencode auth login --provider zen
+
+# 2. Start A2I Core - it auto-reads the Zen key from opencode's auth.json
+cd a2i-core && python server.py
+
+# 3. Ask for a Zen model through the OpenAI-compatible API
+curl http://127.0.0.1:8990/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model": "big-pickle", "messages": [{"role": "user", "content": "hi"}]}'
+
+# Or use opencode as the agent, powered by A2I Core locally
+opencode --provider custom --base-url http://127.0.0.1:8990/v1
+`
+
+The Zen key can also be set explicitly with `A2I_ZEN_KEY` (or reused by
+the A2I Cloud Vercel proxy via `A2I_API_KEY`). Zen free tier:
+100 requests/day, up to 128K context.
 ## Aider — AI pair programmer in the terminal
 
 [`you2show/aider`](https://github.com/you2show/aider). Aider sets
