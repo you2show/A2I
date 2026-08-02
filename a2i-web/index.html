@@ -2860,12 +2860,23 @@ $('set-gemini-clear').addEventListener('click', () => {
 // ---- OpenCode Zen: one-click free provider --------------------------------
 // The key lives in localStorage (like Gemini); saving it auto-creates/updates
 // the "OpenCode Zen" server brain so the chat works with zero further steps.
-const ZEN_URL = 'https://opencode.ai/zen/v1';
+// Zen API goes through the same-origin Vercel proxy (api/zen.js): opencode.ai
+// answers browser CORS preflight with 404, so direct calls from this page are
+// blocked ("Failed to fetch"). The proxy also works from file:// via the
+// direct URL fallback.
+const ZEN_URL = (location.protocol === 'http:' || location.protocol === 'https:')
+  ? '/api/zen'
+  : 'https://opencode.ai/zen/v1';
 const ZEN_KEY = () => localStorage.getItem('a2i-zen-key') || '';
 const ZEN_MODEL = () => localStorage.getItem('a2i-zen-model') || 'big-pickle';
 
 function zenBrainIndex() {
-  return serverBrains.findIndex((b) => b.url && b.url.replace(/\/+$/, '').startsWith(ZEN_URL));
+  // Also match brains saved with the old direct URL (https://opencode.ai/zen/v1)
+  // so a stale entry never causes a duplicate Zen brain.
+  return serverBrains.findIndex((b) => {
+    const u = (b.url || '').replace(/\/+$/, '');
+    return u.startsWith(ZEN_URL) || u.includes('opencode.ai/zen');
+  });
 }
 function ensureZenBrain() {
   const i = zenBrainIndex();
@@ -2978,7 +2989,7 @@ async function refreshZenModels() {
   btn.textContent = '↻ Loading…';
   btn.disabled = true;
   try {
-    const res = await fetch('https://opencode.ai/zen/v1/models', {
+    const res = await fetch(ZEN_URL + '/models', {
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
