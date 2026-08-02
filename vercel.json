@@ -18,5 +18,11 @@
         { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/zen/:path*",
+      "destination": "https://opencode.ai/zen/v1/:path*"
+    }
   ]
 }
