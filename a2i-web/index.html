@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -707,6 +707,8 @@
           • Groq — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> (Llama 3.3 70B, very fast)<br>
           • OpenRouter — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> (DeepSeek R1, Llama 70B — <code>:free</code>)<br>
           • Hugging Face — <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">huggingface.co/settings/tokens</a> (any HF model via <code>hf_…</code> token). Paste the newest repo id from <a href="https://huggingface.co/models?sort=trending" target="_blank" rel="noopener">huggingface.co/models</a> — e.g. Llama 4, Qwen3, DeepSeek-R1<br>
+          • OpenCode Zen — free frontier models via <code>opencode auth login</code> (see MODELS.md)<br>
+          • Opencode Server — the local <code>opencode serve</code> agent loop through A2I Core (<code>oc/…</code>)<br>
           • Local, no API at all: A2I Core (any machine), vLLM (GPU, fastest), Ollama</p>
         <div class="provider-presets">
           <button type="button" class="btn" id="preset-groq">Groq (free)</button>
@@ -714,6 +716,8 @@
           <button type="button" class="btn" id="preset-hf">Hugging Face (free)</button>
           <button type="button" class="btn" id="preset-zen">OpenCode Zen (free)</button>
           <button type="button" class="btn" id="preset-zen-refresh">↻ Zen models</button>
+          <button type="button" class="btn" id="preset-oc">Opencode Server (local)</button>
+          <button type="button" class="btn" id="preset-oc-refresh">↻ OC models</button>
           <button type="button" class="btn" id="preset-a2icore">A2I Core (local)</button>
           <button type="button" class="btn" id="preset-vllm">vLLM (GPU, local)</button>
           <button type="button" class="btn" id="preset-ollama">Ollama (local)</button>
@@ -2898,6 +2902,48 @@ async function refreshZenModels() {
 $('preset-zen-refresh').addEventListener('click', () => refreshZenModels());
 // Warm the list once on load so the datalist is ready before the user looks.
 window.addEventListener('load', () => { refreshZenModels(); });
+// Opencode Server bridge: A2I Core proxies oc/* models to the local
+// `opencode serve` agent loop (session create + prompt). No key needed —
+// a2i-core reuses the server password from OPENCODE_SERVER_PASSWORD.
+$('preset-oc').addEventListener('click', () =>
+  fillProvider('Opencode Server', 'http://127.0.0.1:8990', 'oc/big-pickle'));
+let ocModels = [];
+let ocModelsTried = false;
+async function refreshOcModels() {
+  const btn = $('preset-oc-refresh');
+  btn.textContent = '↻ Loading…';
+  btn.disabled = true;
+  try {
+    const res = await fetch('http://127.0.0.1:8990/v1/models', {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const list = (data && (data.data || data)) || [];
+    ocModels = list
+      .map((m) => (typeof m === 'string' ? m : m.id))
+      .filter((id) => typeof id === 'string' && id.startsWith('oc/'));
+    const dl = $('zen-model-list');
+    ocModels.forEach((id) => {
+      const o = document.createElement('option');
+      o.value = id;
+      dl.appendChild(o);
+    });
+    btn.textContent = `↻ OC models: ${ocModels.length}`;
+    ocModelsTried = true;
+    if ($('set-brain-name').value === 'Opencode Server' && !$('set-brain-model').value && ocModels.length) {
+      $('set-brain-model').value = ocModels[0];
+    }
+    return ocModels;
+  } catch (err) {
+    btn.textContent = '↻ OC models (offline)';
+    ocModelsTried = true;
+    return [];
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('preset-oc-refresh').addEventListener('click', () => refreshOcModels());
 $('preset-a2icore').addEventListener('click', () =>
   fillProvider('A2I Core', 'http://127.0.0.1:8990', ''));
 // vLLM serves /v1/chat/completions and /v1/completions on port 8000 — the
