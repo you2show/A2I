@@ -712,6 +712,7 @@
           <button type="button" class="btn" id="preset-groq">Groq (free)</button>
           <button type="button" class="btn" id="preset-openrouter">OpenRouter (free)</button>
           <button type="button" class="btn" id="preset-hf">Hugging Face (free)</button>
+          <button type="button" class="btn" id="preset-zen">OpenCode Zen (free)</button>
           <button type="button" class="btn" id="preset-a2icore">A2I Core (local)</button>
           <button type="button" class="btn" id="preset-vllm">vLLM (GPU, local)</button>
           <button type="button" class="btn" id="preset-ollama">Ollama (local)</button>
@@ -2851,7 +2852,8 @@ $('preset-openrouter').addEventListener('click', () =>
 // hf_ token. The model is only a default: paste ANY repo id, e.g. the newest
 // trending model from huggingface.co/models?sort=trending.
 $('preset-hf').addEventListener('click', () =>
-  fillProvider('Hugging Face', 'https://router.huggingface.co/v1', 'meta-llama/Llama-4-Scout-17B-16E-Instruct'));
+  fillProvider('Hugging Face', 'https://router.huggingface.co/v1', 'meta-llama/Llama-4-Scout-17B-16E-Instruct'));$('preset-zen').addEventListener('click', () =>
+  fillProvider('OpenCode Zen', 'https://opencode.ai/zen/v1', 'big-pickle'));
 $('preset-a2icore').addEventListener('click', () =>
   fillProvider('A2I Core', 'http://127.0.0.1:8990', ''));
 // vLLM serves /v1/chat/completions and /v1/completions on port 8000 — the
