@@ -195,7 +195,6 @@
     aside.open { transform: translateX(0); box-shadow: var(--shadow); }
     #menu-btn { display: block; }
   }
-</style>
 
 <!-- ============================================================
      A2I 2.0 — design upgrade (layered over the base styles above)
@@ -547,7 +546,6 @@
     transition: transform .12s;
   }
   #install-btn:hover { transform: translateY(-1px); }
-</style>
 
 <!-- ============================================================
      A2I 3.0 — modern minimal (layered over 1.0 + 2.0)
@@ -710,7 +708,6 @@
   .brain-row { border-radius: 9px; background: var(--panel); border: 1px solid var(--border); }
   .row-btns { gap: .45rem; }
   .model-guide summary { color: var(--accent); }
-</style>
 
 <!-- ============================================================
      A2I 4.0 — polish layer: welcome cards, reasoning, toasts,
@@ -830,7 +827,6 @@
     padding: 1.2rem 1rem; text-align: center; color: var(--muted);
     font-size: .85rem; border: 1px dashed var(--border); border-radius: 12px; margin: .4rem;
   }
-</style>
 /* ================= Homepage (/) ================= */
 .home-root { flex: 1; overflow-y: auto; background: var(--bg); color: var(--text); font-family: 'Inter', 'Noto Sans Khmer', ui-sans-serif, system-ui, sans-serif; }
 .home-root * { box-sizing: border-box; }
