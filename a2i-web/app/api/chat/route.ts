@@ -30,7 +30,6 @@ export async function GET() {
 export async function POST(request: Request) {
   const base = process.env.A2I_API_BASE;
   const key = process.env.A2I_API_KEY;
-  const model = process.env.A2I_MODEL || 'default';
 
   if (!base || !key) {
     return json(
@@ -45,12 +44,17 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { messages?: unknown[]; temperature?: number; max_tokens?: number };
+  let body: { messages?: unknown[]; temperature?: number; max_tokens?: number; model?: string };
   try {
     body = await request.json();
   } catch {
     return json({ error: 'invalid JSON body' }, 400);
   }
+
+  // The browser may pick a specific model (e.g. one of the Zen model list);
+  // fall back to the A2I_MODEL env var when none is sent.
+  const clientModel = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : '';
+  const model = clientModel || process.env.A2I_MODEL || 'default';
 
   let upstream: Response;
   try {

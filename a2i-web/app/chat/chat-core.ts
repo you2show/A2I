@@ -976,7 +976,9 @@ serverUrl.addEventListener('change', () => {
 modelSel.addEventListener('change', () => {
   loadedModel = null; webllmEngine = null;
   const mode = engineSel.value;
-  if (mode.startsWith('server:')) {
+  if (mode === 'cloud') {
+    localStorage.setItem('a2i-cloud-model', modelSel.value);
+  } else if (mode.startsWith('server:')) {
     const brain = currentServerBrain();
     if (brain) { brain.model = modelSel.value; saveBrains(); }
   } else if (mode === 'gemini') {
@@ -1007,6 +1009,19 @@ function syncModelPicker() {
     modelSel.title = 'Gemini model';
     return;
   }
+  if (mode === 'cloud') {
+    const cur = CLOUD_MODEL();
+    const models = [];
+    (zenModels || []).forEach((m) => { if (!models.includes(m)) models.push(m); });
+    if (cur && !models.includes(cur)) models.unshift(cur);
+    modelSel.innerHTML = models.length
+      ? models.map((m) => '<option value="' + m + '">' + m + '</option>').join('')
+      : '<option value="' + cur + '">' + cur + '</option>';
+    modelSel.value = cur;
+    modelSel.style.display = 'inline-block';
+    modelSel.title = 'A2I Cloud model';
+    return;
+  }
   if (mode.startsWith('server:') && brain) {
     const zen = /opencode\.ai\/zen|\/api\/zen/.test(brain.url);
     const models = [];
@@ -1034,7 +1049,7 @@ function refreshBar() {
   if (mode === 'auto') {
     setStatus('🔄 Auto — uses the best brain, auto-switches on limits', true);
   } else if (mode === 'cloud') {
-    setStatus('☁️ A2I Cloud — fast, no download', true);
+    setStatus('☁️ A2I Cloud — ' + CLOUD_MODEL(), true);
   } else if (mode === 'gemini') {
     setStatus(`✨ Gemini ${GEMINI_MODEL()} — using your API key`, true);
   } else if (mode === 'browser') {
@@ -1541,6 +1556,7 @@ async function askGemini(messages, onDelta, signal) {
 let cloudAvailable = false;
 let cloudModel = '';
 let cloudBase = '';
+const CLOUD_MODEL = () => localStorage.getItem('a2i-cloud-model') || cloudModel || 'big-pickle';
 
 async function checkCloud() {
   try {
@@ -1590,7 +1606,7 @@ async function askCloud(messages, onDelta, signal) {
     res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: toOpenAIMessages(messages), max_tokens: 1024 }),
+      body: JSON.stringify({ messages: toOpenAIMessages(messages), max_tokens: 1024, model: CLOUD_MODEL() }),
       signal,
     });
   } catch (err) {
@@ -2377,6 +2393,7 @@ async function refreshZenModels() {
     if ($('set-brain-name').value === 'OpenCode Zen' && !$('set-brain-model').value) {
       $('set-brain-model').value = free[0] || zenModels[0] || 'big-pickle';
     }
+    if (engineSel.value === 'cloud') syncModelPicker();
     return zenModels;
   } catch (err) {
     btn.textContent = '↻ Zen models (offline)';
