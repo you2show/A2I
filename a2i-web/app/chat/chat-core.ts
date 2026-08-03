@@ -2379,8 +2379,10 @@ async function refreshZenModels() {
   }
 }
 $('preset-zen-refresh').addEventListener('click', () => refreshZenModels());
-// Warm the list once on load so the datalist is ready before the user looks.
-window.addEventListener('load', () => {
+// Warm the list once the chat DOM is up so the datalist + cloud model picker
+// are ready before the user looks. `load` may already have fired by the time
+// ChatShell injects this markup, so fall back to running immediately.
+const warmZen = () => {
   refreshZenModels();
   // Migrate brains saved with the old direct Zen URL (https://opencode.ai/zen/v1)
   // to the same-origin proxy, then recreate a missing Zen brain if a key is saved.
@@ -2391,7 +2393,9 @@ window.addEventListener('load', () => {
   });
   if (migrated) { saveBrains(); rebuildEngineSelect(engineSel.value); }
   if (ZEN_KEY() && zenBrainIndex() < 0) ensureZenBrain();
-});
+};
+if (document.readyState === 'complete') setTimeout(warmZen, 0);
+else window.addEventListener('load', warmZen);
 // Opencode Server bridge: A2I Core proxies oc/* models to the local
 // `opencode serve` agent loop (session create + prompt). No key needed —
 // a2i-core reuses the server password from OPENCODE_SERVER_PASSWORD.
@@ -2621,12 +2625,14 @@ $('project-edit').addEventListener('click', async () => {
 // ---- PWA: installable + offline app ------------------------------------
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
+  const registerSw = async () => {
     try {
       const reg = await navigator.serviceWorker.register('sw.js');
       reg.update();
     } catch { /* offline install optional */ }
-  });
+  };
+  if (document.readyState === 'complete') setTimeout(registerSw, 0);
+  else window.addEventListener('load', registerSw);
   // When a new service worker takes control (updated code), reload once so the
   // user always ends up on the freshest version instead of stale cached code.
   let swReloaded = false;
