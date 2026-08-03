@@ -2,6 +2,8 @@
 // Runs inside a client-only React shell (ChatShell) that mounts the original
 // markup into the DOM before initApp() executes.
 
+import { T, Tf, getLang, setLang } from '../lib/i18n';
+
 export function initApp(): void {
 // Robust element lookup: if an element is ever missing (typo, markup change),
 // return a harmless no-op stub instead of null so a single bad id can never
@@ -309,8 +311,8 @@ log.addEventListener('click', (e) => {
   const code = btn.closest('.code-wrap')?.querySelector('pre code')?.textContent;
   if (!code) return;
   navigator.clipboard?.writeText(code).then(() => {
-    btn.textContent = 'Copied ✓';
-    setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+    btn.textContent = T('copied') + ' ✓';
+    setTimeout(() => { btn.textContent = T('copy'); }, 1200);
   });
 });
 
@@ -334,12 +336,10 @@ function toast(msg, type) {
 }
 
 function showWelcome() {
-  const heading = coderMode ? '💻 A2I Coder' : 'ជម្រាបសួរ! ខ្ញុំជា A2I';
+  const heading = coderMode ? T('coderHeading') : T('welcomeHeading');
   const sub = coderMode
-    ? 'ជំនួយការសរសេរកូដ — សរសេរ · ជួសជុល · ពន្យល់<br>' +
-      'Expert coding assistant — write, debug, explain'
-    : 'AI ផ្ទាល់ខ្លួនរបស់អ្នក — រត់ក្នុងឧបករណ៍អ្នក គ្មាន API ខាងក្រៅ<br>' +
-      'Your personal all-in-one AI — private, on your device';
+    ? T('coderSub')
+    : T('welcomeSub');
   col.innerHTML = `
     <div id="welcome">
       <div class="logo-big">A2</div>
@@ -352,17 +352,9 @@ function showWelcome() {
   col.querySelector('#welcome p').innerHTML = sub;
   const chips = col.querySelector('.chips');
   const prompts = coderMode ? [
-    'Write a Python function to parse a CSV file',
-    'Explain this error: TypeError: undefined is not a function',
-    'បង្កើត REST API ជាមួយ FastAPI',
-    'Review this code for bugs and security issues',
+    T('chipCsv'), T('chipError'), T('chipApi'), T('chipReview'),
   ] : [
-    'ពន្យល់ពីរបៀប AI ដំណើរការ',
-    'What is 127 x 49?',
-    '/image sunset over Angkor Wat',
-    '/audio Welcome to A2I',
-    'Write a short poem about Cambodia',
-    'ពន្យល់ពីអត្ថប្រយោជន៍របស់ AI',
+    T('chipHowAi'), T('chipMath'), T('chipImage'), T('chipAudio'), T('chipPoem'), T('chipBenefits'),
   ];
   for (const text of prompts) {
     const chip = document.createElement('button');
@@ -386,10 +378,10 @@ function showWelcome() {
     b.addEventListener('click', click);
     feats.appendChild(b);
   };
-  mk('🧠', 'In-browser AI', 'Runs offline on your device', 'Local only', 'warn',
+  mk('🧠', T('featBrowserT'), T('featBrowserS'), T('featBrowserSt'), 'warn',
     () => { engineSel.value = 'browser'; engineSel.dispatchEvent(new Event('change')); });
-  mk('⚡', 'OpenCode Zen', 'Free frontier models — server configured',
-    cloudAvailable ? '✓ Server ready' : (zenOK ? '✓ Active' : 'Set up free'),
+  mk('⚡', T('featZenT'), T('featZenS'),
+    cloudAvailable ? T('featZenStReady') : (zenOK ? T('featZenStActive') : T('featZenStSetup')),
     cloudAvailable ? 'ok' : (zenOK ? 'ok' : 'warn'),
     () => {
       if (cloudAvailable) {
@@ -398,13 +390,13 @@ function showWelcome() {
         $('preset-zen').click();
       }
     });
-  mk('✨', 'Gemini', 'Your own Google key', gemOK ? '✓ Active' : 'Not set', gemOK ? 'ok' : 'warn',
+  mk('✨', T('featGemT'), T('featGemS'), gemOK ? T('featZenStActive') : T('featGemSt'), gemOK ? 'ok' : 'warn',
     () => openSettings('gemini'));
-  mk('🌐', 'Web search', 'Answers grounded in sources', 'Toggle in topbar', 'ok',
+  mk('🌐', T('featWebT'), T('featWebS'), T('featWebSt'), 'ok',
     () => { const t = $('wiki-toggle'); if (t) { t.checked = !t.checked; t.dispatchEvent(new Event('change')); } });
   mk('🗣️', 'Live voice', '3D voice AI — talk to A2I', 'Live page', 'ok',
     () => { location.href = '/live'; });
-  mk('🎨', 'Image & audio', 'Generate pictures and voice', '/image · /audio', 'ok',
+  mk('🎨', T('featMediaT'), T('featMediaS'), T('featMediaSt'), 'ok',
     () => { input.focus(); });
   feats.style.display = 'none';
   requestAnimationFrame(() => { feats.style.display = 'grid'; });
@@ -899,14 +891,14 @@ function rebuildEngineSelect(selected) {
   };
   const hasGemini = !!GEMINI_KEY();
   const hasProviders = hasGemini || serverBrains.length > 0 || cloudAvailable;
-  if (hasProviders) add('auto', '🔄 Auto — best available (auto-failover)');
+  if (hasProviders) add('auto', '🔄 ' + T('engAuto'));
   if (cloudAvailable) add('cloud', cloudModel ? '☁️ A2I Cloud — ' + cloudModel + ' (server)' : '☁️ A2I Cloud (fast, no download)');
   if (hasGemini) add('gemini', '✨ Gemini (' + GEMINI_MODEL() + ')');
-  add('browser', '🧠 In-browser AI (no server, no API)');
+  add('browser', '🧠 ' + T('engBrowser'));
   serverBrains.forEach((b, i) => add('server:' + i, '🖥️ ' + b.name + brainStatusLabel(b)));
-  add('all', '🧩 All brains together / ខួរក្បាលទាំងអស់រួមគ្នា');
-  add('gemini-setup', hasGemini ? '✨ Change Gemini API key…' : '✨ Add Gemini API key…');
-  add('add', '➕ Add brain (Ollama, LM Studio, any URL)…');
+  add('all', '🧩 ' + T('engAll'));
+  add('gemini-setup', hasGemini ? '✨ ' + T('engGeminiChange') : '✨ ' + T('engGeminiAdd'));
+  add('add', '➕ ' + T('engAdd'));
   // Prefer the caller's choice, then the last remembered engine (if still
   // valid), then a sensible default: Cloud → Gemini → in-browser.
   const saved = localStorage.getItem('a2i-engine');
@@ -1047,19 +1039,19 @@ function refreshBar() {
   serverUrl.style.display = brain ? 'inline-block' : 'none';
   if (brain) serverUrl.value = brain.url;
   if (mode === 'auto') {
-    setStatus('🔄 Auto — uses the best brain, auto-switches on limits', true);
+    setStatus(T('stAuto'), true);
   } else if (mode === 'cloud') {
     setStatus('☁️ A2I Cloud — ' + CLOUD_MODEL(), true);
   } else if (mode === 'gemini') {
-    setStatus(`✨ Gemini ${GEMINI_MODEL()} — using your API key`, true);
+    setStatus(`✨ Gemini ${GEMINI_MODEL()} — ` + T('stGemini'), true);
   } else if (mode === 'browser') {
     setStatus(loadedModel ? `ready: ${loadedModel}`
-      : navigator.gpu ? 'model loads on first message'
-      : 'no GPU — CPU mode will load on first message', !!loadedModel);
+      : navigator.gpu ? T('stModelLoads')
+      : T('stCpuMode'), !!loadedModel);
   } else if (mode === 'all') {
-    setStatus(`will ask ${serverBrains.length + (loadedModel ? 1 : 0)}+ brains and combine`);
+    setStatus(Tf('stAll', { n: String(serverBrains.length + (loadedModel ? 1 : 0)) }));
   } else if (brain) {
-    setStatus(`will call ${brain.name}`);
+    setStatus(Tf('stBrain', { name: brain.name }));
   }
 }
 
@@ -1112,9 +1104,9 @@ function stallGuard(ms) {
 }
 
 async function loadGpuEngine(model) {
-  setStatus('loading AI library…');
+  setStatus(T('stLoadingLib'));
   const webllm = await loadWebLLM();
-  setStatus('downloading model (one time)…');
+  setStatus(T('stDownloadingModel'));
   progress.hidden = false;
   const watch = stallGuard(60000);
   const engine = await Promise.race([
@@ -1124,7 +1116,7 @@ async function loadGpuEngine(model) {
         watch.ping();
         progress.value = p.progress || 0;
         const pct = Math.round((p.progress || 0) * 100);
-        setStatus(`⬇ ទាញ AI model ${pct}% (ម្តងគត់) · downloading ${pct}% (one-time)`);
+        setStatus(Tf('stDownloadPct', { pct: String(pct) }));
       },
     }),
   ]).finally(() => watch.clear());
@@ -1244,22 +1236,20 @@ $('set-local-model').addEventListener('click', async () => {
   const f = await pickLocalModel();
   if (!f) return;
   webllmEngine = null; // drop the cached engine so the next message reloads with this file
-  setStatus('📂 Model file set: ' + f.name + ' — ចាប់ផ្ដើមឆាតដើម្បីប្រើ (no download)', false);
+  setStatus(Tf('stModelFileSet', { name: f.name }), false);
   refreshLocalModelState();
 });
 $('set-local-model-clear').addEventListener('click', async () => {
   localModelFile = null;
   webllmEngine = null;
   await clearModelHandle();
-  setStatus('Local model cleared — will download on next use', false);
+  setStatus(T('stLocalCleared'), false);
   refreshLocalModelState();
 });
 refreshLocalModelState();
 
 async function loadCpuEngine(forceCompat = false) {
-  setStatus(forceCompat
-    ? 'ប្រើ CPU (compat) / compatibility mode…'
-    : 'ប្រើ CPU / using CPU mode…');
+  setStatus(forceCompat ? T('stCpuCompat') : T('stCpu'));
   const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
   const wllama = new Wllama(
     { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
@@ -1289,7 +1279,7 @@ async function loadCpuEngine(forceCompat = false) {
   // from the File, with no network download at all.
   const localFile = await getLocalModelBlob();
   if (localFile) {
-    setStatus('📂 ផ្ទុក model ពី file… ' + localFile.name + ' (គ្មាន download)');
+    setStatus(Tf('stUsingLocalFile', { name: localFile.name }));
     await Promise.race([
       watch.signal,
       wllama.loadModel([localFile], modelCfg),
@@ -1304,7 +1294,7 @@ async function loadCpuEngine(forceCompat = false) {
           progress.value = total ? loaded / total : 0;
           const pct = Math.round(100 * (loaded / (total || 1)));
           const mb = Math.round(loaded / 1048576);
-          setStatus(`⬇ ទាញ AI model (CPU) ${pct}% · ${mb}MB (ម្តងគត់ · one-time download)`);
+          setStatus(Tf('stDownloadPctCpu', { pct: String(pct), mb: String(mb) }));
         },
       }),
     ]).finally(() => watch.clear());
@@ -1371,7 +1361,7 @@ async function ensureBrowserEngine() {
       // the GPU when a small model fails — a genuine device/driver problem.
       const isBigModel = /\b(7B|8B|9B|13B)\b/i.test(modelSel.value);
       if (!isBigModel) localStorage.setItem('a2i-gpu-broken', '1');
-      setStatus('GPU មិនដំណើរការ — ប្តូរទៅ CPU ស្វ័យប្រវត្តិ / GPU failed, switching to CPU…');
+      setStatus(T('stGpuFail'));
     }
   }
 
@@ -1384,7 +1374,7 @@ async function ensureBrowserEngine() {
   for (const forceCompat of cpuPlans) {
     try {
       const engine = await loadCpuEngine(forceCompat);
-      setStatus('កំពុងសាកល្បង AI… / warming up…');
+      setStatus(T('stWarming'));
       await Promise.race([
         engine.warmup(),
         new Promise((_, reject) =>
@@ -1392,21 +1382,21 @@ async function ensureBrowserEngine() {
       ]);
       webllmEngine = engine;
       loadedModel = (localModelFile ? localModelFile.name : CPU_MODEL_NAME) + (engine.compat ? ' — compat' : '');
-      setStatus(`ready: ${loadedModel} — CPU mode, slower`, true);
+      setStatus(Tf('stCpuSlower', { model: loadedModel }), true);
       return webllmEngine;
     } catch (err) {
       progress.hidden = true;
       errors.push('CPU' + (forceCompat ? ' compat' : '') + ': ' + err.message);
       if (!forceCompat) {
-        setStatus('ប្តូរទៅ engine ត្រូវគ្នា… / switching to compatibility engine…');
+        setStatus(T('stCompatEngine'));
       }
     }
   }
 
   throw new Error(
-    'មិនអាចចាប់ផ្តើម AI ក្នុងឧបករណ៍បានទេ — សូមបើក check.html ដើម្បីមើលមូលហេតុ ' +
-    'ឬប្រើ engine មួយផ្សេង (A2I Core / Ollama)។ ' +
-    '(Could not start any in-browser engine — open check.html to diagnose.) ' +
+    T('errNoBrowserEngine') + ' ' +
+    T('errNoBrowserEngine2') + ' ' +
+    T('errNoBrowserEngine3') + ' ' +
     errors.join(' | '));
 }
 
@@ -1522,7 +1512,7 @@ async function readGeminiSSE(res, onDelta, signal) {
 
 async function askGemini(messages, onDelta, signal) {
   const key = GEMINI_KEY();
-  if (!key) throw new Error('គ្មាន Gemini API key — សូម paste key សិន។ (No Gemini API key set.)');
+  if (!key) throw new Error(T('errNoGemKey'));
   const url = `https://generativelanguage.googleapis.com/v1beta/models/` +
     `${encodeURIComponent(GEMINI_MODEL())}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`;
   let res;
@@ -1535,18 +1525,14 @@ async function askGemini(messages, onDelta, signal) {
     });
   } catch (err) {
     if (signal?.aborted) return '';
-    throw new Error('មិនអាចភ្ជាប់ Gemini បានទេ។ (Could not reach Gemini.)');
+    throw new Error(T('errGemReach'));
   }
   if (res.status === 429) {
-    throw new Error(
-      'Gemini៖ quota free-tier អស់ (429) — សូម (1) រង់ចាំ ១ នាទី, ' +
-      '(2) ប្តូរ model ទៅ gemini-2.5-flash / gemini-2.0-flash, ឬ ' +
-      '(3) ប្រើ ⚡ Groq/OpenRouter (free) ក្នុង Settings។ ' +
-      '(Free-tier quota hit — wait, switch to a flash model, or use Groq/OpenRouter.)');
+    throw new Error(T('errGemQuota'));
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`Gemini error ${res.status}: ${text.slice(0, 160)}`);
+    throw new Error(Tf('errGemStatus', { s: String(res.status), t: text.slice(0, 160) }));
   }
   return readGeminiSSE(res, onDelta, signal);
 }
@@ -1590,10 +1576,8 @@ function refreshCloudStatusUI() {
   if (cs) {
     if (cloudAvailable) {
       cs.hidden = false;
-      const md = cs.querySelector('.cs-model');
-      if (md) md.textContent = cloudModel || 'default';
-      const bs = cs.querySelector('.cs-base');
-      if (bs) bs.textContent = cloudBase || 'server';
+      const body = cs.querySelector('[data-i18n-html="cloudStatusBody"]');
+      if (body) body.innerHTML = Tf('cloudStatusBody', { model: cloudModel || 'default', base: cloudBase || 'server' });
     } else {
       cs.hidden = true;
     }
@@ -1611,13 +1595,13 @@ async function askCloud(messages, onDelta, signal) {
     });
   } catch (err) {
     if (signal?.aborted) return '';
-    throw new Error('មិនអាចភ្ជាប់ A2I Cloud បានទេ។ (Could not reach A2I Cloud.)');
+    throw new Error(T('errCloudReach'));
   }
   if (res.status === 503) {
     const info = await res.json().catch(() => ({}));
-    throw new Error(info.message || 'A2I Cloud is not configured yet.');
+    throw new Error(info.message || T('errCloudNotConfig'));
   }
-  if (!res.ok) throw new Error(`A2I Cloud error ${res.status}`);
+  if (!res.ok) throw new Error(Tf('errCloudStatus', { s: String(res.status) }));
   return readSSE(res, onDelta, signal);
 }
 
@@ -1643,18 +1627,14 @@ async function askServer(brain, messages, onDelta, signal, onReason) {
     });
   } catch (err) {
     if (signal?.aborted) return '';
-    throw new Error(
-      `មិនអាចភ្ជាប់ទៅ ${brain.name} (${brain.url}) បានទេ។ ` +
-      `(Could not reach ${brain.name}.)`);
+    throw new Error(Tf('errServerReach', { name: brain.name, url: brain.url }));
   }
   if (res.status === 429) {
-    throw new Error(
-      `${brain.name}: quota/rate-limit អស់ (429) — រង់ចាំបន្តិច ឬប្តូរ provider ផ្សេង។ ` +
-      `(Rate limit — wait a moment or switch provider.)`);
+    throw new Error(Tf('errServerQuota', { name: brain.name }));
   }
   if (!res.ok) {
     const t = await res.text().catch(() => '');
-    throw new Error(`${brain.name} error ${res.status}: ${t.slice(0, 160)}`);
+    throw new Error(Tf('errServerStatus', { name: brain.name, s: String(res.status), t: t.slice(0, 160) }));
   }
   return readSSE(res, onDelta, signal, onReason);
 }
@@ -1787,11 +1767,7 @@ function warnIfModelTooSmall(question, mode) {
   if (!/\b(0\.5B|1B|1\.5B)\b/i.test(model)) return;
   smallModelWarned = true;
   addMsg('note',
-    '⚠️ Model តូច (' + model + ') សរសេរខ្មែរមិនល្អទេ — ចម្លើយអាចមើលទៅត្រឹមត្រូវ ' +
-    'តែពិតជាខុស។ សូមប្តូរទៅ model ធំជាង (Qwen2.5 7B ក្នុងបញ្ជីខាងលើ), ' +
-    'A2I Core, ឬ ✨ Gemini។ (Small models cannot write Khmer reliably — ' +
-    'their answers can look fluent but be invented. Switch to a larger model, ' +
-    'A2I Core, or Gemini.)');
+    Tf('noteSmallModel', { model }));
 }
 
 async function generate() {
@@ -1806,8 +1782,7 @@ async function generate() {
   const chosenBrain = currentServerBrain();
   if (chosenBrain && chosenBrain.online === false) {
     addMsg('note',
-      `🖥️ ${chosenBrain.name} មិន online ទេ — ប្តូរទៅ 🧠 In-browser AI ដោយស្វ័យប្រវត្តិ ` +
-      `(${chosenBrain.name} is offline — switching to the in-browser AI)`);
+      Tf('noteBrainOffline', { name: chosenBrain.name }));
     mode = 'browser';
     rebuildEngineSelect('browser');
     refreshBar();
@@ -2206,7 +2181,7 @@ if (cloudGo) cloudGo.addEventListener('click', () => {
   localStorage.setItem('a2i-engine', 'cloud');
   rebuildEngineSelect('cloud'); refreshBar();
   closeSettings();
-  toast('☁️ A2I Cloud — ' + (cloudModel || 'ready'), 'ok');
+  toast('☁️ A2I Cloud — ' + (cloudModel || T('stReady')), 'ok');
 });
 
 // Settings tabs: Models / Providers / Appearance.
@@ -2220,13 +2195,13 @@ document.querySelectorAll('.set-tab').forEach((b) => {
 $('set-gemini-save').addEventListener('click', () => {
   const key = $('set-gemini-key').value.trim();
   const model = $('set-gemini-model').value.trim() || 'gemini-2.5-flash';
-  if (!key) { $('set-gemini-state').textContent = 'enter a key first'; return; }
+  if (!key) { $('set-gemini-state').textContent = T('enterKeyFirst'); return; }
   localStorage.setItem('a2i-gemini-key', key);
   localStorage.setItem('a2i-gemini-model', model);
   localStorage.setItem('a2i-engine', 'gemini');
   rebuildEngineSelect('gemini'); refreshBar();
-  const tag = $('set-gemini-state'); tag.textContent = '✓ saved — Gemini is active'; tag.classList.add('on');
-  toast('Gemini ' + model + ' saved & activated', 'ok');
+  const tag = $('set-gemini-state'); tag.textContent = T('savedActive'); tag.classList.add('on');
+  toast(Tf('toastGemSaved', { model }), 'ok');
 });
 $('set-gemini-clear').addEventListener('click', () => {
   localStorage.removeItem('a2i-gemini-key');
@@ -2234,7 +2209,7 @@ $('set-gemini-clear').addEventListener('click', () => {
   if (localStorage.getItem('a2i-engine') === 'gemini') localStorage.removeItem('a2i-engine');
   rebuildEngineSelect('browser'); refreshBar();
   const tag = $('set-gemini-state'); tag.textContent = 'cleared'; tag.classList.remove('on');
-  toast('Gemini key cleared');
+  toast(T('toastGemCleared'));
 });
 
 // ---- OpenCode Zen: one-click free provider --------------------------------
@@ -2267,7 +2242,7 @@ function ensureZenBrain() {
 }
 
 async function testZenKey(key, tag) {
-  tag.textContent = 'testing…'; tag.classList.remove('on');
+  tag.textContent = T('testing') + '…'; tag.classList.remove('on');
   try {
     const res = await fetch(ZEN_URL + '/chat/completions', {
       method: 'POST',
@@ -2275,25 +2250,25 @@ async function testZenKey(key, tag) {
       body: JSON.stringify({ model: 'big-pickle', messages: [{ role: 'user', content: 'Reply with OK' }], max_tokens: 10 }),
       signal: AbortSignal.timeout(20000),
     });
-    if (!res.ok) throw new Error('HTTP ' + res.status + (res.status === 401 ? ' — key rejected' : ''));
-    tag.textContent = '✓ key works'; tag.classList.add('on');
-    toast('Zen key works — save to activate', 'ok');
+    if (!res.ok) throw new Error('HTTP ' + res.status + (res.status === 401 ? ' — ' + T('keyRejected') : ''));
+    tag.textContent = '✓ ' + T('keyWorks'); tag.classList.add('on');
+    toast(T('toastZenWorks'), 'ok');
     return true;
   } catch (err) {
     tag.textContent = '✗ ' + (err.message || 'failed');
-    toast('Zen test failed: ' + (err.message || 'network error'), 'err');
+    toast(Tf('toastZenTestFailed', { m: err.message || 'network error' }), 'err');
     return false;
   }
 }
 
 $('set-zen-test').addEventListener('click', () => {
   const key = $('set-zen-key').value.trim();
-  if (!key) { $('set-zen-state').textContent = 'paste a key first'; return; }
+  if (!key) { $('set-zen-state').textContent = T('pasteKeyFirst'); return; }
   testZenKey(key, $('set-zen-state'));
 });
 $('set-zen-save').addEventListener('click', async () => {
   const key = $('set-zen-key').value.trim();
-  if (!key) { $('set-zen-state').textContent = 'paste a key first'; return; }
+  if (!key) { $('set-zen-state').textContent = T('pasteKeyFirst'); return; }
   const model = ($('set-zen-model').value.trim() || 'big-pickle'); // free default; pick any from the datalist
   localStorage.setItem('a2i-zen-key', key);
   localStorage.setItem('a2i-zen-model', model);
@@ -2303,10 +2278,10 @@ $('set-zen-save').addEventListener('click', async () => {
     ensureZenBrain();
     localStorage.setItem('a2i-engine', 'server:' + zenBrainIndex());
     rebuildEngineSelect('server:' + zenBrainIndex()); refreshBar();
-    tag.textContent = '✓ saved & active'; tag.classList.add('on');
-    toast('Zen ' + model + ' saved & activated', 'ok');
+    tag.textContent = '✓ ' + T('savedActive'); tag.classList.add('on');
+    toast(Tf('toastZenSaved', { model }), 'ok');
   } else {
-    tag.textContent += ' — not saved'; 
+    tag.textContent += ' — ' + T('notSaved');
   }
 });
 $('set-zen-clear').addEventListener('click', () => {
@@ -2317,8 +2292,8 @@ $('set-zen-clear').addEventListener('click', () => {
   if (i >= 0) { serverBrains.splice(i, 1); saveBrains(); renderBrainList(); }
   if (localStorage.getItem('a2i-engine') === 'server:' + i) localStorage.removeItem('a2i-engine');
   rebuildEngineSelect('browser'); refreshBar();
-  const tag = $('set-zen-state'); tag.textContent = 'cleared'; tag.classList.remove('on');
-  toast('Zen key cleared');
+  const tag = $('set-zen-state'); tag.textContent = T('cleared'); tag.classList.remove('on');
+  toast(T('toastZenCleared'));
 });
 
 $('set-brain-add').addEventListener('click', () => {
@@ -2388,7 +2363,7 @@ async function refreshZenModels() {
       dl.appendChild(o);
     });
     const free = zenModels.filter((id) => id.endsWith('-free') || id === 'big-pickle');
-    btn.textContent = `↻ Zen models: ${zenModels.length} (${free.length} free)`;
+    btn.textContent = `↻ ${T('zenRefreshBtn')}: ${zenModels.length} (${free.length} free)`;
     zenModelsTried = true;
     if ($('set-brain-name').value === 'OpenCode Zen' && !$('set-brain-model').value) {
       $('set-brain-model').value = free[0] || zenModels[0] || 'big-pickle';
@@ -2396,7 +2371,7 @@ async function refreshZenModels() {
     if (engineSel.value === 'cloud') syncModelPicker();
     return zenModels;
   } catch (err) {
-    btn.textContent = '↻ Zen models (offline)';
+    btn.textContent = `↻ ${T('zenRefreshBtn')} (${T('offline')})`;
     zenModelsTried = true;
     return [];
   } finally {
@@ -2429,10 +2404,10 @@ async function refreshOcModels() {
   // From a public https page the browser blocks plain-http localhost calls
   // (mixed content), so only try when the page itself is local.
   if (location.protocol !== 'http:') {
-    btn.textContent = '↻ OC models (local only)';
+    btn.textContent = `↻ ${T('ocRefreshBtn')} (${T('localOnly')})`;
     return [];
   }
-  btn.textContent = '↻ Loading…';
+  btn.textContent = '↻ ' + T('loading');
   btn.disabled = true;
   try {
     const res = await fetch('http://127.0.0.1:8990/v1/models', {
@@ -2450,14 +2425,14 @@ async function refreshOcModels() {
       o.value = id;
       dl.appendChild(o);
     });
-    btn.textContent = `↻ OC models: ${ocModels.length}`;
+    btn.textContent = `↻ ${T('ocRefreshBtn')}: ${ocModels.length}`;
     ocModelsTried = true;
     if ($('set-brain-name').value === 'Opencode Server' && !$('set-brain-model').value && ocModels.length) {
       $('set-brain-model').value = ocModels[0];
     }
     return ocModels;
   } catch (err) {
-    btn.textContent = '↻ OC models (offline)';
+    btn.textContent = `↻ ${T('ocRefreshBtn')} (${T('offline')})`;
     ocModelsTried = true;
     return [];
   } finally {
@@ -2479,7 +2454,7 @@ $('set-theme').addEventListener('click', () =>
 
 function refreshAutospeak() {
   const on = localStorage.getItem('a2i-autospeak') === '1';
-  $('set-autospeak-label').textContent = 'Auto read answers: ' + (on ? 'On' : 'Off');
+  $('set-autospeak-label').textContent = on ? T('autospeakOn') : T('autospeakOff');
   $('set-autospeak').classList.toggle('primary', on);
 }
 $('set-autospeak').addEventListener('click', () => {
@@ -2506,9 +2481,9 @@ function projectState(message, busy = false) {
 
 function renderProjectList() {
   const list = $('project-list');
-  if (!projectFiles.size) { list.textContent = 'No files loaded yet.'; return; }
+  if (!projectFiles.size) { list.textContent = T('projNoFiles'); return; }
   const total = [...projectFiles.values()].reduce((n, t) => n + t.length, 0);
-  list.textContent = `${projectFiles.size} file(s), ${Math.round(total / 1024)} KB loaded`;
+  list.textContent = Tf('projFilesLoaded', { n: String(projectFiles.size), kb: String(Math.round(total / 1024)) });
 }
 
 async function addProjectFiles(fileList) {
@@ -2520,7 +2495,7 @@ async function addProjectFiles(fileList) {
     } catch { skipped++; }
   }
   renderProjectList();
-  if (skipped) projectState(`${skipped} file(s) skipped (too large or unreadable)`);
+  if (skipped) projectState(Tf('projSkipped', { n: String(skipped) }));
 }
 
 $('project-btn').addEventListener('click', () => {
@@ -2558,15 +2533,15 @@ async function callAgent(path, body) {
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
-    throw new Error(`A2I Core returned ${res.status}. ${detail.slice(0, 160)}`);
+    throw new Error(Tf('errA2ICore', { s: String(res.status), detail: detail.slice(0, 160) }));
   }
   return res.json();
 }
 
 function requireProjectInput() {
   const task = $('project-task').value.trim();
-  if (!projectFiles.size) { projectState('Load some files first'); return null; }
-  if (!task) { projectState('Type a question or task first'); return null; }
+  if (!projectFiles.size) { projectState(T('projLoadFirst')); return null; }
+  if (!task) { projectState(T('projTaskFirst')); return null; }
   return task;
 }
 
@@ -2575,18 +2550,18 @@ $('project-ask').addEventListener('click', async () => {
   if (!task) return;
   const out = $('project-output');
   out.hidden = false;
-  out.textContent = 'Thinking…';
-  projectState('asking…', true);
+  out.textContent = T('projThinking');
+  projectState(T('projAsking'), true);
   try {
     const data = await callAgent('/v1/agent/ask', {
       question: task, files: Object.fromEntries(projectFiles),
     });
-    out.innerHTML = renderMarkdown(data.answer || '(no answer)');
-    projectState('✓ done');
+    out.innerHTML = renderMarkdown(data.answer || T('projNoAnswer'));
+    projectState('✓ ' + T('projDone'));
   } catch (err) {
     out.textContent = '⚠ ' + err.message +
-      '\n\nStart A2I Core (cd a2i-core && ./run.sh), then add it in ⚙️ Settings.';
-    projectState('failed');
+      '\n\n' + T('projStartCore');
+    projectState(T('projFailed'));
   }
 });
 
@@ -2595,8 +2570,8 @@ $('project-edit').addEventListener('click', async () => {
   if (!task) return;
   const out = $('project-output');
   out.hidden = false;
-  out.textContent = 'Working… the model is writing edits.';
-  projectState('editing…', true);
+  out.textContent = T('projWorking');
+  projectState(T('projEditing'), true);
   try {
     const data = await callAgent('/v1/agent/edit', {
       task, files: Object.fromEntries(projectFiles),
@@ -2635,11 +2610,11 @@ $('project-edit').addEventListener('click', async () => {
       // Keep the panel's copy in sync so follow-up edits build on this one.
       projectFiles.set(path, content);
     }
-    projectState(changed.length ? '✓ done' : 'no changes');
+    projectState(changed.length ? '✓ ' + T('projDone') : T('projNoChanges'));
   } catch (err) {
     out.textContent = '⚠ ' + err.message +
-      '\n\nStart A2I Core (cd a2i-core && ./run.sh), then add it in ⚙️ Settings.';
-    projectState('failed');
+      '\n\n' + T('projStartCore');
+    projectState(T('projFailed'));
   }
 });
 
@@ -2703,11 +2678,11 @@ exportMenu.querySelectorAll('button').forEach((b) => {
   b.addEventListener('click', async () => {
     const md = chatToMarkdown();
     exportMenu.hidden = true;
-    if (!md) { addMsg('note', 'ជជែកទទេ — គ្មានអ្វីនាំចេញ។ (Nothing to export yet.)'); return; }
+    if (!md) { addMsg('note', T('noteNothingExport')); return; }
     const act = b.dataset.act;
     if (act === 'copy') {
-      try { await navigator.clipboard.writeText(md); b.innerHTML = svgIcon('check') + ' Copied'; } catch { /* */ }
-      setTimeout(() => { b.innerHTML = svgIcon('copy') + ' Copy chat'; }, 1200);
+      try { await navigator.clipboard.writeText(md); b.innerHTML = svgIcon('check') + ' ' + T('copied'); } catch { /* */ }
+      setTimeout(() => { b.innerHTML = svgIcon('copy') + ' ' + T('copyChat'); }, 1200);
     } else if (act === 'download') {
       const blob = new Blob([md], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
@@ -2720,7 +2695,7 @@ exportMenu.querySelectorAll('button').forEach((b) => {
       if (navigator.share) {
         try { await navigator.share({ title: 'A2I chat', text: md }); } catch { /* cancelled */ }
       } else {
-        try { await navigator.clipboard.writeText(md); addMsg('note', 'Share not supported — copied to clipboard instead.'); } catch { /* */ }
+        try { await navigator.clipboard.writeText(md); addMsg('note', T('noteShareCopied')); } catch { /* */ }
       }
     }
   });
@@ -2735,14 +2710,14 @@ let paletteItems = [], paletteSel = 0;
 
 function paletteActions() {
   const list = [
-    { icon: 'plus', label: 'New chat', run: newChat },
-    { icon: 'code', label: (coderMode ? 'Turn OFF' : 'Turn ON') + ' Coder mode', run: () => $('coder-btn').click() },
-    { icon: 'settings', label: 'Settings — API keys, servers', run: () => openSettings() },
-    { icon: 'sparkles', label: 'Add / change Gemini API key', run: () => openSettings('gemini') },
-    { icon: 'bot', label: 'Open Live 3D voice', run: () => { location.href = '/live'; } },
-    { icon: 'contrast', label: 'Toggle light / dark theme', run: () =>
+    { icon: 'plus', label: T('palNewChat'), run: newChat },
+    { icon: 'code', label: T(coderMode ? 'palCoderOff' : 'palCoderOn'), run: () => $('coder-btn').click() },
+    { icon: 'settings', label: T('palSettings'), run: () => openSettings() },
+    { icon: 'sparkles', label: T('palGemini'), run: () => openSettings('gemini') },
+    { icon: 'bot', label: T('palLive'), run: () => { location.href = '/live'; } },
+    { icon: 'contrast', label: T('palTheme'), run: () =>
       applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
-    { icon: 'download', label: 'Copy this chat (Markdown)', run: async () => {
+    { icon: 'download', label: T('palCopy'), run: async () => {
       const md = chatToMarkdown(); if (md) await navigator.clipboard.writeText(md).catch(() => {}); } },
   ];
   return list;
@@ -2783,7 +2758,7 @@ function renderPalette() {
   if (paletteItems.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'pal-empty';
-    empty.textContent = 'No matches — try “zen”, “new chat”, “dark”, or just ask in the box below.';
+    empty.textContent = T('palEmpty');
     paletteList.appendChild(empty);
   }
 }
@@ -2812,6 +2787,48 @@ $('search-btn').addEventListener('click', openPalette);
 document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
 });
+
+// ---- Language switching (km / en) --------------------------------------
+
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n');
+    if (!key) return;
+    const val = T(key);
+    if (el.hasAttribute('data-i18n-html')) el.innerHTML = val;
+    else el.textContent = val;
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-ph');
+    if (key) el.setAttribute('placeholder', T(key));
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-title');
+    if (key) el.setAttribute('title', T(key));
+  });
+  document.documentElement.lang = getLang();
+}
+
+function refreshLangUI() {
+  rebuildEngineSelect(engineSel.value);
+  refreshBar();
+  if ($('welcome')) showWelcome();
+  refreshCloudStatusUI();
+  renderBrainList();
+  refreshAutospeak();
+  if ($('preset-zen-refresh')) $('preset-zen-refresh').textContent = `↻ ${T('zenRefreshBtn')}`;
+  if ($('preset-oc-refresh')) $('preset-oc-refresh').textContent = `↻ ${T('ocRefreshBtn')}`;
+  const langBtn = $('lang-btn');
+  if (langBtn) langBtn.textContent = getLang() === 'km' ? 'EN' : 'ខ្មែរ';
+}
+
+$('lang-btn').addEventListener('click', () => {
+  setLang(getLang() === 'km' ? 'en' : 'km');
+  applyLang();
+  refreshLangUI();
+});
+applyLang();
+refreshLangUI();
 
 // ---- Init --------------------------------------------------------------
 

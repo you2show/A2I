@@ -1,5 +1,7 @@
 // A2I Live core — ported 1:1 from live.html.
 
+import { T } from '../lib/i18n';
+
 export function initLive(): void {
 const _elStub = new Proxy({}, {
   get(_t, p) {
@@ -136,9 +138,7 @@ async function askModel(messages, onDelta, signal) {
     body: JSON.stringify({ messages, max_tokens: 512 }), signal,
   }).catch(() => null);
   if (res && res.ok) return await readSSE(res, onDelta);
-  throw new Error(
-    'មិនអាចភ្ជាប់ខួរក្បាល A2I បានទេ — ចាប់ផ្តើម A2I Core (http://127.0.0.1:8990) សិន។ ' +
-    '(No A2I brain reachable — start A2I Core first.)');
+  throw new Error(T('liveErrBrain'));
 }
 
 // ---- Voice output (the robot speaks) -----------------------------------
@@ -156,8 +156,8 @@ function speak(text) {
     || voices.find((v) => v.lang?.toLowerCase().startsWith('en'));
   if (v) u.voice = v;
   u.rate = 1; u.pitch = 1;
-  u.onstart = () => setState('speaking', 'speaking…');
-  u.onend = () => { setState('idle', 'tap the mic and speak'); if (autoListen) startRecog(); };
+  u.onstart = () => setState('speaking', T('liveSpeaking'));
+  u.onend = () => { setState('idle', T('liveCaption')); if (autoListen) startRecog(); };
   speechSynthesis.speak(u);
 }
 
@@ -169,14 +169,14 @@ async function handle(text) {
   capUser.textContent = '“' + text + '”';
   capAI.textContent = '';
   history.push({ role: 'user', content: text });
-  setState('thinking', 'thinking…');
+  setState('thinking', T('liveThinking'));
   try {
     const answer = await askModel(history, (t) => { capAI.textContent = t; }, controller.signal);
     if (answer) { history.push({ role: 'assistant', content: answer }); speak(answer); }
-    else setState('idle', 'tap the mic and speak');
+    else setState('idle', T('liveCaption'));
   } catch (err) {
     capAI.textContent = '⚠ ' + err.message;
-    setState('idle', 'tap the mic and speak');
+    setState('idle', T('liveCaption'));
   }
 }
 
@@ -198,7 +198,7 @@ function buildRecog() {
   r.lang = lang === 'km' ? 'km-KH' : 'en-US';
   r.interimResults = true;
   r.continuous = false;
-  r.onstart = () => { listening = true; setState('listening', 'listening…'); micBtn.classList.remove('off'); startMicAnalyser(); };
+  r.onstart = () => { listening = true; setState('listening', T('liveListening')); micBtn.classList.remove('off'); startMicAnalyser(); };
   r.onresult = (e) => {
     let txt = '';
     for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
@@ -208,14 +208,14 @@ function buildRecog() {
   r.onerror = (e) => {
     listening = false; stopMicAnalyser();
     setState('idle', e.error === 'not-allowed'
-      ? 'microphone blocked — allow mic access' : 'tap the mic and speak');
+      ? T('liveMicBlocked') : T('liveCaption'));
   };
-  r.onend = () => { listening = false; stopMicAnalyser(); if (body.dataset.state === 'listening') setState('idle', 'tap the mic and speak'); };
+  r.onend = () => { listening = false; stopMicAnalyser(); if (body.dataset.state === 'listening') setState('idle', T('liveCaption')); };
   return r;
 }
 
 function startRecog() {
-  if (!SR) { setState('idle', 'voice input not supported — type instead'); return; }
+  if (!SR) { setState('idle', T('liveNoVoice')); return; }
   if (listening) return;
   recog = buildRecog();
   try { recog.start(); } catch { /* already started */ }
@@ -223,7 +223,7 @@ function startRecog() {
 function stopRecog() { try { recog?.stop(); } catch {} listening = false; }
 
 micBtn.addEventListener('click', () => {
-  if (!SR) { input.focus(); setState('idle', 'voice not supported here — type below'); return; }
+  if (!SR) { input.focus(); setState('idle', T('liveNoVoice2')); return; }
   if (listening) stopRecog(); else startRecog();
 });
 
@@ -254,12 +254,12 @@ geminiBtn.addEventListener('click', () => {
     GEMINI_KEY());
   if (key === null) return;
   if (!key.trim()) { localStorage.removeItem('a2i-gemini-key'); refreshGeminiBtn();
-    setState('idle', 'Gemini cleared — using local A2I Core'); return; }
+    setState('idle', T('liveGemCleared')); return; }
   localStorage.setItem('a2i-gemini-key', key.trim());
   const model = prompt('Gemini model (e.g. gemini-2.0-flash, gemini-2.5-flash):', GEMINI_MODEL());
   if (model && model.trim()) localStorage.setItem('a2i-gemini-model', model.trim());
   refreshGeminiBtn();
-  setState('idle', '✨ Gemini ready — tap the mic and speak');
+  setState('idle', T('liveGemReady'));
 });
 refreshGeminiBtn();
 
@@ -342,9 +342,16 @@ function drawViz() {
 requestAnimationFrame(drawViz);
 
 // ---- Init --------------------------------------------------------------
+document.querySelectorAll('[data-i18n]').forEach((el) => {
+  const key = el.getAttribute('data-i18n');
+  if (key) el.textContent = T(key);
+});
+document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+  const key = el.getAttribute('data-i18n-ph');
+  if (key) el.setAttribute('placeholder', T(key));
+});
 $('foot').innerHTML = SR
-  ? 'និយាយ ឬវាយ — ភ្ជាប់ A2I Core មូលដ្ឋាន · talk or type · powered by your local A2I Core. ' +
-    '<span style="opacity:.7">(Voice recognition uses your browser\'s speech service.)</span>'
-  : 'Browser នេះមិនគាំទ្រការនិយាយទេ — សូមវាយសួរ · this browser has no speech input — type to chat.';
+  ? T('liveFootSR') + ' <span style="opacity:.7">(' + T('liveFootNote') + ')</span>'
+  : T('liveFootNoSR');
 if (!SR) micBtn.classList.add('off');
 }
