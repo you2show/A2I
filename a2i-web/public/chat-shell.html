@@ -228,25 +228,6 @@
         <option value="Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC">Qwen2.5 Coder 7B (~4.5GB)</option>
       </optgroup>
     </select>
-    <input id="server-url" data-i18n-ph="serverUrlPh" placeholder="http://127.0.0.1:8990 (OpenAI-compatible URL)">
-    <button type="button" id="coder-btn" title="Coder mode — expert coding assistant"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> <span data-i18n="coderBtn">Coder</span></button>
-    <label class="wiki"><input type="checkbox" id="wiki-toggle" checked> 🌐 <span data-i18n="webLbl">Web</span></label>
-    <select id="search-mode" title="Which sources to search">
-      <option value="auto" data-i18n="srcAuto">🔎 Auto sources</option>
-      <option value="web" data-i18n="srcWeb">📖 Encyclopedia</option>
-      <option value="academic" data-i18n="srcAcademic">🎓 Academic (arXiv)</option>
-      <option value="discussions" data-i18n="srcDiscussions">💬 Discussions (HN)</option>
-      <option value="off" data-i18n="srcOff">🚫 No search</option>
-    </select>
-    <a href="/live" id="live-link" title="3D voice AI — talk to A2I"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> <span data-i18n="liveLink">Live</span></a>
-    <div class="menu-wrap">
-      <button type="button" id="export-btn" data-i18n-title="tExport"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><line x1="4" y1="21" x2="20" y2="21"/></svg></button>
-      <div id="export-menu" class="popmenu" hidden>
-        <button type="button" data-act="copy"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> <span data-i18n="copyChat">Copy chat</span></button>
-        <button type="button" data-act="download"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><line x1="4" y1="21" x2="20" y2="21"/></svg> <span data-i18n="downloadMd">Download .md</span></button>
-        <button type="button" data-act="share"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> <span data-i18n="share">Share</span></button>
-      </div>
-    </div>
     <div id="status-wrap">
       <progress id="progress" max="1" value="0" hidden></progress>
       <span id="status" data-i18n="statusReady">ready</span>
