@@ -642,12 +642,8 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
     --ok: #3ecf8e; --listen: #4aa8ff; --think: #f0b429; --speak: #3ecf8e;
     --border: rgba(140, 150, 200, .18);
   }
-  * { box-sizing: border-box; margin: 0; }
-  .live-shell { height: 100%; }
-  body {
-    font-family: ui-sans-serif, system-ui, "Segoe UI", "Noto Sans Khmer", sans-serif;
-    background: var(--bg); color: var(--text); overflow: hidden; height: 100dvh;
-  }
+  .live-shell { height: 100%; font-family: ui-sans-serif, system-ui, "Segoe UI", "Noto Sans Khmer", sans-serif; }
+  body:has(.live-shell) { overflow: hidden; }
   /* animated future background */
   .live-shell .bg {
     position: fixed; inset: 0; z-index: 0;
@@ -701,7 +697,7 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
     transition: background .5s, opacity .5s, transform .5s; transform: scale(.9);
   }
   .live-shell[data-state="listening"] .halo { background: radial-gradient(circle, var(--listen), transparent 60%); opacity: .8; animation: pulse 1.4s ease-in-out infinite; }
-  .live-shell[data-state="thinking"]  .live-shell .halo { background: radial-gradient(circle, var(--think), transparent 60%); opacity: .8; animation: pulse 1s ease-in-out infinite; }
+  .live-shell[data-state="thinking"] .halo { background: radial-gradient(circle, var(--think), transparent 60%); opacity: .8; animation: pulse 1s ease-in-out infinite; }
   .live-shell[data-state="speaking"]  .live-shell .halo { background: radial-gradient(circle, var(--speak), transparent 60%); opacity: .85; animation: pulse .7s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { transform: scale(.86); } 50% { transform: scale(1.02); } }
 
