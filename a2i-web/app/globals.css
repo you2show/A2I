@@ -698,7 +698,7 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
   }
   .live-shell[data-state="listening"] .halo { background: radial-gradient(circle, var(--listen), transparent 60%); opacity: .8; animation: pulse 1.4s ease-in-out infinite; }
   .live-shell[data-state="thinking"] .halo { background: radial-gradient(circle, var(--think), transparent 60%); opacity: .8; animation: pulse 1s ease-in-out infinite; }
-  .live-shell[data-state="speaking"]  .live-shell .halo { background: radial-gradient(circle, var(--speak), transparent 60%); opacity: .85; animation: pulse .7s ease-in-out infinite; }
+  .live-shell[data-state="speaking"] .halo { background: radial-gradient(circle, var(--speak), transparent 60%); opacity: .85; animation: pulse .7s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { transform: scale(.86); } 50% { transform: scale(1.02); } }
 
   .live-shell .viz {
