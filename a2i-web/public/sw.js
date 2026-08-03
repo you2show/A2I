@@ -3,7 +3,7 @@
 // Network-first for page navigations (HTML always fresh, cache only when
 // offline). Immutable assets (vendored wasm, icons, Next.js build output) use
 // cache-first for speed. Cross-origin requests always go straight to network.
-const CACHE = 'a2i-shell-v4';
+const CACHE = 'a2i-shell-v5';
 const OFFLINE_ASSETS = [
   '/manifest.webmanifest',
   '/icons/icon-192.png',
