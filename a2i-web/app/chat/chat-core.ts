@@ -1584,7 +1584,7 @@ function refreshCloudStatusUI() {
   }
 }
 
-async function askCloud(messages, onDelta, signal) {
+async function askCloud(messages, onDelta, signal, onReason) {
   let res;
   try {
     res = await fetch('/api/chat', {
@@ -1602,7 +1602,7 @@ async function askCloud(messages, onDelta, signal) {
     throw new Error(info.message || T('errCloudNotConfig'));
   }
   if (!res.ok) throw new Error(Tf('errCloudStatus', { s: String(res.status) }));
-  return readSSE(res, onDelta, signal);
+  return readSSE(res, onDelta, signal, onReason);
 }
 
 // ---- Server brains -----------------------------------------------------
@@ -1795,7 +1795,7 @@ async function generate() {
       answer = await askAuto(messages, aiDiv, signal);
     } else if (mode === 'cloud') {
       const aiDiv = addMsg('ai', '…', '☁️ A2I Cloud');
-      answer = await askCloud(messages, (t) => aiDiv.update(t), signal);
+      answer = await askCloud(messages, (t) => aiDiv.update(t), signal, (rt) => aiDiv.setReason(rt));
     } else if (mode === 'gemini') {
       const aiDiv = addMsg('ai', '…', '✨ Gemini');
       answer = await askGemini(messages, (t) => aiDiv.update(t), signal);

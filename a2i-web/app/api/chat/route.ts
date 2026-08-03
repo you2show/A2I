@@ -7,7 +7,8 @@
 //   A2I_API_KEY   - the secret API key for that provider
 //   A2I_MODEL     - the model id to use, e.g. an open model like a Llama/Qwen id
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 function json(obj: unknown, status = 200) {
   return new Response(JSON.stringify(obj), {
