@@ -96,15 +96,19 @@
       </div>
 
       <div class="tab-pane" data-tab="models">
-      <div class="setup-hint"><b>Quick start · ចាប់ផ្ដើមងាយៗ</b> — <b>1)</b> បន្ថែម AI មួយខាងក្រោម · <b>2)</b> ជ្រើសវាក្នុងបញ្ជីខាងលើ · <b>3)</b> ចាប់ផ្ដើមជជែក។ លឿនបំផុតគឺ <b>OpenCode Zen</b> (free, គ្មានប័ណ្ណឥណទាន) — បិទ key រួចចុច <b>Save &amp; Activate</b>។</div>
+      <div id="cloud-status" class="setup-hint" hidden>
+        <b>☁️ A2I Cloud — បានកំណត់រួចនៅ Server · server-configured</b><br>
+        Model: <b class="cs-model"></b> · Endpoint: <span class="cs-base"></span> · Key លាក់នៅ Vercel env — គ្មានតម្រូវការកំណត់អ្វីទេ ជជែកបានភ្លាមៗ។
+        <div class="row-btns"><button id="cloud-go" class="btn primary">☁️ ជជែកជាមួយ A2I Cloud</button></div>
+      </div>
+      <div class="setup-hint"><b>Quick start · ចាប់ផ្ដើមងាយៗ</b> — A2I Cloud បានដំឡើងនៅលើ Server រួចហើយ៖ គ្រាន់តែជ្រើស <b>☁️ A2I Cloud</b> ក្នុងបញ្ជីខាងលើ រួចចាប់ផ្ដើមជជែកភ្លាមៗ — គ្មាន key ត្រូវបញ្ចូលទេ។ ផ្នែកខាងក្រោមសម្រាប់អ្នកចង់ <b>បន្ថែម AI បន្ថែមទៀត</b> (Gemini, local model, provider ផ្សេងៗ) តែប៉ុណ្ណោះ។</div>
 
       <section class="setblock">
         <div class="setblock-h"><span class="setnum">1</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg> OpenCode Zen (free — no card) <span class="badge-rec">Recommended</span></div>
-        <p class="hint">Frontier free models (Big Pickle, DeepSeek V4 Flash Free, … — see
-          <a href="https://github.com/you2show/A2I/blob/main/MODELS.md" target="_blank" rel="noopener">MODELS.md</a>).
-          Get a key free with <code>opencode auth login --provider zen</code> or on
-          <a href="https://opencode.ai" target="_blank" rel="noopener">opencode.ai</a>,
-          paste it here and press <b>Test key</b>. Free tier: 100 requests/day.</p>
+        <p class="hint">Zen បានកំណត់រួចនៅលើ Server (Vercel env) — អ្នកមិនបាច់បំពេញ key ទេ។ បើចង់ប្រើ key ផ្ទាល់ខ្លួនរបស់អ្នកវិញ (free tier: 100 requests/day) ទើបបំពេញខាងក្រោម ដើម្បី override — បើមិនចង់ទេ រំលងចោលបាន។ មើល
+          <a href="https://github.com/you2show/A2I/blob/main/MODELS.md" target="_blank" rel="noopener">MODELS.md</a>
+          សម្រាប់បញ្ជី model ។ Get a key free with <code>opencode auth login --provider zen</code> or on
+          <a href="https://opencode.ai" target="_blank" rel="noopener">opencode.ai</a>.</p>
         <label class="field">Zen API key
           <input id="set-zen-key" type="password" placeholder="sk-…" autocomplete="off">
         </label>

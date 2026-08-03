@@ -388,8 +388,16 @@ function showWelcome() {
   };
   mk('🧠', 'In-browser AI', 'Runs offline on your device', 'Local only', 'warn',
     () => { engineSel.value = 'browser'; engineSel.dispatchEvent(new Event('change')); });
-  mk('⚡', 'OpenCode Zen', 'Free frontier models, no card', zenOK ? '✓ Active' : 'Set up free', zenOK ? 'ok' : 'warn',
-    () => { $('preset-zen').click(); });
+  mk('⚡', 'OpenCode Zen', 'Free frontier models — server configured',
+    cloudAvailable ? '✓ Server ready' : (zenOK ? '✓ Active' : 'Set up free'),
+    cloudAvailable ? 'ok' : (zenOK ? 'ok' : 'warn'),
+    () => {
+      if (cloudAvailable) {
+        engineSel.value = 'cloud'; engineSel.dispatchEvent(new Event('change'));
+      } else {
+        $('preset-zen').click();
+      }
+    });
   mk('✨', 'Gemini', 'Your own Google key', gemOK ? '✓ Active' : 'Not set', gemOK ? 'ok' : 'warn',
     () => openSettings('gemini'));
   mk('🌐', 'Web search', 'Answers grounded in sources', 'Toggle in topbar', 'ok',
@@ -892,7 +900,7 @@ function rebuildEngineSelect(selected) {
   const hasGemini = !!GEMINI_KEY();
   const hasProviders = hasGemini || serverBrains.length > 0 || cloudAvailable;
   if (hasProviders) add('auto', '🔄 Auto — best available (auto-failover)');
-  if (cloudAvailable) add('cloud', '☁️ A2I Cloud (fast, no download)');
+  if (cloudAvailable) add('cloud', cloudModel ? '☁️ A2I Cloud — ' + cloudModel + ' (server)' : '☁️ A2I Cloud (fast, no download)');
   if (hasGemini) add('gemini', '✨ Gemini (' + GEMINI_MODEL() + ')');
   add('browser', '🧠 In-browser AI (no server, no API)');
   serverBrains.forEach((b, i) => add('server:' + i, '🖥️ ' + b.name + brainStatusLabel(b)));
@@ -1531,6 +1539,8 @@ async function askGemini(messages, onDelta, signal) {
 // ---- A2I Cloud (Vercel serverless proxy → hosted model) ----------------
 
 let cloudAvailable = false;
+let cloudModel = '';
+let cloudBase = '';
 
 async function checkCloud() {
   try {
@@ -1538,8 +1548,40 @@ async function checkCloud() {
     if (res.ok) {
       const info = await res.json();
       cloudAvailable = !!info.configured;
+      cloudModel = info.model || '';
+      cloudBase = info.base || '';
+      refreshCloudStatusUI();
+      if ($('welcome') && typeof showWelcome === 'function') showWelcome();
     }
   } catch { cloudAvailable = false; }
+}
+
+// Update any UI that reflects the server-configured A2I Cloud API without
+// touching inputs the user may be typing into (used from checkCloud() and
+// openSettings()).
+function refreshCloudStatusUI() {
+  const ztag = $('set-zen-state');
+  if (ztag && !overlay.hidden) {
+    if (cloudAvailable) {
+      ztag.textContent = '● server-configured — key on server, no setup needed';
+      ztag.classList.add('on');
+    } else {
+      ztag.textContent = ZEN_KEY() ? '● active' : '';
+      ztag.classList.toggle('on', !!ZEN_KEY());
+    }
+  }
+  const cs = $('cloud-status');
+  if (cs) {
+    if (cloudAvailable) {
+      cs.hidden = false;
+      const md = cs.querySelector('.cs-model');
+      if (md) md.textContent = cloudModel || 'default';
+      const bs = cs.querySelector('.cs-base');
+      if (bs) bs.textContent = cloudBase || 'server';
+    } else {
+      cs.hidden = true;
+    }
+  }
 }
 
 async function askCloud(messages, onDelta, signal) {
@@ -2126,11 +2168,9 @@ function openSettings(focus) {
   tag.classList.toggle('on', !!GEMINI_KEY());
   $('set-zen-key').value = ZEN_KEY();
   $('set-zen-model').value = ZEN_MODEL();
-  const ztag = $('set-zen-state');
-  ztag.textContent = ZEN_KEY() ? '● active' : '';
-  ztag.classList.toggle('on', !!ZEN_KEY());
   renderBrainList();
   overlay.hidden = false;
+  refreshCloudStatusUI();
   setTimeout(() => {
     if (focus === 'gemini') $('set-gemini-key').focus();
     else if (focus === 'zen') $('set-zen-key').focus();
@@ -2143,6 +2183,15 @@ $('settings-btn').addEventListener('click', () => openSettings());
 $('settings-close').addEventListener('click', closeSettings);
 overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSettings(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) closeSettings(); });
+
+// "Chat with A2I Cloud" — jump straight to the server-configured engine.
+const cloudGo = $('cloud-go');
+if (cloudGo) cloudGo.addEventListener('click', () => {
+  localStorage.setItem('a2i-engine', 'cloud');
+  rebuildEngineSelect('cloud'); refreshBar();
+  closeSettings();
+  toast('☁️ A2I Cloud — ' + (cloudModel || 'ready'), 'ok');
+});
 
 // Settings tabs: Models / Providers / Appearance.
 document.querySelectorAll('.set-tab').forEach((b) => {

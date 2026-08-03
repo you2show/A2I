@@ -20,7 +20,11 @@ export async function GET() {
   const base = process.env.A2I_API_BASE;
   const key = process.env.A2I_API_KEY;
   const model = process.env.A2I_MODEL || 'default';
-  return json({ configured: Boolean(base && key), model: base && key ? model : null });
+  return json({
+    configured: Boolean(base && key),
+    model: base && key ? model : null,
+    base: base && key ? base : null,
+  });
 }
 
 export async function POST(request: Request) {
