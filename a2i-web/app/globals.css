@@ -196,11 +196,6 @@
     #menu-btn { display: block; }
   }
 
-<!-- ============================================================
-     A2I 2.0 — design upgrade (layered over the base styles above)
-     Adds depth, motion, a gradient identity and glass surfaces
-     without changing any structure, IDs or classes.
-     ============================================================ -->
 <style>
   :root {
     --grad: linear-gradient(135deg, #e2704e 0%, #c96442 45%, #a24bd8 120%);
@@ -547,11 +542,6 @@
   }
   #install-btn:hover { transform: translateY(-1px); }
 
-<!-- ============================================================
-     A2I 3.0 — modern minimal (layered over 1.0 + 2.0)
-     Neutral surfaces, single accent, standard proportions.
-     Structure, IDs and classes unchanged.
-     ============================================================ -->
 <style>
   :root {
     --bg: #fafafa; --panel: #ffffff; --side: #f1f2f4; --text: #16181d;
@@ -709,10 +699,6 @@
   .row-btns { gap: .45rem; }
   .model-guide summary { color: var(--accent); }
 
-<!-- ============================================================
-     A2I 4.0 — polish layer: welcome cards, reasoning, toasts,
-     settings tabs, code-copy, micro-interactions.
-     ============================================================ -->
 <style>
   body { letter-spacing: -.005em; }
 
