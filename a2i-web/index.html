@@ -1,9 +1,12 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>A2I — All-in-One AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Khmer:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #f4f3ee; --panel: #ffffff; --side: #ece9e0; --text: #1f1e1b;
@@ -20,7 +23,7 @@
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
   body {
-    font-family: ui-sans-serif, system-ui, "Segoe UI", "Noto Sans Khmer", sans-serif;
+    font-family: 'Inter', 'Noto Sans Khmer', ui-sans-serif, system-ui, "Segoe UI", sans-serif;
     background: var(--bg); color: var(--text); display: flex; height: 100dvh;
     transition: background .25s, color .25s;
   }
@@ -719,6 +722,126 @@
   .model-guide summary { color: var(--accent); }
 </style>
 
+<!-- ============================================================
+     A2I 4.0 — polish layer: welcome cards, reasoning, toasts,
+     settings tabs, code-copy, micro-interactions.
+     ============================================================ -->
+<style>
+  body { letter-spacing: -.005em; }
+
+  /* ---- Welcome: hero + feature cards ---- */
+  #welcome { padding: 3.2rem 1.2rem 1.6rem; }
+  #welcome .logo-big {
+    width: 58px; height: 58px; border-radius: 17px; font-size: 1.5rem;
+    background: var(--grad); color: #fff; box-shadow: 0 8px 24px var(--ring);
+  }
+  #welcome h2 { font-size: 1.7rem; font-weight: 800; }
+  #welcome p { max-width: 34rem; margin-left: auto; margin-right: auto; line-height: 1.65; }
+  .chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; max-width: 38rem; margin: 1.4rem auto 1.6rem; }
+  @media (max-width: 640px) { .chips { grid-template-columns: 1fr; } }
+  .chip { border-radius: 12px; }
+
+  .w-feats {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem;
+    max-width: 44rem; margin: 0 auto;
+  }
+  @media (max-width: 760px) { .w-feats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .w-feat {
+    display: flex; flex-direction: column; gap: .15rem; text-align: left;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 13px;
+    padding: .8rem .9rem; cursor: pointer; color: var(--text); font: inherit;
+    transition: transform .12s, border-color .15s, box-shadow .15s;
+  }
+  .w-feat:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+  .w-feat .wf-ico { font-size: 1.15rem; }
+  .w-feat .wf-t { font-size: .84rem; font-weight: 700; }
+  .w-feat .wf-s { font-size: .7rem; color: var(--muted); line-height: 1.4; }
+  .w-feat .wf-st {
+    margin-top: .25rem; font-size: .64rem; font-weight: 700; letter-spacing: .03em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .w-feat .wf-st.ok { color: #2fbf71; }
+  .w-feat .wf-st.warn { color: #d99a2b; }
+  [data-theme="dark"] .w-feat .wf-st.ok { color: #3ddc86; }
+
+  /* ---- Reasoning (thinking) block ---- */
+  .reasoning {
+    margin: 0 0 .55rem; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg); font-size: .8rem;
+  }
+  .reasoning summary {
+    cursor: pointer; padding: .45rem .7rem; color: var(--muted);
+    font-weight: 600; user-select: none; list-style: none;
+  }
+  .reasoning summary::before { content: "▶ "; font-size: .62rem; }
+  .reasoning[open] summary::before { content: "▼ "; }
+  .reasoning summary:hover { color: var(--text); }
+  .reasoning-body {
+    padding: 0 .7rem .6rem; color: var(--muted); white-space: pre-wrap;
+    border-top: 1px dashed var(--border); padding-top: .5rem;
+    max-height: 12rem; overflow-y: auto; font-size: .76rem; line-height: 1.6;
+  }
+
+  /* ---- Code blocks: header + copy ---- */
+  .code-wrap { margin: .4em 0 .8em; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .code-wrap .md pre, .md .code-wrap pre { border: 0; border-radius: 0; margin: 0; }
+  .code-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .3rem .7rem; background: var(--code-bg); border-bottom: 1px solid var(--border);
+    font-size: .72rem; color: var(--muted); font-weight: 600;
+  }
+  .code-copy {
+    border: 0; background: transparent; color: var(--muted); cursor: pointer;
+    font: inherit; font-size: .72rem; font-weight: 600; padding: .15rem .4rem; border-radius: 6px;
+  }
+  .code-copy:hover { background: var(--user); color: var(--text); }
+
+  /* ---- Toasts ---- */
+  #toast-box {
+    position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: .4rem;
+    z-index: 200; pointer-events: none;
+  }
+  .toast {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; padding: .5rem .95rem; font-size: .82rem; font-weight: 500;
+    box-shadow: var(--shadow); animation: a2i-toast .25s cubic-bezier(.2,.7,.2,1) both;
+    max-width: 90vw;
+  }
+  .toast.ok { border-color: color-mix(in srgb, #2fbf71 45%, var(--border)); }
+  .toast.ok::before { content: "✓ "; color: #2fbf71; font-weight: 800; }
+  .toast.err { border-color: color-mix(in srgb, #d94f4f 45%, var(--border)); }
+  .toast.err::before { content: "✗ "; color: #d94f4f; font-weight: 800; }
+  .toast.out { opacity: 0; transform: translateY(6px); transition: opacity .3s, transform .3s; }
+  @keyframes a2i-toast { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+  /* ---- Settings tabs ---- */
+  .set-tabs { display: flex; gap: .35rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: .6rem; }
+  .set-tab {
+    border: 1px solid transparent; background: transparent; color: var(--muted);
+    font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer;
+    padding: .42rem .8rem; border-radius: 9px; transition: background .12s, color .12s;
+  }
+  .set-tab:hover { background: var(--user); color: var(--text); }
+  .set-tab.active { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
+
+  /* ---- Micro-interactions ---- */
+  button:active { transform: scale(.97); }
+  #send:active, .icon-btn:active { transform: scale(.94); }
+  .msg { transition: opacity .2s; }
+  .msg-actions { opacity: 1; } /* always visible: discoverable on touch too */
+  .msg-actions .act-btn { background: transparent; }
+  .msg-actions .act-btn:hover { background: var(--user); }
+  .chat-item .del, .chat-item .pin, .chat-item .ren { opacity: .45; }
+  .chat-item:hover .del, .chat-item:hover .pin, .chat-item:hover .ren { opacity: 1; }
+  #status-wrap .dot { transition: background .3s; }
+  .brain-label { letter-spacing: .01em; }
+  .pal-empty {
+    padding: 1.2rem 1rem; text-align: center; color: var(--muted);
+    font-size: .85rem; border: 1px dashed var(--border); border-radius: 12px; margin: .4rem;
+  }
+</style>
+
 
 <!-- PWA: installable, offline-capable app -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -823,6 +946,13 @@
     </div>
     <div class="modal-body">
 
+      <div class="set-tabs">
+        <button type="button" class="set-tab active" data-tab="models">⚙️ Models</button>
+        <button type="button" class="set-tab" data-tab="providers">🔌 Providers</button>
+        <button type="button" class="set-tab" data-tab="appearance">🎨 Appearance</button>
+      </div>
+
+      <div class="tab-pane" data-tab="models">
       <div class="setup-hint"><b>Quick start · ចាប់ផ្ដើមងាយៗ</b> — <b>1)</b> បន្ថែម AI មួយខាងក្រោម · <b>2)</b> ជ្រើសវាក្នុងបញ្ជីខាងលើ · <b>3)</b> ចាប់ផ្ដើមជជែក។ លឿនបំផុតគឺ <b>OpenCode Zen</b> (free, គ្មានប័ណ្ណឥណទាន) — បិទ key រួចចុច <b>Save &amp; Activate</b>។</div>
 
       <section class="setblock">
@@ -863,7 +993,9 @@
           <span id="set-gemini-state" class="statetag"></span>
         </div>
       </section>
+      </div>
 
+      <div class="tab-pane" data-tab="providers">
       <section class="setblock">
         <div class="setblock-h"><span class="setnum">3</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg> Local model file — SSD / disk (no download)</div>
         <p class="hint">Keep a GGUF model on your SSD and load it straight from disk — <b>no download, works offline</b>, and new preview URLs never re-download. Big models fit too. Get GGUF files from Hugging Face (Qwen, Llama, …).</p>
@@ -913,7 +1045,9 @@
           <button id="set-brain-add" class="btn primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add provider</button>
         </div>
       </section>
+      </div>
 
+      <div class="tab-pane" data-tab="appearance">
       <section class="setblock">
         <div class="setblock-h"><span class="setnum">5</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg> Appearance & voice</div>
         <div class="row-btns">
@@ -921,6 +1055,7 @@
           <button id="set-autospeak" class="btn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg> <span id="set-autospeak-label">Auto read answers: Off</span></button>
         </div>
       </section>
+      </div>
 
     </div>
   </div>
@@ -1294,11 +1429,40 @@ function renderMarkdown(src) {
     .replace(/^\s*\d+\. (.*)$/gm, '<li>$1</li>');
   html = html.replace(/(?:<li>[\s\S]*?<\/li>\n?)+/g, (m) => '<ul>' + m + '</ul>');
   html = '<p>' + html.replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
-  return html.replace(/\u0000(\d+)\u0000/g,
-    (m, i) => `<pre><code>${escapeHtml(blocks[+i])}</code></pre>`);
+  return html.replace(/\u0000(\d+)\u0000/g, (m, i) =>
+    `<div class="code-wrap"><div class="code-head"><span>${escapeHtml(blocks[+i].slice(0, 32))}</span><button type="button" class="code-copy">Copy</button></div><pre><code>${escapeHtml(blocks[+i])}</code></pre></div>`);
 }
 
+// Copy button for code blocks (event delegation — works for streamed content).
+log.addEventListener('click', (e) => {
+  const btn = e.target.closest('.code-copy');
+  if (!btn) return;
+  const code = btn.closest('.code-wrap')?.querySelector('pre code')?.textContent;
+  if (!code) return;
+  navigator.clipboard?.writeText(code).then(() => {
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+  });
+});
+
 // ---- Chat rendering ----------------------------------------------------
+
+function toast(msg, type) {
+  let box = document.getElementById('toast-box');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'toast-box';
+    document.body.appendChild(box);
+  }
+  const t = document.createElement('div');
+  t.className = 'toast' + (type ? ' toast-' + type : '');
+  t.textContent = msg;
+  box.appendChild(t);
+  setTimeout(() => {
+    t.classList.add('out');
+    setTimeout(() => t.remove(), 320);
+  }, 2600);
+}
 
 function showWelcome() {
   const heading = coderMode ? '💻 A2I Coder' : 'ជម្រាបសួរ! ខ្ញុំជា A2I';
@@ -1313,6 +1477,7 @@ function showWelcome() {
       <h2></h2>
       <p></p>
       <div class="chips"></div>
+      <div class="w-feats"></div>
     </div>`;
   col.querySelector('#welcome h2').textContent = heading;
   col.querySelector('#welcome p').innerHTML = sub;
@@ -1320,15 +1485,15 @@ function showWelcome() {
   const prompts = coderMode ? [
     'Write a Python function to parse a CSV file',
     'Explain this error: TypeError: undefined is not a function',
-    'សរសេរ REST API ជាមួយ FastAPI',
+    'បង្កើត REST API ជាមួយ FastAPI',
     'Review this code for bugs and security issues',
   ] : [
-    'ប្រាប់ខ្ញុំអំពីប្រវត្តិអង្គរវត្ត',
-    'What is 127 × 49?',
+    'ពន្យល់ពីរបៀប AI ដំណើរការ',
+    'What is 127 x 49?',
     '/image sunset over Angkor Wat',
     '/audio Welcome to A2I',
     'Write a short poem about Cambodia',
-    'តើ AI ដំណើរការយ៉ាងដូចម្តេច?',
+    'ពន្យល់ពីអត្ថប្រយោជន៍របស់ AI',
   ];
   for (const text of prompts) {
     const chip = document.createElement('button');
@@ -1337,6 +1502,35 @@ function showWelcome() {
     chip.addEventListener('click', () => { input.value = text; form.requestSubmit(); });
     chips.appendChild(chip);
   }
+  // Feature cards: one-click switch between engines and tools, with live status.
+  const feats = col.querySelector('.w-feats');
+  const zenOK = !!ZEN_KEY();
+  const gemOK = !!GEMINI_KEY();
+  const mk = (ico, title, sub, status, st, click) => {
+    const b = document.createElement('button');
+    b.className = 'w-feat';
+    b.innerHTML =
+      '<span class="wf-ico">' + ico + '</span>' +
+      '<span class="wf-t">' + title + '</span>' +
+      '<span class="wf-s">' + sub + '</span>' +
+      (status ? '<span class="wf-st ' + st + '">' + status + '</span>' : '');
+    b.addEventListener('click', click);
+    feats.appendChild(b);
+  };
+  mk('🧠', 'In-browser AI', 'Runs offline on your device', 'Local only', 'warn',
+    () => { engineSel.value = 'browser'; engineSel.dispatchEvent(new Event('change')); });
+  mk('⚡', 'OpenCode Zen', 'Free frontier models, no card', zenOK ? '✓ Active' : 'Set up free', zenOK ? 'ok' : 'warn',
+    () => { $('preset-zen').click(); });
+  mk('✨', 'Gemini', 'Your own Google key', gemOK ? '✓ Active' : 'Not set', gemOK ? 'ok' : 'warn',
+    () => openSettings('gemini'));
+  mk('🌐', 'Web search', 'Answers grounded in sources', 'Toggle in topbar', 'ok',
+    () => { const t = $('wiki-toggle'); if (t) { t.checked = !t.checked; t.dispatchEvent(new Event('change')); } });
+  mk('🗣️', 'Live voice', '3D voice AI — talk to A2I', 'Live page', 'ok',
+    () => { location.href = 'live.html'; });
+  mk('🎨', 'Image & audio', 'Generate pictures and voice', '/image · /audio', 'ok',
+    () => { input.focus(); });
+  feats.style.display = 'none';
+  requestAnimationFrame(() => { feats.style.display = 'grid'; });
 }
 
 function addMsg(cls, text, label, images) {
@@ -1437,6 +1631,7 @@ function addMsg(cls, text, label, images) {
     copy.addEventListener('click', () => {
       navigator.clipboard?.writeText(raw);
       copy.innerHTML = svgIcon('check', 'ico-sm');
+      toast('Copied to clipboard', 'ok');
       setTimeout(() => { copy.innerHTML = svgIcon('copy', 'ico-sm'); }, 1200);
     });
 
@@ -1448,6 +1643,26 @@ function addMsg(cls, text, label, images) {
         ? '<span class="typing" aria-label="thinking"><i></i><i></i><i></i></span>'
         : renderMarkdown(t);
       log.scrollTop = log.scrollHeight;
+    };
+    // Zen & reasoning models stream their chain-of-thought first — show it in
+    // a collapsible "Thinking" block above the answer.
+    let reasonEl = null, reasonBody = null, reasonRaw = '';
+    div.setReason = (t) => {
+      reasonRaw = t;
+      if (!reasonEl) {
+        reasonEl = document.createElement('details');
+        reasonEl.className = 'reasoning';
+        const sum = document.createElement('summary');
+        sum.textContent = '💭 Thinking…';
+        reasonEl.appendChild(sum);
+        reasonBody = document.createElement('div');
+        reasonBody.className = 'reasoning-body';
+        reasonEl.appendChild(reasonBody);
+        wrap.insertBefore(reasonEl, body);
+      }
+      reasonBody.textContent = t;
+      reasonEl.querySelector('summary').textContent = '💭 Thinking (' +
+        t.split(/\s+/).length + ' words)';
     };
     div.update(text);
   }
@@ -2311,10 +2526,10 @@ async function askBrowser(messages, onDelta, signal) {
 // ---- Streaming helpers -------------------------------------------------
 
 // Parse an OpenAI-style SSE stream, calling onDelta with the growing answer.
-async function readSSE(res, onDelta, signal) {
+async function readSSE(res, onDelta, signal, onReason) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let answer = '', buffer = '';
+  let answer = '', reasoning = '', buffer = '';
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -2325,8 +2540,13 @@ async function readSSE(res, onDelta, signal) {
       for (const line of lines) {
         if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
         try {
-          const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content;
-          if (delta) { answer += delta; onDelta(answer); }
+          const chunk = JSON.parse(line.slice(6));
+          const d = chunk.choices?.[0]?.delta;
+          if (d?.reasoning_content) {
+            reasoning += d.reasoning_content;
+            if (onReason) onReason(reasoning);
+          }
+          if (d?.content) { answer += d.content; onDelta(answer); }
         } catch { /* ignore keep-alive / partial lines */ }
       }
     }
@@ -2476,7 +2696,7 @@ async function askCloud(messages, onDelta, signal) {
 
 // ---- Server brains -----------------------------------------------------
 
-async function askServer(brain, messages, onDelta, signal) {
+async function askServer(brain, messages, onDelta, signal, onReason) {
   let res;
   try {
     const headers = { 'Content-Type': 'application/json' };
@@ -2509,7 +2729,7 @@ async function askServer(brain, messages, onDelta, signal) {
     const t = await res.text().catch(() => '');
     throw new Error(`${brain.name} error ${res.status}: ${t.slice(0, 160)}`);
   }
-  return readSSE(res, onDelta, signal);
+  return readSSE(res, onDelta, signal, onReason);
 }
 
 // ---- Auto: best available brain, with automatic failover ----------------
@@ -2517,19 +2737,19 @@ async function askServer(brain, messages, onDelta, signal) {
 // the next one, so a single 429 (free-tier limit) never breaks the chat.
 async function askAuto(messages, aiDiv, signal) {
   const providers = [];
-  if (GEMINI_KEY()) providers.push({ label: '✨ Gemini', fn: (d) => askGemini(messages, d, signal) });
+  if (GEMINI_KEY()) providers.push({ label: '✨ Gemini', fn: (d, r) => askGemini(messages, d, signal) });
   serverBrains.forEach((b) => {
-    if (b.online !== false) providers.push({ label: '🖥️ ' + b.name, fn: (d) => askServer(b, messages, d, signal) });
+    if (b.online !== false) providers.push({ label: '🖥️ ' + b.name, fn: (d, r) => askServer(b, messages, d, signal, r) });
   });
-  if (cloudAvailable) providers.push({ label: '☁️ A2I Cloud', fn: (d) => askCloud(messages, d, signal) });
-  providers.push({ label: '🧠 In-browser AI', fn: (d) => askBrowser(messages, d, signal) });
+  if (cloudAvailable) providers.push({ label: '☁️ A2I Cloud', fn: (d, r) => askCloud(messages, d, signal) });
+  providers.push({ label: '🧠 In-browser AI', fn: (d, r) => askBrowser(messages, d, signal) });
 
   let lastErr = null;
   for (let i = 0; i < providers.length; i++) {
     const p = providers[i];
     aiDiv.setLabel('🔄 ' + p.label);
     try {
-      const ans = await p.fn((t) => aiDiv.update(t));
+      const ans = await p.fn((t) => aiDiv.update(t), (rt) => aiDiv.setReason(rt));
       if (ans && ans.trim()) { aiDiv.setLabel(p.label); return ans; }
     } catch (err) {
       if (signal?.aborted) return '';
@@ -2552,7 +2772,7 @@ async function askAllBrains(question, messages, signal) {
   const liveBrains = serverBrains.filter((b) => b.online !== false);
   const tasks = liveBrains.map((brain) => {
     const div = addMsg('ai', '…', '🖥️ ' + brain.name);
-    return askServer(brain, messages, (t) => div.update(t), signal)
+    return askServer(brain, messages, (t) => div.update(t), signal, (rt) => div.setReason(rt))
       .then((answer) => results.push({ name: brain.name, answer, brain }))
       .catch((err) => div.update('⚠ ' + err.message));
   });
@@ -2700,7 +2920,7 @@ async function generate() {
     } else {
       const brain = currentServerBrain();
       const aiDiv = addMsg('ai', '…', '🖥️ ' + (brain?.name || 'server'));
-      answer = await askServer(brain, messages, (t) => aiDiv.update(t), signal);
+      answer = await askServer(brain, messages, (t) => aiDiv.update(t), signal, (rt) => aiDiv.setReason(rt));
     }
     if (answer) {
       history.push({ role: 'assistant', content: answer });
@@ -3055,6 +3275,14 @@ $('settings-close').addEventListener('click', closeSettings);
 overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSettings(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) closeSettings(); });
 
+// Settings tabs: Models / Providers / Appearance.
+document.querySelectorAll('.set-tab').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.set-tab').forEach((x) => x.classList.toggle('active', x === b));
+    document.querySelectorAll('.tab-pane').forEach((p) => { p.hidden = p.dataset.tab !== b.dataset.tab; });
+  });
+});
+
 $('set-gemini-save').addEventListener('click', () => {
   const key = $('set-gemini-key').value.trim();
   const model = $('set-gemini-model').value.trim() || 'gemini-2.5-flash';
@@ -3064,6 +3292,7 @@ $('set-gemini-save').addEventListener('click', () => {
   localStorage.setItem('a2i-engine', 'gemini');
   rebuildEngineSelect('gemini'); refreshBar();
   const tag = $('set-gemini-state'); tag.textContent = '✓ saved — Gemini is active'; tag.classList.add('on');
+  toast('Gemini ' + model + ' saved & activated', 'ok');
 });
 $('set-gemini-clear').addEventListener('click', () => {
   localStorage.removeItem('a2i-gemini-key');
@@ -3071,6 +3300,7 @@ $('set-gemini-clear').addEventListener('click', () => {
   if (localStorage.getItem('a2i-engine') === 'gemini') localStorage.removeItem('a2i-engine');
   rebuildEngineSelect('browser'); refreshBar();
   const tag = $('set-gemini-state'); tag.textContent = 'cleared'; tag.classList.remove('on');
+  toast('Gemini key cleared');
 });
 
 // ---- OpenCode Zen: one-click free provider --------------------------------
@@ -3113,9 +3343,11 @@ async function testZenKey(key, tag) {
     });
     if (!res.ok) throw new Error('HTTP ' + res.status + (res.status === 401 ? ' — key rejected' : ''));
     tag.textContent = '✓ key works'; tag.classList.add('on');
+    toast('Zen key works — save to activate', 'ok');
     return true;
   } catch (err) {
     tag.textContent = '✗ ' + (err.message || 'failed');
+    toast('Zen test failed: ' + (err.message || 'network error'), 'err');
     return false;
   }
 }
@@ -3138,6 +3370,7 @@ $('set-zen-save').addEventListener('click', async () => {
     localStorage.setItem('a2i-engine', 'server:' + zenBrainIndex());
     rebuildEngineSelect('server:' + zenBrainIndex()); refreshBar();
     tag.textContent = '✓ saved & active'; tag.classList.add('on');
+    toast('Zen ' + model + ' saved & activated', 'ok');
   } else {
     tag.textContent += ' — not saved'; 
   }
@@ -3151,6 +3384,7 @@ $('set-zen-clear').addEventListener('click', () => {
   if (localStorage.getItem('a2i-engine') === 'server:' + i) localStorage.removeItem('a2i-engine');
   rebuildEngineSelect('browser'); refreshBar();
   const tag = $('set-zen-state'); tag.textContent = 'cleared'; tag.classList.remove('on');
+  toast('Zen key cleared');
 });
 
 $('set-brain-add').addEventListener('click', () => {
@@ -3611,6 +3845,12 @@ function renderPalette() {
     row.addEventListener('mousemove', () => { if (paletteSel !== i) { paletteSel = i; highlightPalette(); } });
     paletteList.appendChild(row);
   });
+  if (paletteItems.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'pal-empty';
+    empty.textContent = 'No matches — try “zen”, “new chat”, “dark”, or just ask in the box below.';
+    paletteList.appendChild(empty);
+  }
 }
 function highlightPalette() {
   [...paletteList.children].forEach((r, i) => {
