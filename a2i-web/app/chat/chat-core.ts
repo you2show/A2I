@@ -2320,13 +2320,20 @@ function fillProvider(name, url, model) {
 }
 $('preset-groq').addEventListener('click', () =>
   fillProvider('Groq', 'https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile'));
+// Cerebras — wafer-scale inference chips, one of the fastest free tiers.
+$('preset-cerebras').addEventListener('click', () =>
+  fillProvider('Cerebras', 'https://api.cerebras.ai/v1', 'qwen-3-235b-a22b-instruct-2507'));
 $('preset-openrouter').addEventListener('click', () =>
   fillProvider('OpenRouter', 'https://openrouter.ai/api/v1', 'meta-llama/llama-3.3-70b-instruct:free'));
 // Hugging Face's own OpenAI-compatible router — famous open models via a free
 // hf_ token. The model is only a default: paste ANY repo id, e.g. the newest
 // trending model from huggingface.co/models?sort=trending.
 $('preset-hf').addEventListener('click', () =>
-  fillProvider('Hugging Face', 'https://router.huggingface.co/v1', 'meta-llama/Llama-4-Scout-17B-16E-Instruct'));$('preset-zen').addEventListener('click', () => {
+  fillProvider('Hugging Face', 'https://router.huggingface.co/v1', 'meta-llama/Llama-4-Scout-17B-16E-Instruct'));
+// Api.Airforce — a single free gateway to 100+ open models.
+$('preset-airforce').addEventListener('click', () =>
+  fillProvider('Api.Airforce', 'https://api.airforce/v1', 'gpt-oss-120b'));
+$('preset-zen').addEventListener('click', () => {
   // One click = done. If a Zen key is already saved, add/activate the brain
   // immediately; otherwise open Settings with the Zen key field focused.
   if (ZEN_KEY()) {
