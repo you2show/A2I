@@ -387,11 +387,19 @@ function showWelcome() {
       if (cloudAvailable) {
         engineSel.value = 'cloud'; engineSel.dispatchEvent(new Event('change'));
       } else {
+        openSettings('brain');
         $('preset-zen').click();
       }
     });
   mk('✨', T('featGemT'), T('featGemS'), gemOK ? T('featZenStActive') : T('featGemSt'), gemOK ? 'ok' : 'warn',
     () => openSettings('gemini'));
+  // Nudge toward a free, genuinely strong brain (70B+ via Groq/Cerebras) —
+  // the default is a small in-browser model so it works on any device, which
+  // reads as "not smart" until a free key is added. Shown until one is set.
+  const strongBrainOK = serverBrains.some((b) => b.online !== false);
+  mk('🚀', T('featFastT'), T('featFastS'), strongBrainOK ? T('featFastStReady') : T('featFastStSetup'),
+    strongBrainOK ? 'ok' : 'warn',
+    () => { openSettings('brain'); $('preset-cerebras').click(); });
   mk('🌐', T('featWebT'), T('featWebS'), T('featWebSt'), 'ok',
     () => { const t = $('wiki-toggle'); if (t) { t.checked = !t.checked; t.dispatchEvent(new Event('change')); } });
   mk('🗣️', 'Live voice', '3D voice AI — talk to A2I', 'Live page', 'ok',
@@ -1082,9 +1090,12 @@ async function loadWebLLM() {
     '(Could not load the AI library.) ' + lastError.message);
 }
 
+// 1.5B (not 0.5B): still fits phones/basic laptops (see MODELS.md), but is
+// noticeably more coherent than 0.5B — a genuine "not smart" complaint traced
+// back to first-time users landing on the smallest possible default model.
 const CPU_MODEL_URL =
-  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
-const CPU_MODEL_NAME = 'Qwen2.5 0.5B (CPU)';
+  'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf';
+const CPU_MODEL_NAME = 'Qwen2.5 1.5B (CPU)';
 
 // Turns an infinite hang into a clear, recoverable error: rejects if the
 // wrapped work makes no progress for `ms`. Call `ping()` on each sign of
@@ -1712,29 +1723,48 @@ async function askAllBrains(question, messages, signal) {
   }
   if (results.length === 1) return results[0].answer;
 
+  // Combining costs a whole extra round-trip (wait for every brain, THEN wait
+  // for one more generation), so only pay for it when it can actually help.
+  // Treat the in-browser fallback model as "weak" — it is usually far smaller
+  // than a configured Cloud/server/Gemini brain.
+  const isWeak = (r) => r.name.startsWith('In-browser ');
+  const strong = results.filter((r) => !isWeak(r));
+
+  // Exactly one strong answer plus weak filler: the strong answer alone is
+  // already the best we have, and asking a small model to "help combine" it
+  // only adds latency and a chance of the small model garbling it.
+  if (strong.length === 1 && strong.length < results.length) return strong[0].answer;
+
+  // Combine among the strong answers when there are any, so a weak in-browser
+  // answer cannot dilute or override a better one; otherwise combine what we have.
+  const toCombine = strong.length > 0 ? strong : results;
+  if (toCombine.length === 1) return toCombine[0].answer;
+
   const combineMessages = [
     { role: 'system', content: activePrompt() },
     {
       role: 'user',
       content:
         `Question: ${question}\n\n` +
-        results.map((r, i) => `Answer ${i + 1} (from ${r.name}):\n${r.answer}`).join('\n\n') +
+        toCombine.map((r, i) => `Answer ${i + 1} (from ${r.name}):\n${r.answer}`).join('\n\n') +
         '\n\nCombine these answers into one single best answer to the question. ' +
         'Keep what is correct, drop what is wrong, and reply in the language of the question.',
     },
   ];
   const div = addMsg('ai combined', '…', '🧩 A2I combined / ចម្លើយរួម');
-  // Pick a combiner: prefer Cloud, then in-browser, then any server brain.
-  const serverResult = results.find((r) => r.brain);
+  // Pick a combiner: prefer Cloud, then a configured server brain (Groq /
+  // Cerebras / etc. are typically much stronger than the in-browser fallback),
+  // then in-browser only as a last resort.
+  const serverResult = toCombine.find((r) => r.brain) || results.find((r) => r.brain);
   let combined;
   if (cloudAvailable) {
     combined = await askCloud(combineMessages, (t) => div.update(t), signal);
-  } else if (webllmEngine && loadedModel) {
-    combined = await askBrowser(combineMessages, (t) => div.update(t), signal);
   } else if (serverResult) {
     combined = await askServer(serverResult.brain, combineMessages, (t) => div.update(t), signal);
+  } else if (webllmEngine && loadedModel) {
+    combined = await askBrowser(combineMessages, (t) => div.update(t), signal);
   } else {
-    combined = results.map((r) => r.answer).join('\n\n');
+    combined = toCombine.map((r) => r.answer).join('\n\n');
   }
   return combined;
 }

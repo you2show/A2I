@@ -272,6 +272,13 @@ const DICT: Record<string, { km: string; en: string }> = {
   featGemT: { km: 'Gemini', en: 'Gemini' },
   featGemS: { km: 'កូនសោ Google ផ្ទាល់ខ្លួនរបស់អ្នក', en: 'Your own Google key' },
   featGemSt: { km: 'មិនទាន់កំណត់', en: 'Not set' },
+  featFastT: { km: 'AI ខ្លាំង + លឿន ឥតគិតថ្លៃ', en: 'Free & smart' },
+  featFastS: {
+    km: 'Groq/Cerebras — model 70B+, លឿនណាស់, ឥតគិតថ្លៃ (ជាង model ក្នុងកម្មវិធីរុករក)',
+    en: 'Groq/Cerebras — 70B+ models, very fast, free (stronger than the in-browser model)',
+  },
+  featFastStReady: { km: 'បានកំណត់', en: 'Configured' },
+  featFastStSetup: { km: 'កំណត់ឥតគិតថ្លៃ', en: 'Set up free' },
   featWebT: { km: 'ស្វែងរកបណ្ដាញ', en: 'Web search' },
   featWebS: { km: 'ចម្លើយដោយយោងប្រភព', en: 'Answers grounded in sources' },
   featWebSt: { km: 'ប្ដូរក្នុងរបារខាងលើ', en: 'Toggle in topbar' },
