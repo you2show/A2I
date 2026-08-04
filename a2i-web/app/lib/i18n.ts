@@ -99,8 +99,10 @@ const DICT: Record<string, { km: string; en: string }> = {
   gCloud: { km: 'គ្មានឧបករណ៍ខ្លាំង', en: 'No good hardware' },
   gCloudM: { km: 'Groq · Hugging Face (70B, API ឥតគិតថ្លៃ)', en: 'Groq · Hugging Face (70B, free API)' },
   presetGroq: { km: 'Groq (ឥតគិតថ្លៃ)', en: 'Groq (free)' },
+  presetCerebras: { km: 'Cerebras (ឥតគិតថ្លៃ)', en: 'Cerebras (free)' },
   presetOpenrouter: { km: 'OpenRouter (ឥតគិតថ្លៃ)', en: 'OpenRouter (free)' },
   presetHf: { km: 'Hugging Face (ឥតគិតថ្លៃ)', en: 'Hugging Face (free)' },
+  presetAirforce: { km: 'Api.Airforce (ឥតគិតថ្លៃ)', en: 'Api.Airforce (free)' },
   presetZen: { km: 'OpenCode Zen (ឥតគិតថ្លៃ)', en: 'OpenCode Zen (free)' },
   presetOc: { km: 'Opencode Server (ក្នុងម៉ាស៊ីន)', en: 'Opencode Server (local)' },
   presetA2icore: { km: 'A2I Core (ក្នុងម៉ាស៊ីន)', en: 'A2I Core (local)' },
@@ -189,8 +191,8 @@ const DICT: Record<string, { km: string; en: string }> = {
   providersBlockTitle: { km: 'អ្នកផ្ដល់សេវា AI — ក្នុងម៉ាស៊ីន និងឥតគិតថ្លៃ', en: 'AI providers — local & free' },
   providersHint:
     {
-      km: 'API ឥតគិតថ្លៃបន្ថែមទៀត — កូនសោនៅក្នុងកម្មវិធីរុករកអ្នក គ្រាន់តែចុចប៊ូតុងដែលមាន (ទម្រង់បំពេញដោយខ្លួនឯង) រួចបន្ថែមអ្នកផ្ដល់សេវា៖ Groq · OpenRouter · Hugging Face · Zen · Opencode Server · A2I Core · vLLM · Ollama។',
-      en: 'More free APIs — keys stay in your browser, just press a preset button (form fills itself) then Add provider: Groq · OpenRouter · Hugging Face · Zen · Opencode Server · A2I Core · vLLM · Ollama.',
+      km: 'API ឥតគិតថ្លៃបន្ថែមទៀត — កូនសោនៅក្នុងកម្មវិធីរុករកអ្នក គ្រាន់តែចុចប៊ូតុងដែលមាន (ទម្រង់បំពេញដោយខ្លួនឯង) រួចបន្ថែមអ្នកផ្ដល់សេវា៖ Groq · Cerebras · OpenRouter · Hugging Face · Api.Airforce · Zen · Opencode Server · A2I Core · vLLM · Ollama។',
+      en: 'More free APIs — keys stay in your browser, just press a preset button (form fills itself) then Add provider: Groq · Cerebras · OpenRouter · Hugging Face · Api.Airforce · Zen · Opencode Server · A2I Core · vLLM · Ollama.',
     },
   addProvider: { km: 'បន្ថែមអ្នកផ្ដល់សេវា', en: 'Add provider' },
   brainNamePh: { km: 'ឈ្មោះ', en: 'Name' },
