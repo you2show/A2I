@@ -1820,19 +1820,27 @@ async function generate() {
 
   try {
     let answer;
+    // aiDiv/askFn are hoisted so the self-critique pass below (after the mode
+    // branches) can reuse whichever bubble and brain actually answered.
+    // askFn stays unset for 'all' mode, which already does its own
+    // multi-brain combine and isn't a good fit for a second critique round.
+    let aiDiv, askFn;
     if (mode === 'auto') {
-      const aiDiv = addMsg('ai', '…', '🔄 Auto');
+      aiDiv = addMsg('ai', '…', '🔄 Auto');
       answer = await askAuto(messages, aiDiv, signal);
+      askFn = (msgs, onDelta, sig) => askAuto(msgs, aiDiv, sig);
     } else if (mode === 'cloud') {
-      const aiDiv = addMsg('ai', '…', '☁️ A2I Cloud');
+      aiDiv = addMsg('ai', '…', '☁️ A2I Cloud');
       answer = await askCloud(messages, (t) => aiDiv.update(t), signal, (rt) => aiDiv.setReason(rt));
+      askFn = (msgs, onDelta, sig) => askCloud(msgs, onDelta, sig);
     } else if (mode === 'gemini') {
-      const aiDiv = addMsg('ai', '…', '✨ Gemini');
+      aiDiv = addMsg('ai', '…', '✨ Gemini');
       answer = await askGemini(messages, (t) => aiDiv.update(t), signal);
+      askFn = (msgs, onDelta, sig) => askGemini(msgs, onDelta, sig);
     } else if (mode === 'all') {
       answer = await askAllBrains(question, messages, signal);
     } else if (mode === 'browser') {
-      const aiDiv = addMsg('ai', '…', '🧠 In-browser AI');
+      aiDiv = addMsg('ai', '…', '🧠 In-browser AI');
       // Until the engine is ready, mirror download progress into the bubble.
       if (!(webllmEngine && loadedModel)) {
         aiDiv.update('⬇ កំពុងរៀបចំ AI ជាលើកដំបូង… (setting up the AI for the first time — this downloads a model once, then works instantly)');
@@ -1849,11 +1857,42 @@ async function generate() {
       } finally {
         loadingReporter = null;
       }
+      askFn = (msgs, onDelta, sig) => askBrowser(msgs, onDelta, sig);
     } else {
       const brain = currentServerBrain();
-      const aiDiv = addMsg('ai', '…', '🖥️ ' + (brain?.name || 'server'));
+      aiDiv = addMsg('ai', '…', '🖥️ ' + (brain?.name || 'server'));
       answer = await askServer(brain, messages, (t) => aiDiv.update(t), signal, (rt) => aiDiv.setReason(rt));
+      askFn = (msgs, onDelta, sig) => askServer(brain, msgs, onDelta, sig);
     }
+
+    // Self-critique: ask the same brain to check its own draft and reply with
+    // just the corrected final answer. The draft is kept visible in the
+    // collapsible "Thinking" area so nothing is silently thrown away; on any
+    // failure (timeout, provider error) the original draft is kept as-is.
+    if (answer && askFn && critiqueMode && !signal.aborted) {
+      const draft = answer;
+      aiDiv.setReason(draft);
+      aiDiv.update('🔍 ' + T('critiqueRunning'));
+      try {
+        const critiqueMessages = [
+          { role: 'system', content: activePrompt() },
+          {
+            role: 'user',
+            content:
+              `Question: ${question}\n\nDraft answer:\n${draft}\n\n` +
+              'Carefully check the draft answer above for mistakes, missing steps, or unclear ' +
+              'parts. Reply with ONLY the corrected, final answer (not a list of corrections) — ' +
+              'in the language of the question.',
+          },
+        ];
+        const revised = await askFn(critiqueMessages, (t) => aiDiv.update(t), signal);
+        answer = (revised && revised.trim()) ? revised : draft;
+      } catch {
+        answer = draft;
+      }
+      if (answer === draft) aiDiv.update(draft);
+    }
+
     if (answer) {
       history.push({ role: 'assistant', content: answer });
       persistChat();
@@ -1963,6 +2002,18 @@ audBtn.addEventListener('click', () => {
   if (audioMode) imageMode = false;
   refreshComposerMode();
   input.focus();
+});
+
+// Self-critique: after a normal answer, ask the same brain to review its own
+// draft and produce a corrected final version. Persistent setting (not a
+// one-shot composer mode like image/audio), since it affects every reply.
+let critiqueMode = localStorage.getItem('a2i-critique') === '1';
+const critiqueBtn = $('critique-btn');
+critiqueBtn.classList.toggle('on', critiqueMode);
+critiqueBtn.addEventListener('click', () => {
+  critiqueMode = !critiqueMode;
+  localStorage.setItem('a2i-critique', critiqueMode ? '1' : '0');
+  critiqueBtn.classList.toggle('on', critiqueMode);
 });
 
 async function generateImage(prompt) {

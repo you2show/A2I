@@ -330,6 +330,7 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 .icon-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
 .icon-btn.ghost { background: transparent; color: var(--muted); }
 .icon-btn.ghost:hover { color: var(--accent); background: var(--accent-soft); }
+.icon-btn.on { color: #fff; background: var(--grad); box-shadow: 0 4px 12px var(--ring); }
 #stop { background: var(--danger); display: none; }
 #attach-preview { display: flex; gap: .5rem; flex-wrap: wrap; max-width: 46rem; margin: 0 auto .5rem; }
 .thumb { width: 58px; height: 58px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); }

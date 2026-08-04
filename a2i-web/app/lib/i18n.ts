@@ -228,6 +228,11 @@ const DICT: Record<string, { km: string; en: string }> = {
   tMic: { km: 'និយាយបញ្ចូល', en: 'Dictate' },
   tImg: { km: 'បង្កើតរូបភាព (ឥតគិតថ្លៃ)', en: 'Generate image (free)' },
   tAud: { km: 'បង្កើតសំឡេង (ឥតគិតថ្លៃ)', en: 'Generate audio / voice (free)' },
+  tCritique: {
+    km: 'ត្រួតពិនិត្យខ្លួនឯង — ត្រឹមត្រូវជាង តែយឺតជាង',
+    en: 'Self-review — more accurate, slower',
+  },
+  critiqueRunning: { km: 'កំពុងត្រួតពិនិត្យចម្លើយខ្លួនឯង…', en: 'Reviewing its own answer…' },
   tRegen: { km: 'បង្កើតចម្លើយម្ដងទៀត', en: 'Regenerate' },
   tStop: { km: 'បញ្ឈប់', en: 'Stop' },
   tSend: { km: 'ផ្ញើ', en: 'Send' },
