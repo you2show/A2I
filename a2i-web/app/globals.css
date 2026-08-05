@@ -562,7 +562,10 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
   font-size: .8rem; color: var(--muted); margin-bottom: 1.8rem; box-shadow: var(--shadow);
 }
 .home-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px rgba(34, 197, 94, .18); animation: a2i-pulse 2s ease-in-out infinite; }
-.home-hero h1 { font-size: clamp(2.4rem, 6vw, 4rem); line-height: 1.1; font-weight: 800; letter-spacing: -.03em; }
+/* 800-weight Khmer glyphs get visually heavy/blocky at this size (the script's
+   stacked vowel signs read fine at body-text weights but muddy at hero scale)
+   — 700 keeps the same bold, confident feel without that. */
+.home-hero h1 { font-size: clamp(2.4rem, 6vw, 4rem); line-height: 1.25; font-weight: 700; letter-spacing: -.02em; }
 .home-hero h1 em {
   font-style: normal;
   background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -607,7 +610,7 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 .pv-bubble.ai { background: var(--panel); border: 1px solid var(--border); }
 .pv-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--code-bg); border: 1px solid var(--border); border-radius: 9px; padding: .6rem .8rem; font-size: .8rem; margin-top: .6rem; overflow-x: auto; }
 .home-section { max-width: 1020px; margin: 0 auto; padding: 5.5rem 1.2rem 3.5rem; position: relative; z-index: 1; }
-.home-section h2 { font-size: clamp(1.55rem, 3.5vw, 2.15rem); font-weight: 800; text-align: center; letter-spacing: -.02em; }
+.home-section h2 { font-size: clamp(1.55rem, 3.5vw, 2.15rem); font-weight: 700; line-height: 1.3; text-align: center; letter-spacing: -.01em; }
 .home-section h2 span { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .home-section .h2sub { text-align: center; color: var(--muted); margin-top: .7rem; margin-bottom: 3rem; }
 .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
