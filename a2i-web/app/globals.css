@@ -592,7 +592,8 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 .btn-lg.primary { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 10px 30px var(--ring); }
 .btn-lg.primary:hover { background: var(--accent-2); box-shadow: 0 14px 38px var(--ring); }
 .home-chips { display: flex; gap: .6rem; justify-content: center; margin-top: 2.1rem; flex-wrap: wrap; }
-.home-chips span { font-size: .78rem; color: var(--muted); padding: .35rem .8rem; border-radius: 999px; background: var(--panel); border: 1px solid var(--border); }
+.home-chips span { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--muted); padding: .35rem .8rem; border-radius: 999px; background: var(--panel); border: 1px solid var(--border); }
+.home-chips span svg { width: 13px; height: 13px; flex: none; }
 .home-stats {
   max-width: 860px; margin: 3.2rem auto 0; padding: 0 1.2rem; position: relative; z-index: 1;
   display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem;

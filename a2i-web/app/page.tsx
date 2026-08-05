@@ -22,6 +22,15 @@ const ICONS: Record<string, React.ReactNode> = {
   mic: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
   ),
+  lock: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+  ),
+  card: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>
+  ),
+  phone: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2" /><line x1="11" y1="18" x2="13" y2="18" /></svg>
+  ),
 };
 
 export default function HomePage() {
@@ -56,10 +65,10 @@ export default function HomePage() {
           <a className="btn-lg" href="/live">{t('hpCta2')}</a>
         </div>
         <div className="home-chips">
-          <span>⚡ {t('hpChip1')}</span>
-          <span>🔒 {t('hpChip2')}</span>
-          <span>💳 {t('hpChip3')}</span>
-          <span>📱 {t('hpChip4')}</span>
+          <span>{ICONS.bolt} {t('hpChip1')}</span>
+          <span>{ICONS.lock} {t('hpChip2')}</span>
+          <span>{ICONS.card} {t('hpChip3')}</span>
+          <span>{ICONS.phone} {t('hpChip4')}</span>
         </div>
 
         <div className="home-stats">
