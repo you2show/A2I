@@ -91,15 +91,15 @@
     <div class="modal-body">
 
       <div class="set-tabs">
-        <button type="button" class="set-tab active" data-tab="models">⚙️ <span data-i18n="tabModels">Models</span></button>
-        <button type="button" class="set-tab" data-tab="providers">🔌 <span data-i18n="tabProviders">Providers</span></button>
-        <button type="button" class="set-tab" data-tab="appearance">🎨 <span data-i18n="tabAppearance">Appearance</span></button>
+        <button type="button" class="set-tab active" data-tab="models"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> <span data-i18n="tabModels">Models</span></button>
+        <button type="button" class="set-tab" data-tab="providers"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> <span data-i18n="tabProviders">Providers</span></button>
+        <button type="button" class="set-tab" data-tab="appearance"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg> <span data-i18n="tabAppearance">Appearance</span></button>
       </div>
 
       <div class="tab-pane" data-tab="models">
       <div id="cloud-status" class="setup-hint" hidden>
         <div data-i18n-html="cloudStatusBody"></div>
-        <div class="row-btns"><button id="cloud-go" class="btn primary">☁️ <span data-i18n="chatCloudBtn">Chat with A2I Cloud</span></button></div>
+        <div class="row-btns"><button id="cloud-go" class="btn primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> <span data-i18n="chatCloudBtn">Chat with A2I Cloud</span></button></div>
       </div>
       <div class="setup-hint" data-i18n-html="quickStart">Quick start: A2I Cloud is already set up on the server — pick it in the list above and start chatting right away, no setup needed. The sections below are only for adding more AI options.</div>
 
@@ -165,19 +165,27 @@
       <section class="setblock">
         <div class="setblock-h"><span class="setnum">4</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> <span data-i18n="providersBlockTitle">AI providers — local &amp; free</span></div>
         <p class="hint" data-i18n="providersHint">More free APIs — keys stay in your browser, just press a preset button (form fills itself) then Add provider: Groq · OpenRouter · Hugging Face · Zen · Opencode Server · A2I Core · vLLM · Ollama.</p>
-        <div class="provider-presets">
-          <button type="button" class="btn" id="preset-groq" data-i18n="presetGroq">Groq (free)</button>
-          <button type="button" class="btn" id="preset-cerebras" data-i18n="presetCerebras">Cerebras (free)</button>
-          <button type="button" class="btn" id="preset-openrouter" data-i18n="presetOpenrouter">OpenRouter (free)</button>
-          <button type="button" class="btn" id="preset-hf" data-i18n="presetHf">Hugging Face (free)</button>
-          <button type="button" class="btn" id="preset-airforce" data-i18n="presetAirforce">Api.Airforce (free)</button>
-          <button type="button" class="btn" id="preset-zen" data-i18n="presetZen">OpenCode Zen (free)</button>
-          <button type="button" class="btn" id="preset-zen-refresh">↻ Zen models</button>
-          <button type="button" class="btn" id="preset-oc" data-i18n="presetOc">Opencode Server (local)</button>
-          <button type="button" class="btn" id="preset-oc-refresh">↻ OC models</button>
-          <button type="button" class="btn" id="preset-a2icore" data-i18n="presetA2icore">A2I Core (local)</button>
-          <button type="button" class="btn" id="preset-vllm" data-i18n="presetVllm">vLLM (GPU, local)</button>
-          <button type="button" class="btn" id="preset-ollama" data-i18n="presetOllama">Ollama (local)</button>
+        <div class="preset-group">
+          <div class="preset-group-label" data-i18n="presetGroupFree">Free — hosted API</div>
+          <div class="provider-presets">
+            <button type="button" class="btn" id="preset-groq" data-i18n="presetGroq">Groq</button>
+            <button type="button" class="btn" id="preset-cerebras" data-i18n="presetCerebras">Cerebras</button>
+            <button type="button" class="btn" id="preset-openrouter" data-i18n="presetOpenrouter">OpenRouter</button>
+            <button type="button" class="btn" id="preset-hf" data-i18n="presetHf">Hugging Face</button>
+            <button type="button" class="btn" id="preset-airforce" data-i18n="presetAirforce">Api.Airforce</button>
+            <button type="button" class="btn" id="preset-zen" data-i18n="presetZen">OpenCode Zen</button>
+            <button type="button" class="btn ghost-sm" id="preset-zen-refresh">↻ Zen models</button>
+          </div>
+        </div>
+        <div class="preset-group">
+          <div class="preset-group-label" data-i18n="presetGroupLocal">Local / self-hosted</div>
+          <div class="provider-presets">
+            <button type="button" class="btn" id="preset-oc" data-i18n="presetOc">Opencode Server</button>
+            <button type="button" class="btn ghost-sm" id="preset-oc-refresh">↻ OC models</button>
+            <button type="button" class="btn" id="preset-a2icore" data-i18n="presetA2icore">A2I Core</button>
+            <button type="button" class="btn" id="preset-vllm" data-i18n="presetVllm">vLLM (GPU)</button>
+            <button type="button" class="btn" id="preset-ollama" data-i18n="presetOllama">Ollama</button>
+          </div>
         </div>
         <div id="set-brain-list" class="brain-list"></div>
         <div class="add-brain add-brain-2">
@@ -211,9 +219,9 @@
     <select id="engine"></select>
     <select id="model">
       <optgroup label="Fast — any GPU">
-        <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC" selected>Qwen2.5 0.5B (fast, ~400MB)</option>
+        <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Qwen2.5 0.5B (fast, ~400MB)</option>
         <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (~800MB)</option>
-        <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 1.5B (good, ~1GB)</option>
+        <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC" selected>Qwen2.5 1.5B (good, ~1GB)</option>
         <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2 2B (~1.5GB)</option>
         <option value="Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen2.5 3B (smart, ~2GB)</option>
         <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (~2GB)</option>
@@ -247,6 +255,7 @@
         <button type="button" id="mic-btn" class="icon-btn ghost" data-i18n-title="tMic"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
         <button type="button" id="img-btn" class="icon-btn ghost" data-i18n-title="tImg"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z"/></svg></button>
         <button type="button" id="aud-btn" class="icon-btn ghost" data-i18n-title="tAud"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></button>
+        <button type="button" id="critique-btn" class="icon-btn ghost" data-i18n-title="tCritique"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="8 12 11 15 16 9"/></svg></button>
         <textarea id="input" rows="1" data-i18n-ph="inputPh" placeholder="Ask anything…"></textarea>
         <button type="button" id="regen" class="icon-btn ghost" data-i18n-title="tRegen" style="display:none"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66"/><polyline points="4 4 4 8 8 8"/></svg></button>
         <button type="button" id="stop" class="icon-btn" data-i18n-title="tStop"><svg class="ico ico-lg" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>

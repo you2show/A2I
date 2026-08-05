@@ -142,7 +142,10 @@ select, #server-url {
   outline: none; transition: border-color .15s, box-shadow .15s;
 }
 select:focus, #server-url:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-#engine { font-weight: 600; }
+#engine {
+  font-weight: 600; max-width: 19rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 #server-url { flex: 1; min-width: 11rem; display: none; }
 #topbar label.wiki { display: flex; align-items: center; gap: .3rem; cursor: pointer; color: var(--muted); font-size: .82rem; user-select: none; }
 #coder-btn, #live-link, #search-mode {
@@ -173,7 +176,8 @@ body.coder #coder-btn { background: var(--accent); border-color: var(--accent); 
   cursor: pointer; font: inherit; font-size: .84rem; color: var(--text);
 }
 .popmenu button:hover { background: var(--side); }
-#status-wrap { margin-left: auto; display: flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .78rem; }
+#status-wrap { margin-left: auto; display: flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .78rem; min-width: 0; }
+#status { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }
 .dot.ready { background: var(--ok); }
 .dot.busy { background: var(--accent); animation: a2i-pulse .9s ease-in-out infinite; }
@@ -277,7 +281,7 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 .gen-audio { width: 100%; margin: .4em 0; }
 
 /* Welcome */
-#welcome { text-align: center; padding: 3.4rem 1rem 1rem; }
+#welcome { text-align: center; padding: 2.3rem 1rem 1rem; }
 #welcome .logo-big {
   width: 56px; height: 56px; border-radius: 16px; background: var(--grad); color: #fff;
   display: grid; place-items: center; font-size: 1.6rem; font-weight: 800; margin: 0 auto 1rem;
@@ -299,11 +303,23 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 }
 .chip:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 0 0 3px var(--ring); }
 @media (max-width: 560px) { .chips { grid-template-columns: 1fr; } }
-.w-feats { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .7rem; max-width: 38rem; margin: 1.7rem auto 0; text-align: left; }
-.w-feat { border: 1px solid var(--border); border-radius: 14px; padding: .85rem 1rem; background: var(--panel); }
-.wf-ico { font-size: 1rem; margin-bottom: .35rem; }
-.wf-t { font-size: .87rem; font-weight: 600; }
-.wf-s { font-size: .75rem; color: var(--muted); margin-top: .1rem; }
+/* Compact single-row pills (icon + title + status), not stacked info cards —
+   the full title/subtitle/status is still reachable via the title tooltip
+   set in mk() (chat-core.ts), so nothing shown before is lost, just quieter. */
+.w-feats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .5rem; max-width: 40rem; margin: 1.3rem auto 0; text-align: left; }
+.w-feat {
+  border: 1px solid var(--border); border-radius: 10px; padding: .5rem .7rem;
+  background: var(--panel); display: flex; align-items: center; gap: .5rem;
+  cursor: pointer; transition: border-color .15s, transform .1s;
+}
+.w-feat:hover { border-color: var(--accent); transform: translateY(-1px); }
+.wf-ico { font-size: .9rem; flex-shrink: 0; line-height: 1; }
+.wf-t { font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 2.5rem; }
+.wf-s { display: none; }
+.wf-st {
+  margin-left: auto; font-size: .68rem; color: var(--muted); flex-shrink: 1;
+  padding-left: .4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .wf-st.ok { color: var(--ok); }
 @media (max-width: 760px) { .w-feats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
@@ -330,6 +346,7 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 .icon-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
 .icon-btn.ghost { background: transparent; color: var(--muted); }
 .icon-btn.ghost:hover { color: var(--accent); background: var(--accent-soft); }
+.icon-btn.on { color: #fff; background: var(--grad); box-shadow: 0 4px 12px var(--ring); }
 #stop { background: var(--danger); display: none; }
 #attach-preview { display: flex; gap: .5rem; flex-wrap: wrap; max-width: 46rem; margin: 0 auto .5rem; }
 .thumb { width: 58px; height: 58px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); }
@@ -398,8 +415,18 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 .badge-rec { background: var(--accent-soft); color: var(--accent); font-size: .68rem; font-weight: 700; padding: .15rem .55rem; border-radius: 999px; }
 .setup-hint { background: var(--grad-soft); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); border-radius: 12px; padding: .7rem .9rem; font-size: .8rem; color: var(--muted); line-height: 1.55; margin-bottom: .9rem; }
 .setup-hint b { color: var(--accent); }
-.provider-presets { display: flex; flex-wrap: wrap; gap: .45rem; margin: .5rem 0 .85rem; }
-.provider-presets .btn { font-size: .77rem; padding: .35rem .65rem; }
+.preset-group { margin: .7rem 0; }
+.preset-group-label {
+  font-size: .68rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: .4rem;
+}
+.provider-presets { display: flex; flex-wrap: wrap; gap: .4rem; }
+.provider-presets .btn { font-size: .8rem; padding: .38rem .75rem; }
+.provider-presets .btn.ghost-sm {
+  font-size: .72rem; padding: .3rem .55rem; color: var(--muted);
+  background: transparent; border-style: dashed;
+}
+.provider-presets .btn.ghost-sm:hover { color: var(--accent); border-color: var(--accent); }
 .brain-list { display: flex; flex-direction: column; gap: .4rem; }
 .brain-row {
   display: flex; align-items: center; gap: .6rem; border: 1px solid var(--border);
@@ -545,7 +572,10 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
   font-size: .8rem; color: var(--muted); margin-bottom: 1.8rem; box-shadow: var(--shadow);
 }
 .home-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px rgba(34, 197, 94, .18); animation: a2i-pulse 2s ease-in-out infinite; }
-.home-hero h1 { font-size: clamp(2.4rem, 6vw, 4rem); line-height: 1.1; font-weight: 800; letter-spacing: -.03em; }
+/* 800-weight Khmer glyphs get visually heavy/blocky at this size (the script's
+   stacked vowel signs read fine at body-text weights but muddy at hero scale)
+   — 700 keeps the same bold, confident feel without that. */
+.home-hero h1 { font-size: clamp(2.4rem, 6vw, 4rem); line-height: 1.25; font-weight: 700; letter-spacing: -.02em; }
 .home-hero h1 em {
   font-style: normal;
   background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -562,7 +592,8 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 .btn-lg.primary { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 10px 30px var(--ring); }
 .btn-lg.primary:hover { background: var(--accent-2); box-shadow: 0 14px 38px var(--ring); }
 .home-chips { display: flex; gap: .6rem; justify-content: center; margin-top: 2.1rem; flex-wrap: wrap; }
-.home-chips span { font-size: .78rem; color: var(--muted); padding: .35rem .8rem; border-radius: 999px; background: var(--panel); border: 1px solid var(--border); }
+.home-chips span { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--muted); padding: .35rem .8rem; border-radius: 999px; background: var(--panel); border: 1px solid var(--border); }
+.home-chips span svg { width: 13px; height: 13px; flex: none; }
 .home-stats {
   max-width: 860px; margin: 3.2rem auto 0; padding: 0 1.2rem; position: relative; z-index: 1;
   display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem;
@@ -590,7 +621,7 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 .pv-bubble.ai { background: var(--panel); border: 1px solid var(--border); }
 .pv-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--code-bg); border: 1px solid var(--border); border-radius: 9px; padding: .6rem .8rem; font-size: .8rem; margin-top: .6rem; overflow-x: auto; }
 .home-section { max-width: 1020px; margin: 0 auto; padding: 5.5rem 1.2rem 3.5rem; position: relative; z-index: 1; }
-.home-section h2 { font-size: clamp(1.55rem, 3.5vw, 2.15rem); font-weight: 800; text-align: center; letter-spacing: -.02em; }
+.home-section h2 { font-size: clamp(1.55rem, 3.5vw, 2.15rem); font-weight: 700; line-height: 1.3; text-align: center; letter-spacing: -.01em; }
 .home-section h2 span { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .home-section .h2sub { text-align: center; color: var(--muted); margin-top: .7rem; margin-bottom: 3rem; }
 .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
@@ -642,7 +673,16 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
     --ok: #3ecf8e; --listen: #4aa8ff; --think: #f0b429; --speak: #3ecf8e;
     --border: rgba(140, 150, 200, .18);
   }
-  .live-shell { height: 100%; font-family: ui-sans-serif, system-ui, "Segoe UI", "Noto Sans Khmer", sans-serif; }
+  .live-shell {
+    height: 100%; font-family: ui-sans-serif, system-ui, "Segoe UI", "Noto Sans Khmer", sans-serif;
+    /* This is the page's host/mount div (LiveShell.tsx), a direct flex-item
+       child of `body{display:flex}`. #a2i-root already stretches this way for
+       /chat; the live page's host div uses this class instead of that id, so
+       without this rule it shrink-wraps to its content's ~680px intrinsic
+       width (driven by .robot's max-width) and leaves the rest of a wide
+       viewport as dead empty space instead of filling it. */
+    flex: 1 1 auto; width: 100%; min-width: 0; min-height: 0;
+  }
   body:has(.live-shell) { overflow: hidden; }
   /* animated future background */
   .live-shell .bg {

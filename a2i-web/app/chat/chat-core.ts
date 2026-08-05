@@ -47,6 +47,11 @@ const ICONS = {
   share: '<path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>',
   message: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
   code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  chip: '<rect x="5" y="5" width="14" height="14" rx="2"/><rect x="10" y="10" width="4" height="4"/><line x1="9" y1="2" x2="9" y2="5"/><line x1="15" y1="2" x2="15" y2="5"/><line x1="9" y1="19" x2="9" y2="22"/><line x1="15" y1="19" x2="15" y2="22"/><line x1="2" y1="9" x2="5" y2="9"/><line x1="2" y1="15" x2="5" y2="15"/><line x1="19" y1="9" x2="22" y2="9"/><line x1="19" y1="15" x2="22" y2="15"/>',
+  bolt: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  mic: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
 };
 // Full <svg> markup for one icon; `cls` adds extra classes (e.g. 'ico-sm').
 function svgIcon(name, cls = '') {
@@ -64,7 +69,7 @@ const SYSTEM_PROMPT =
   'You are A2I, a helpful all-in-one AI assistant. Answer clearly and accurately. ' +
   'If context documents are provided, ground your answer in them.';
 
-// 💻 Coder mode — a coding-specialist persona. Kept deliberately concrete so
+// Coder mode — a coding-specialist persona. Kept deliberately concrete so
 // small local models (Qwen2.5-Coder, DeepSeek-Coder, Code Llama) follow it.
 const CODER_PROMPT =
   'You are A2I Coder, an expert programming assistant. Rules:\n' +
@@ -370,6 +375,9 @@ function showWelcome() {
   const mk = (ico, title, sub, status, st, click) => {
     const b = document.createElement('button');
     b.className = 'w-feat';
+    // The subtitle is hidden by CSS to keep these compact single-row pills —
+    // it (and the status) are still reachable via this hover tooltip.
+    b.title = title + (sub ? ' — ' + sub : '') + (status ? ' (' + status + ')' : '');
     b.innerHTML =
       '<span class="wf-ico">' + ico + '</span>' +
       '<span class="wf-t">' + title + '</span>' +
@@ -378,25 +386,33 @@ function showWelcome() {
     b.addEventListener('click', click);
     feats.appendChild(b);
   };
-  mk('🧠', T('featBrowserT'), T('featBrowserS'), T('featBrowserSt'), 'warn',
+  mk(svgIcon('chip', 'ico-sm'), T('featBrowserT'), T('featBrowserS'), T('featBrowserSt'), 'warn',
     () => { engineSel.value = 'browser'; engineSel.dispatchEvent(new Event('change')); });
-  mk('⚡', T('featZenT'), T('featZenS'),
+  mk(svgIcon('bolt', 'ico-sm'), T('featZenT'), T('featZenS'),
     cloudAvailable ? T('featZenStReady') : (zenOK ? T('featZenStActive') : T('featZenStSetup')),
     cloudAvailable ? 'ok' : (zenOK ? 'ok' : 'warn'),
     () => {
       if (cloudAvailable) {
         engineSel.value = 'cloud'; engineSel.dispatchEvent(new Event('change'));
       } else {
+        openSettings('brain');
         $('preset-zen').click();
       }
     });
-  mk('✨', T('featGemT'), T('featGemS'), gemOK ? T('featZenStActive') : T('featGemSt'), gemOK ? 'ok' : 'warn',
+  mk(svgIcon('sparkles', 'ico-sm'), T('featGemT'), T('featGemS'), gemOK ? T('featZenStActive') : T('featGemSt'), gemOK ? 'ok' : 'warn',
     () => openSettings('gemini'));
-  mk('🌐', T('featWebT'), T('featWebS'), T('featWebSt'), 'ok',
+  // Nudge toward a free, genuinely strong brain (70B+ via Groq/Cerebras) —
+  // the default is a small in-browser model so it works on any device, which
+  // reads as "not smart" until a free key is added. Shown until one is set.
+  const strongBrainOK = serverBrains.some((b) => b.online !== false);
+  mk(svgIcon('bolt', 'ico-sm'), T('featFastT'), T('featFastS'), strongBrainOK ? T('featFastStReady') : T('featFastStSetup'),
+    strongBrainOK ? 'ok' : 'warn',
+    () => { openSettings('brain'); $('preset-cerebras').click(); });
+  mk(svgIcon('globe', 'ico-sm'), T('featWebT'), T('featWebS'), T('featWebSt'), 'ok',
     () => { const t = $('wiki-toggle'); if (t) { t.checked = !t.checked; t.dispatchEvent(new Event('change')); } });
-  mk('🗣️', 'Live voice', '3D voice AI — talk to A2I', 'Live page', 'ok',
+  mk(svgIcon('mic', 'ico-sm'), 'Live voice', '3D voice AI — talk to A2I', 'Live page', 'ok',
     () => { location.href = '/live'; });
-  mk('🎨', T('featMediaT'), T('featMediaS'), T('featMediaSt'), 'ok',
+  mk(svgIcon('image', 'ico-sm'), T('featMediaT'), T('featMediaS'), T('featMediaSt'), 'ok',
     () => { input.focus(); });
   feats.style.display = 'none';
   requestAnimationFrame(() => { feats.style.display = 'grid'; });
@@ -522,7 +538,7 @@ function addMsg(cls, text, label, images) {
         reasonEl = document.createElement('details');
         reasonEl.className = 'reasoning';
         const sum = document.createElement('summary');
-        sum.textContent = '💭 Thinking…';
+        sum.textContent = 'Thinking…';
         reasonEl.appendChild(sum);
         reasonBody = document.createElement('div');
         reasonBody.className = 'reasoning-body';
@@ -530,7 +546,7 @@ function addMsg(cls, text, label, images) {
         wrap.insertBefore(reasonEl, body);
       }
       reasonBody.textContent = t;
-      reasonEl.querySelector('summary').textContent = '💭 Thinking (' +
+      reasonEl.querySelector('summary').textContent = 'Thinking (' +
         t.split(/\s+/).length + ' words)';
     };
     div.update(text);
@@ -547,7 +563,7 @@ function renderChat() {
   for (const m of msgs) {
     if (m.role === 'user') { addMsg('user', m.content, null, m.images); continue; }
     if (m.genImage) {
-      const d = addMsg('ai', '', '🎨 A2I Image');
+      const d = addMsg('ai', '', 'A2I Image');
       const b = d.querySelector('.md');
       b.innerHTML = '';
       const im = new Image(); im.className = 'gen-img'; im.src = m.genImage;
@@ -556,7 +572,7 @@ function renderChat() {
       continue;
     }
     if (m.genAudio) {
-      const d = addMsg('ai', '', '🎵 A2I Audio');
+      const d = addMsg('ai', '', 'A2I Audio');
       const b = d.querySelector('.md');
       b.innerHTML = '';
       const au = document.createElement('audio');
@@ -564,7 +580,7 @@ function renderChat() {
       b.appendChild(au);
       continue;
     }
-    addMsg('ai', m.content, '🧠 A2I');
+    addMsg('ai', m.content, 'A2I');
   }
   regenBtn.style.display =
     msgs.at(-1)?.role === 'assistant' ? 'grid' : 'none';
@@ -877,8 +893,8 @@ let serverBrains = loadServerBrains();
 const saveBrains = () => localStorage.setItem('a2i-brains', JSON.stringify(serverBrains));
 
 function brainStatusLabel(brain) {
-  if (brain.online === true) return ' ✅';
-  if (brain.online === false) return ' (offline ❌)';
+  if (brain.online === true) return ' (online)';
+  if (brain.online === false) return ' (offline)';
   return '';
 }
 
@@ -891,14 +907,17 @@ function rebuildEngineSelect(selected) {
   };
   const hasGemini = !!GEMINI_KEY();
   const hasProviders = hasGemini || serverBrains.length > 0 || cloudAvailable;
-  if (hasProviders) add('auto', '🔄 ' + T('engAuto'));
-  if (cloudAvailable) add('cloud', cloudModel ? '☁️ A2I Cloud — ' + cloudModel + ' (server)' : '☁️ A2I Cloud (fast, no download)');
-  if (hasGemini) add('gemini', '✨ Gemini (' + GEMINI_MODEL() + ')');
-  add('browser', '🧠 ' + T('engBrowser'));
-  serverBrains.forEach((b, i) => add('server:' + i, '🖥️ ' + b.name + brainStatusLabel(b)));
-  add('all', '🧩 ' + T('engAll'));
-  add('gemini-setup', hasGemini ? '✨ ' + T('engGeminiChange') : '✨ ' + T('engGeminiAdd'));
-  add('add', '➕ ' + T('engAdd'));
+  // <option> text is plain-text only (no icon rendering inside a native
+  // <select>), so these are unprefixed — also keeps them shorter for the
+  // topbar's ellipsis-truncated width.
+  if (hasProviders) add('auto', T('engAuto'));
+  if (cloudAvailable) add('cloud', cloudModel ? 'A2I Cloud — ' + cloudModel + ' (server)' : 'A2I Cloud (fast, no download)');
+  if (hasGemini) add('gemini', 'Gemini (' + GEMINI_MODEL() + ')');
+  add('browser', T('engBrowser'));
+  serverBrains.forEach((b, i) => add('server:' + i, b.name + brainStatusLabel(b)));
+  add('all', T('engAll'));
+  add('gemini-setup', hasGemini ? T('engGeminiChange') : T('engGeminiAdd'));
+  add('add', T('engAdd'));
   // Prefer the caller's choice, then the last remembered engine (if still
   // valid), then a sensible default: Cloud → Gemini → in-browser.
   const saved = localStorage.getItem('a2i-engine');
@@ -1035,15 +1054,19 @@ function syncModelPicker() {
 function refreshBar() {
   const mode = engineSel.value;
   const brain = currentServerBrain();
+  // The select is truncated with an ellipsis (long provider descriptions no
+  // longer wrap the topbar to two lines) — keep the full text reachable on
+  // hover/long-press via the native title tooltip.
+  engineSel.title = engineSel.options[engineSel.selectedIndex]?.textContent || '';
   syncModelPicker();
   serverUrl.style.display = brain ? 'inline-block' : 'none';
   if (brain) serverUrl.value = brain.url;
   if (mode === 'auto') {
     setStatus(T('stAuto'), true);
   } else if (mode === 'cloud') {
-    setStatus('☁️ A2I Cloud — ' + CLOUD_MODEL(), true);
+    setStatus('A2I Cloud — ' + CLOUD_MODEL(), true);
   } else if (mode === 'gemini') {
-    setStatus(`✨ Gemini ${GEMINI_MODEL()} — ` + T('stGemini'), true);
+    setStatus(`Gemini ${GEMINI_MODEL()} — ` + T('stGemini'), true);
   } else if (mode === 'browser') {
     setStatus(loadedModel ? `ready: ${loadedModel}`
       : navigator.gpu ? T('stModelLoads')
@@ -1061,6 +1084,7 @@ let loadingReporter = null;
 
 function setStatus(text, ready = false) {
   statusEl.textContent = text;
+  statusEl.title = text; // truncated with an ellipsis in the topbar; full text on hover
   dot.classList.toggle('ready', ready);
   if (loadingReporter) loadingReporter(text);
 }
@@ -1082,9 +1106,12 @@ async function loadWebLLM() {
     '(Could not load the AI library.) ' + lastError.message);
 }
 
+// 1.5B (not 0.5B): still fits phones/basic laptops (see MODELS.md), but is
+// noticeably more coherent than 0.5B — a genuine "not smart" complaint traced
+// back to first-time users landing on the smallest possible default model.
 const CPU_MODEL_URL =
-  'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
-const CPU_MODEL_NAME = 'Qwen2.5 0.5B (CPU)';
+  'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf';
+const CPU_MODEL_NAME = 'Qwen2.5 1.5B (CPU)';
 
 // Turns an infinite hang into a clear, recoverable error: rejects if the
 // wrapped work makes no progress for `ms`. Call `ping()` on each sign of
@@ -1096,8 +1123,8 @@ function stallGuard(ms) {
     clearTimeout(timer);
     timer = setTimeout(() => rejectFn(new Error(
       'ការទាញ model គាំង (គ្មានចលនា ' + Math.round(ms / 1000) + ' វិនាទី) — ' +
-      'សូមចុច "🔄 ជួសជុល" ក្នុង sidebar រួចព្យាយាមម្តងទៀត។ ' +
-      '(Download stalled — click "🔄 Fix" in the sidebar, then retry.)')), ms);
+      'សូមចុច "ជួសជុល" ក្នុង sidebar រួចព្យាយាមម្តងទៀត។ ' +
+      '(Download stalled — click "Fix" in the sidebar, then retry.)')), ms);
   };
   arm();
   return { signal: promise, ping: arm, clear: () => clearTimeout(timer) };
@@ -1644,17 +1671,17 @@ async function askServer(brain, messages, onDelta, signal, onReason) {
 // the next one, so a single 429 (free-tier limit) never breaks the chat.
 async function askAuto(messages, aiDiv, signal) {
   const providers = [];
-  if (GEMINI_KEY()) providers.push({ label: '✨ Gemini', fn: (d, r) => askGemini(messages, d, signal) });
+  if (GEMINI_KEY()) providers.push({ label: 'Gemini', fn: (d, r) => askGemini(messages, d, signal) });
   serverBrains.forEach((b) => {
-    if (b.online !== false) providers.push({ label: '🖥️ ' + b.name, fn: (d, r) => askServer(b, messages, d, signal, r) });
+    if (b.online !== false) providers.push({ label: b.name, fn: (d, r) => askServer(b, messages, d, signal, r) });
   });
-  if (cloudAvailable) providers.push({ label: '☁️ A2I Cloud', fn: (d, r) => askCloud(messages, d, signal) });
-  providers.push({ label: '🧠 In-browser AI', fn: (d, r) => askBrowser(messages, d, signal) });
+  if (cloudAvailable) providers.push({ label: 'A2I Cloud', fn: (d, r) => askCloud(messages, d, signal) });
+  providers.push({ label: 'In-browser AI', fn: (d, r) => askBrowser(messages, d, signal) });
 
   let lastErr = null;
   for (let i = 0; i < providers.length; i++) {
     const p = providers[i];
-    aiDiv.setLabel('🔄 ' + p.label);
+    aiDiv.setLabel(p.label);
     try {
       const ans = await p.fn((t) => aiDiv.update(t), (rt) => aiDiv.setReason(rt));
       if (ans && ans.trim()) { aiDiv.setLabel(p.label); return ans; }
@@ -1678,27 +1705,27 @@ async function askAllBrains(question, messages, signal) {
   const results = [];
   const liveBrains = serverBrains.filter((b) => b.online !== false);
   const tasks = liveBrains.map((brain) => {
-    const div = addMsg('ai', '…', '🖥️ ' + brain.name);
+    const div = addMsg('ai', '…', brain.name);
     return askServer(brain, messages, (t) => div.update(t), signal, (rt) => div.setReason(rt))
       .then((answer) => results.push({ name: brain.name, answer, brain }))
       .catch((err) => div.update('⚠ ' + err.message));
   });
   if (GEMINI_KEY()) {
-    const div = addMsg('ai', '…', '✨ Gemini');
+    const div = addMsg('ai', '…', 'Gemini');
     tasks.push(
       askGemini(messages, (t) => div.update(t), signal)
         .then((answer) => results.push({ name: 'Gemini', answer, brain: null }))
         .catch((err) => div.update('⚠ ' + err.message)));
   }
   if (cloudAvailable) {
-    const div = addMsg('ai', '…', '☁️ A2I Cloud');
+    const div = addMsg('ai', '…', 'A2I Cloud');
     tasks.push(
       askCloud(messages, (t) => div.update(t), signal)
         .then((answer) => results.push({ name: 'A2I Cloud', answer, brain: null, cloud: true }))
         .catch((err) => div.update('⚠ ' + err.message)));
   }
   if (loadedModel && webllmEngine) {
-    const div = addMsg('ai', '…', '🧠 ' + loadedModel);
+    const div = addMsg('ai', '…', loadedModel);
     tasks.push(
       askBrowser(messages, (t) => div.update(t), signal)
         .then((answer) => results.push({ name: 'In-browser ' + loadedModel, answer, brain: null }))
@@ -1707,10 +1734,27 @@ async function askAllBrains(question, messages, signal) {
   await Promise.allSettled(tasks);
 
   if (results.length === 0) {
-    const div = addMsg('ai', '…', '🧠 In-browser AI');
+    const div = addMsg('ai', '…', 'In-browser AI');
     return askBrowser(messages, (t) => div.update(t), signal);
   }
   if (results.length === 1) return results[0].answer;
+
+  // Combining costs a whole extra round-trip (wait for every brain, THEN wait
+  // for one more generation), so only pay for it when it can actually help.
+  // Treat the in-browser fallback model as "weak" — it is usually far smaller
+  // than a configured Cloud/server/Gemini brain.
+  const isWeak = (r) => r.name.startsWith('In-browser ');
+  const strong = results.filter((r) => !isWeak(r));
+
+  // Exactly one strong answer plus weak filler: the strong answer alone is
+  // already the best we have, and asking a small model to "help combine" it
+  // only adds latency and a chance of the small model garbling it.
+  if (strong.length === 1 && strong.length < results.length) return strong[0].answer;
+
+  // Combine among the strong answers when there are any, so a weak in-browser
+  // answer cannot dilute or override a better one; otherwise combine what we have.
+  const toCombine = strong.length > 0 ? strong : results;
+  if (toCombine.length === 1) return toCombine[0].answer;
 
   const combineMessages = [
     { role: 'system', content: activePrompt() },
@@ -1718,23 +1762,25 @@ async function askAllBrains(question, messages, signal) {
       role: 'user',
       content:
         `Question: ${question}\n\n` +
-        results.map((r, i) => `Answer ${i + 1} (from ${r.name}):\n${r.answer}`).join('\n\n') +
+        toCombine.map((r, i) => `Answer ${i + 1} (from ${r.name}):\n${r.answer}`).join('\n\n') +
         '\n\nCombine these answers into one single best answer to the question. ' +
         'Keep what is correct, drop what is wrong, and reply in the language of the question.',
     },
   ];
-  const div = addMsg('ai combined', '…', '🧩 A2I combined / ចម្លើយរួម');
-  // Pick a combiner: prefer Cloud, then in-browser, then any server brain.
-  const serverResult = results.find((r) => r.brain);
+  const div = addMsg('ai combined', '…', 'A2I combined / ចម្លើយរួម');
+  // Pick a combiner: prefer Cloud, then a configured server brain (Groq /
+  // Cerebras / etc. are typically much stronger than the in-browser fallback),
+  // then in-browser only as a last resort.
+  const serverResult = toCombine.find((r) => r.brain) || results.find((r) => r.brain);
   let combined;
   if (cloudAvailable) {
     combined = await askCloud(combineMessages, (t) => div.update(t), signal);
-  } else if (webllmEngine && loadedModel) {
-    combined = await askBrowser(combineMessages, (t) => div.update(t), signal);
   } else if (serverResult) {
     combined = await askServer(serverResult.brain, combineMessages, (t) => div.update(t), signal);
+  } else if (webllmEngine && loadedModel) {
+    combined = await askBrowser(combineMessages, (t) => div.update(t), signal);
   } else {
-    combined = results.map((r) => r.answer).join('\n\n');
+    combined = toCombine.map((r) => r.answer).join('\n\n');
   }
   return combined;
 }
@@ -1790,19 +1836,27 @@ async function generate() {
 
   try {
     let answer;
+    // aiDiv/askFn are hoisted so the self-critique pass below (after the mode
+    // branches) can reuse whichever bubble and brain actually answered.
+    // askFn stays unset for 'all' mode, which already does its own
+    // multi-brain combine and isn't a good fit for a second critique round.
+    let aiDiv, askFn;
     if (mode === 'auto') {
-      const aiDiv = addMsg('ai', '…', '🔄 Auto');
+      aiDiv = addMsg('ai', '…', 'Auto');
       answer = await askAuto(messages, aiDiv, signal);
+      askFn = (msgs, onDelta, sig) => askAuto(msgs, aiDiv, sig);
     } else if (mode === 'cloud') {
-      const aiDiv = addMsg('ai', '…', '☁️ A2I Cloud');
+      aiDiv = addMsg('ai', '…', 'A2I Cloud');
       answer = await askCloud(messages, (t) => aiDiv.update(t), signal, (rt) => aiDiv.setReason(rt));
+      askFn = (msgs, onDelta, sig) => askCloud(msgs, onDelta, sig);
     } else if (mode === 'gemini') {
-      const aiDiv = addMsg('ai', '…', '✨ Gemini');
+      aiDiv = addMsg('ai', '…', 'Gemini');
       answer = await askGemini(messages, (t) => aiDiv.update(t), signal);
+      askFn = (msgs, onDelta, sig) => askGemini(msgs, onDelta, sig);
     } else if (mode === 'all') {
       answer = await askAllBrains(question, messages, signal);
     } else if (mode === 'browser') {
-      const aiDiv = addMsg('ai', '…', '🧠 In-browser AI');
+      aiDiv = addMsg('ai', '…', 'In-browser AI');
       // Until the engine is ready, mirror download progress into the bubble.
       if (!(webllmEngine && loadedModel)) {
         aiDiv.update('⬇ កំពុងរៀបចំ AI ជាលើកដំបូង… (setting up the AI for the first time — this downloads a model once, then works instantly)');
@@ -1811,7 +1865,7 @@ async function generate() {
         // Single-thread prefill has no incremental progress to show, so the
         // wait before the first token can otherwise look identical to a
         // frozen page. Say plainly that it is working.
-        aiDiv.update('🐢 កំពុងគិត (យឺត ព្រោះ browser នេះប្រើ CPU តែ១ core)… ' +
+        aiDiv.update('កំពុងគិត (យឺត ព្រោះ browser នេះប្រើ CPU តែ១ core)… ' +
           'thinking… (slow — this browser runs single-core CPU inference)');
       }
       try {
@@ -1819,11 +1873,42 @@ async function generate() {
       } finally {
         loadingReporter = null;
       }
+      askFn = (msgs, onDelta, sig) => askBrowser(msgs, onDelta, sig);
     } else {
       const brain = currentServerBrain();
-      const aiDiv = addMsg('ai', '…', '🖥️ ' + (brain?.name || 'server'));
+      aiDiv = addMsg('ai', '…', brain?.name || 'server');
       answer = await askServer(brain, messages, (t) => aiDiv.update(t), signal, (rt) => aiDiv.setReason(rt));
+      askFn = (msgs, onDelta, sig) => askServer(brain, msgs, onDelta, sig);
     }
+
+    // Self-critique: ask the same brain to check its own draft and reply with
+    // just the corrected final answer. The draft is kept visible in the
+    // collapsible "Thinking" area so nothing is silently thrown away; on any
+    // failure (timeout, provider error) the original draft is kept as-is.
+    if (answer && askFn && critiqueMode && !signal.aborted) {
+      const draft = answer;
+      aiDiv.setReason(draft);
+      aiDiv.update(T('critiqueRunning'));
+      try {
+        const critiqueMessages = [
+          { role: 'system', content: activePrompt() },
+          {
+            role: 'user',
+            content:
+              `Question: ${question}\n\nDraft answer:\n${draft}\n\n` +
+              'Carefully check the draft answer above for mistakes, missing steps, or unclear ' +
+              'parts. Reply with ONLY the corrected, final answer (not a list of corrections) — ' +
+              'in the language of the question.',
+          },
+        ];
+        const revised = await askFn(critiqueMessages, (t) => aiDiv.update(t), signal);
+        answer = (revised && revised.trim()) ? revised : draft;
+      } catch {
+        answer = draft;
+      }
+      if (answer === draft) aiDiv.update(draft);
+    }
+
     if (answer) {
       history.push({ role: 'assistant', content: answer });
       persistChat();
@@ -1935,11 +2020,23 @@ audBtn.addEventListener('click', () => {
   input.focus();
 });
 
+// Self-critique: after a normal answer, ask the same brain to review its own
+// draft and produce a corrected final version. Persistent setting (not a
+// one-shot composer mode like image/audio), since it affects every reply.
+let critiqueMode = localStorage.getItem('a2i-critique') === '1';
+const critiqueBtn = $('critique-btn');
+critiqueBtn.classList.toggle('on', critiqueMode);
+critiqueBtn.addEventListener('click', () => {
+  critiqueMode = !critiqueMode;
+  localStorage.setItem('a2i-critique', critiqueMode ? '1' : '0');
+  critiqueBtn.classList.toggle('on', critiqueMode);
+});
+
 async function generateImage(prompt) {
   addMsg('user', prompt);
   history.push({ role: 'user', content: prompt });
   persistChat();
-  const div = addMsg('ai', '🎨 កំពុងបង្កើតរូប… (generating image, ~10s)', '🎨 A2I Image');
+  const div = addMsg('ai', 'កំពុងបង្កើតរូប… (generating image, ~10s)', 'A2I Image');
   const body = div.querySelector('.md');
   const seed = Math.floor(Math.random() * 1e6);
   const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
@@ -1959,7 +2056,7 @@ async function generateImage(prompt) {
     wrap.appendChild(dl);
     body.appendChild(wrap);
     log.scrollTop = log.scrollHeight;
-    history.push({ role: 'assistant', content: '🎨 ' + prompt, genImage: url });
+    history.push({ role: 'assistant', content: prompt, genImage: url });
     persistChat();
   };
   img.onerror = () => {
@@ -2004,7 +2101,7 @@ async function generateAudio(prompt) {
   addMsg('user', prompt);
   history.push({ role: 'user', content: prompt });
   persistChat();
-  const div = addMsg('ai', '🎵 កំពុងបង្កើតសំឡេង… (generating audio, ~10s)', '🎵 A2I Audio');
+  const div = addMsg('ai', 'កំពុងបង្កើតសំឡេង… (generating audio, ~10s)', 'A2I Audio');
   const body = div.querySelector('.md');
   const url = audioUrl(prompt);
   try {
@@ -2012,7 +2109,7 @@ async function generateAudio(prompt) {
     body.innerHTML = '';
     body.appendChild(wrap);
     log.scrollTop = log.scrollHeight;
-    history.push({ role: 'assistant', content: '🎵 ' + prompt, genAudio: url });
+    history.push({ role: 'assistant', content: prompt, genAudio: url });
     persistChat();
   } catch {
     div.update('⚠ បង្កើតសំឡេងមិនបានទេ — ព្យាយាមម្តងទៀត ឬពិនិត្យអ៊ីនធឺណិត។ (Audio generation failed — try again.)');
@@ -2024,7 +2121,7 @@ form.addEventListener('submit', async (e) => {
   const text = input.value.trim();
   if (currentAbort) return;
 
-  // Image generation: via the 🎨 toggle or a /image · /imagine command.
+  // Image generation: via the image toggle or a /image · /imagine command.
   const cmd = /^\/(image|imagine)\s+/i.exec(text);
   if ((imageMode && text) || cmd) {
     const prompt = cmd ? text.slice(cmd[0].length).trim() : text;
@@ -2034,7 +2131,7 @@ form.addEventListener('submit', async (e) => {
     return;
   }
 
-  // Audio / voice generation: via the 🎵 toggle or a /audio · /speak · /voice command.
+  // Audio / voice generation: via the audio toggle or a /audio · /speak · /voice command.
   const audCmd = /^\/(audio|speak|voice)\s+/i.exec(text);
   if ((audioMode && text) || audCmd) {
     const prompt = audCmd ? text.slice(audCmd[0].length).trim() : text;
@@ -2181,7 +2278,7 @@ if (cloudGo) cloudGo.addEventListener('click', () => {
   localStorage.setItem('a2i-engine', 'cloud');
   rebuildEngineSelect('cloud'); refreshBar();
   closeSettings();
-  toast('☁️ A2I Cloud — ' + (cloudModel || T('stReady')), 'ok');
+  toast('A2I Cloud — ' + (cloudModel || T('stReady')), 'ok');
 });
 
 // Settings tabs: Models / Providers / Appearance.
@@ -2671,7 +2768,7 @@ function chatToMarkdown() {
   const date = new Date().toLocaleString();
   let md = `# A2I chat — ${date}\n\n`;
   for (const m of msgs) {
-    const who = m.role === 'user' ? '🧑 You' : '🤖 A2I';
+    const who = m.role === 'user' ? 'You' : 'A2I';
     const body = m.content || (m.images?.length ? '_[image]_' : '');
     md += `### ${who}\n\n${body}\n\n`;
   }
