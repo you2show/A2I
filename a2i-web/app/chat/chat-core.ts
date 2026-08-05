@@ -370,6 +370,9 @@ function showWelcome() {
   const mk = (ico, title, sub, status, st, click) => {
     const b = document.createElement('button');
     b.className = 'w-feat';
+    // The subtitle is hidden by CSS to keep these compact single-row pills —
+    // it (and the status) are still reachable via this hover tooltip.
+    b.title = title + (sub ? ' — ' + sub : '') + (status ? ' (' + status + ')' : '');
     b.innerHTML =
       '<span class="wf-ico">' + ico + '</span>' +
       '<span class="wf-t">' + title + '</span>' +
@@ -1043,6 +1046,10 @@ function syncModelPicker() {
 function refreshBar() {
   const mode = engineSel.value;
   const brain = currentServerBrain();
+  // The select is truncated with an ellipsis (long provider descriptions no
+  // longer wrap the topbar to two lines) — keep the full text reachable on
+  // hover/long-press via the native title tooltip.
+  engineSel.title = engineSel.options[engineSel.selectedIndex]?.textContent || '';
   syncModelPicker();
   serverUrl.style.display = brain ? 'inline-block' : 'none';
   if (brain) serverUrl.value = brain.url;
@@ -1069,6 +1076,7 @@ let loadingReporter = null;
 
 function setStatus(text, ready = false) {
   statusEl.textContent = text;
+  statusEl.title = text; // truncated with an ellipsis in the topbar; full text on hover
   dot.classList.toggle('ready', ready);
   if (loadingReporter) loadingReporter(text);
 }

@@ -142,7 +142,10 @@ select, #server-url {
   outline: none; transition: border-color .15s, box-shadow .15s;
 }
 select:focus, #server-url:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-#engine { font-weight: 600; }
+#engine {
+  font-weight: 600; max-width: 19rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 #server-url { flex: 1; min-width: 11rem; display: none; }
 #topbar label.wiki { display: flex; align-items: center; gap: .3rem; cursor: pointer; color: var(--muted); font-size: .82rem; user-select: none; }
 #coder-btn, #live-link, #search-mode {
@@ -173,7 +176,8 @@ body.coder #coder-btn { background: var(--accent); border-color: var(--accent); 
   cursor: pointer; font: inherit; font-size: .84rem; color: var(--text);
 }
 .popmenu button:hover { background: var(--side); }
-#status-wrap { margin-left: auto; display: flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .78rem; }
+#status-wrap { margin-left: auto; display: flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .78rem; min-width: 0; }
+#status { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }
 .dot.ready { background: var(--ok); }
 .dot.busy { background: var(--accent); animation: a2i-pulse .9s ease-in-out infinite; }
@@ -277,7 +281,7 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 .gen-audio { width: 100%; margin: .4em 0; }
 
 /* Welcome */
-#welcome { text-align: center; padding: 3.4rem 1rem 1rem; }
+#welcome { text-align: center; padding: 2.3rem 1rem 1rem; }
 #welcome .logo-big {
   width: 56px; height: 56px; border-radius: 16px; background: var(--grad); color: #fff;
   display: grid; place-items: center; font-size: 1.6rem; font-weight: 800; margin: 0 auto 1rem;
@@ -299,11 +303,23 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 }
 .chip:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 0 0 3px var(--ring); }
 @media (max-width: 560px) { .chips { grid-template-columns: 1fr; } }
-.w-feats { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .7rem; max-width: 38rem; margin: 1.7rem auto 0; text-align: left; }
-.w-feat { border: 1px solid var(--border); border-radius: 14px; padding: .85rem 1rem; background: var(--panel); }
-.wf-ico { font-size: 1rem; margin-bottom: .35rem; }
-.wf-t { font-size: .87rem; font-weight: 600; }
-.wf-s { font-size: .75rem; color: var(--muted); margin-top: .1rem; }
+/* Compact single-row pills (icon + title + status), not stacked info cards —
+   the full title/subtitle/status is still reachable via the title tooltip
+   set in mk() (chat-core.ts), so nothing shown before is lost, just quieter. */
+.w-feats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .5rem; max-width: 40rem; margin: 1.3rem auto 0; text-align: left; }
+.w-feat {
+  border: 1px solid var(--border); border-radius: 10px; padding: .5rem .7rem;
+  background: var(--panel); display: flex; align-items: center; gap: .5rem;
+  cursor: pointer; transition: border-color .15s, transform .1s;
+}
+.w-feat:hover { border-color: var(--accent); transform: translateY(-1px); }
+.wf-ico { font-size: .9rem; flex-shrink: 0; line-height: 1; }
+.wf-t { font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 2.5rem; }
+.wf-s { display: none; }
+.wf-st {
+  margin-left: auto; font-size: .68rem; color: var(--muted); flex-shrink: 1;
+  padding-left: .4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .wf-st.ok { color: var(--ok); }
 @media (max-width: 760px) { .w-feats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
