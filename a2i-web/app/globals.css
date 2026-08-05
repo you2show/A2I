@@ -415,8 +415,18 @@ body.coder .msg.ai .md pre { border-color: var(--accent); }
 .badge-rec { background: var(--accent-soft); color: var(--accent); font-size: .68rem; font-weight: 700; padding: .15rem .55rem; border-radius: 999px; }
 .setup-hint { background: var(--grad-soft); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); border-radius: 12px; padding: .7rem .9rem; font-size: .8rem; color: var(--muted); line-height: 1.55; margin-bottom: .9rem; }
 .setup-hint b { color: var(--accent); }
-.provider-presets { display: flex; flex-wrap: wrap; gap: .45rem; margin: .5rem 0 .85rem; }
-.provider-presets .btn { font-size: .77rem; padding: .35rem .65rem; }
+.preset-group { margin: .7rem 0; }
+.preset-group-label {
+  font-size: .68rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: .4rem;
+}
+.provider-presets { display: flex; flex-wrap: wrap; gap: .4rem; }
+.provider-presets .btn { font-size: .8rem; padding: .38rem .75rem; }
+.provider-presets .btn.ghost-sm {
+  font-size: .72rem; padding: .3rem .55rem; color: var(--muted);
+  background: transparent; border-style: dashed;
+}
+.provider-presets .btn.ghost-sm:hover { color: var(--accent); border-color: var(--accent); }
 .brain-list { display: flex; flex-direction: column; gap: .4rem; }
 .brain-row {
   display: flex; align-items: center; gap: .6rem; border: 1px solid var(--border);

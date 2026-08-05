@@ -91,15 +91,15 @@
     <div class="modal-body">
 
       <div class="set-tabs">
-        <button type="button" class="set-tab active" data-tab="models">⚙️ <span data-i18n="tabModels">Models</span></button>
-        <button type="button" class="set-tab" data-tab="providers">🔌 <span data-i18n="tabProviders">Providers</span></button>
-        <button type="button" class="set-tab" data-tab="appearance">🎨 <span data-i18n="tabAppearance">Appearance</span></button>
+        <button type="button" class="set-tab active" data-tab="models"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> <span data-i18n="tabModels">Models</span></button>
+        <button type="button" class="set-tab" data-tab="providers"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> <span data-i18n="tabProviders">Providers</span></button>
+        <button type="button" class="set-tab" data-tab="appearance"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg> <span data-i18n="tabAppearance">Appearance</span></button>
       </div>
 
       <div class="tab-pane" data-tab="models">
       <div id="cloud-status" class="setup-hint" hidden>
         <div data-i18n-html="cloudStatusBody"></div>
-        <div class="row-btns"><button id="cloud-go" class="btn primary">☁️ <span data-i18n="chatCloudBtn">Chat with A2I Cloud</span></button></div>
+        <div class="row-btns"><button id="cloud-go" class="btn primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> <span data-i18n="chatCloudBtn">Chat with A2I Cloud</span></button></div>
       </div>
       <div class="setup-hint" data-i18n-html="quickStart">Quick start: A2I Cloud is already set up on the server — pick it in the list above and start chatting right away, no setup needed. The sections below are only for adding more AI options.</div>
 
@@ -165,19 +165,27 @@
       <section class="setblock">
         <div class="setblock-h"><span class="setnum">4</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> <span data-i18n="providersBlockTitle">AI providers — local &amp; free</span></div>
         <p class="hint" data-i18n="providersHint">More free APIs — keys stay in your browser, just press a preset button (form fills itself) then Add provider: Groq · OpenRouter · Hugging Face · Zen · Opencode Server · A2I Core · vLLM · Ollama.</p>
-        <div class="provider-presets">
-          <button type="button" class="btn" id="preset-groq" data-i18n="presetGroq">Groq (free)</button>
-          <button type="button" class="btn" id="preset-cerebras" data-i18n="presetCerebras">Cerebras (free)</button>
-          <button type="button" class="btn" id="preset-openrouter" data-i18n="presetOpenrouter">OpenRouter (free)</button>
-          <button type="button" class="btn" id="preset-hf" data-i18n="presetHf">Hugging Face (free)</button>
-          <button type="button" class="btn" id="preset-airforce" data-i18n="presetAirforce">Api.Airforce (free)</button>
-          <button type="button" class="btn" id="preset-zen" data-i18n="presetZen">OpenCode Zen (free)</button>
-          <button type="button" class="btn" id="preset-zen-refresh">↻ Zen models</button>
-          <button type="button" class="btn" id="preset-oc" data-i18n="presetOc">Opencode Server (local)</button>
-          <button type="button" class="btn" id="preset-oc-refresh">↻ OC models</button>
-          <button type="button" class="btn" id="preset-a2icore" data-i18n="presetA2icore">A2I Core (local)</button>
-          <button type="button" class="btn" id="preset-vllm" data-i18n="presetVllm">vLLM (GPU, local)</button>
-          <button type="button" class="btn" id="preset-ollama" data-i18n="presetOllama">Ollama (local)</button>
+        <div class="preset-group">
+          <div class="preset-group-label" data-i18n="presetGroupFree">Free — hosted API</div>
+          <div class="provider-presets">
+            <button type="button" class="btn" id="preset-groq" data-i18n="presetGroq">Groq</button>
+            <button type="button" class="btn" id="preset-cerebras" data-i18n="presetCerebras">Cerebras</button>
+            <button type="button" class="btn" id="preset-openrouter" data-i18n="presetOpenrouter">OpenRouter</button>
+            <button type="button" class="btn" id="preset-hf" data-i18n="presetHf">Hugging Face</button>
+            <button type="button" class="btn" id="preset-airforce" data-i18n="presetAirforce">Api.Airforce</button>
+            <button type="button" class="btn" id="preset-zen" data-i18n="presetZen">OpenCode Zen</button>
+            <button type="button" class="btn ghost-sm" id="preset-zen-refresh">↻ Zen models</button>
+          </div>
+        </div>
+        <div class="preset-group">
+          <div class="preset-group-label" data-i18n="presetGroupLocal">Local / self-hosted</div>
+          <div class="provider-presets">
+            <button type="button" class="btn" id="preset-oc" data-i18n="presetOc">Opencode Server</button>
+            <button type="button" class="btn ghost-sm" id="preset-oc-refresh">↻ OC models</button>
+            <button type="button" class="btn" id="preset-a2icore" data-i18n="presetA2icore">A2I Core</button>
+            <button type="button" class="btn" id="preset-vllm" data-i18n="presetVllm">vLLM (GPU)</button>
+            <button type="button" class="btn" id="preset-ollama" data-i18n="presetOllama">Ollama</button>
+          </div>
         </div>
         <div id="set-brain-list" class="brain-list"></div>
         <div class="add-brain add-brain-2">
