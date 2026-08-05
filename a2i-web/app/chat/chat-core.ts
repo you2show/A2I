@@ -933,6 +933,10 @@ function apiBase(url) {
   // Same-origin Vercel proxy paths (/api/zen) already include the full base —
   // never append /v1 to them.
   if (base.startsWith('/api/')) return base;
+  // Some OpenAI-compatible services expose their root at /openai instead of
+  // /v1 (Pollinations does). Those are already complete API roots — appending
+  // /v1 would turn them into a 404.
+  if (/\/openai$/.test(base)) return base;
   return /\/v\d+$/.test(base) ? base : base + '/v1';
 }
 
@@ -2408,12 +2412,15 @@ $('set-brain-add').addEventListener('click', () => {
   checkBrains(); renderBrainList();
 });
 
-// Free-provider quick presets: fill the form, focus the key field.
-function fillProvider(name, url, model) {
+// Free-provider quick presets: fill the form, focus the key field. Providers
+// that take no key focus the Add button instead, so the empty key field does
+// not read as a required step.
+function fillProvider(name, url, model, keyless = false) {
   $('set-brain-name').value = name;
   $('set-brain-url').value = url;
   $('set-brain-model').value = model || '';
-  $('set-brain-key').focus();
+  if (keyless) $('set-brain-key').value = '';
+  $(keyless ? 'set-brain-add' : 'set-brain-key').focus();
 }
 $('preset-groq').addEventListener('click', () =>
   fillProvider('Groq', 'https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile'));
@@ -2430,6 +2437,11 @@ $('preset-hf').addEventListener('click', () =>
 // Api.Airforce — a single free gateway to 100+ open models.
 $('preset-airforce').addEventListener('click', () =>
   fillProvider('Api.Airforce', 'https://api.airforce/v1', 'gpt-oss-120b'));
+// Pollinations — a genuinely keyless public OpenAI-compatible endpoint, so it
+// works for a first-time visitor with nothing configured. Its API root is
+// /openai rather than /v1 (see apiBase).
+$('preset-pollinations').addEventListener('click', () =>
+  fillProvider('Pollinations', 'https://text.pollinations.ai/openai', 'openai-fast', true));
 $('preset-zen').addEventListener('click', () => {
   // One click = done. If a Zen key is already saved, add/activate the brain
   // immediately; otherwise open Settings with the Zen key field focused.
@@ -2556,6 +2568,11 @@ $('preset-vllm').addEventListener('click', () =>
   fillProvider('vLLM', 'http://127.0.0.1:8000/v1', 'Qwen/Qwen2.5-Coder-7B-Instruct'));
 $('preset-ollama').addEventListener('click', () =>
   fillProvider('Ollama', 'http://127.0.0.1:11434/v1', 'qwen2.5-coder'));
+// gpt4free runs its own OpenAI-compatible server (default port 1337) and sends
+// CORS *, so the browser can call it directly. Local-only on purpose: it is a
+// third-party tool the user chooses to run, not something A2I ships or hosts.
+$('preset-g4f').addEventListener('click', () =>
+  fillProvider('gpt4free', 'http://127.0.0.1:1337/v1', '', true));
 
 $('set-theme').addEventListener('click', () =>
   applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
