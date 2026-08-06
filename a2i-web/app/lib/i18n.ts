@@ -110,6 +110,11 @@ const DICT: Record<string, { km: string; en: string }> = {
   presetVllm: { km: 'vLLM (GPU)', en: 'vLLM (GPU)' },
   presetOllama: { km: 'Ollama', en: 'Ollama' },
   presetG4f: { km: 'gpt4free', en: 'gpt4free' },
+  replyTruncated:
+    {
+      km: '⚠ ចម្លើយត្រូវបានកាត់ ដោយសារដល់ដែនកំណត់ប្រវែង — សូមសួរ "បន្ត" ដើម្បីអានតទៅទៀត។',
+      en: '⚠ Reply cut off at the length limit — ask "continue" to get the rest.',
+    },
   modelStaleTag: { km: '(រកមិនឃើញ)', en: '(not offered)' },
   modelStaleTitle:
     {

@@ -1197,6 +1197,18 @@ const CPU_MODEL_URL =
   'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf';
 const CPU_MODEL_NAME = 'Qwen2.5 1.5B (CPU)';
 
+// Reply-length budgets. These used to be 1024 everywhere (and 180-300 on the
+// CPU path), which cut ordinary answers off mid-sentence with no indication
+// that anything had been dropped. Hosted providers stream fast enough that a
+// generous budget costs nothing when the model finishes early; in-browser
+// engines stay lower because every token is generated on the user's device.
+// Whatever the budget, a reply that hits it is now labelled rather than
+// silently truncated — see readSSE/markIfTruncated.
+const MAX_TOKENS_HOSTED = 4096;
+const MAX_TOKENS_GPU = 2048;
+const MAX_TOKENS_CPU = 1024;
+const MAX_TOKENS_CPU_COMPAT = 512;
+
 // Turns an infinite hang into a clear, recoverable error: rejects if the
 // wrapped work makes no progress for `ms`. Call `ping()` on each sign of
 // life (e.g. a download-progress event).
@@ -1235,7 +1247,7 @@ async function loadGpuEngine(model) {
   return {
     kind: 'gpu',
     stop: () => engine.interruptGenerate?.(),
-    async ask(messages, onDelta, signal, maxTokens = 1024) {
+    async ask(messages, onDelta, signal, maxTokens = MAX_TOKENS_GPU) {
       const chunks = await engine.chat.completions.create({
         messages, stream: true, max_tokens: maxTokens,
       });
@@ -1418,11 +1430,12 @@ async function loadCpuEngine(forceCompat = false) {
     kind: 'cpu',
     compat,
     stop: () => {},
-    ask(messages, onDelta, signal, maxTokens = 1024) {
-      // Single-thread compat generation is slow per token; a shorter cap
-      // means a full answer finishes sooner instead of a longer one being
-      // cut off by the user losing patience.
-      const cap = compat ? 180 : 300;
+    ask(messages, onDelta, signal, maxTokens = MAX_TOKENS_CPU) {
+      // Single-thread compat generation is slow per token, so the CPU path
+      // stays the most conservative of the engines — but the old 180/300
+      // caps ended almost every answer mid-sentence, which reads as a broken
+      // model rather than a deliberate limit.
+      const cap = compat ? MAX_TOKENS_CPU_COMPAT : MAX_TOKENS_CPU;
       return new Promise((resolve, reject) => {
         let answer = '';
         wllama.createChatCompletion({
@@ -1525,7 +1538,7 @@ async function askBrowser(messages, onDelta, signal) {
 async function readSSE(res, onDelta, signal, onReason) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let answer = '', reasoning = '', buffer = '';
+  let answer = '', reasoning = '', buffer = '', truncated = false;
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -1538,6 +1551,10 @@ async function readSSE(res, onDelta, signal, onReason) {
         try {
           const chunk = JSON.parse(line.slice(6));
           const d = chunk.choices?.[0]?.delta;
+          // "length" means the model was stopped by the token budget rather
+          // than finishing its thought. Without this the reply just ends
+          // mid-sentence and looks like a broken model.
+          if (chunk.choices?.[0]?.finish_reason === 'length') truncated = true;
           if (d?.reasoning_content) {
             reasoning += d.reasoning_content;
             if (onReason) onReason(reasoning);
@@ -1549,6 +1566,10 @@ async function readSSE(res, onDelta, signal, onReason) {
   } catch (err) {
     if (!signal?.aborted) throw err;
   }
+  if (truncated && answer) {
+    answer += '\n\n' + T('replyTruncated');
+    onDelta(answer);
+  }
   return answer;
 }
 
@@ -1559,7 +1580,7 @@ async function readSSE(res, onDelta, signal, onReason) {
 const GEMINI_KEY = () => localStorage.getItem('a2i-gemini-key') || '';
 const GEMINI_MODEL = () => localStorage.getItem('a2i-gemini-model') || 'gemini-2.0-flash';
 
-function toGeminiBody(messages, maxTokens = 1024) {
+function toGeminiBody(messages, maxTokens = MAX_TOKENS_HOSTED) {
   const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
   const contents = messages
     .filter((m) => m.role !== 'system')
@@ -1704,7 +1725,7 @@ async function askCloud(messages, onDelta, signal, onReason) {
     res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: toOpenAIMessages(messages), max_tokens: 1024, model: CLOUD_MODEL() }),
+      body: JSON.stringify({ messages: toOpenAIMessages(messages), max_tokens: MAX_TOKENS_HOSTED, model: CLOUD_MODEL() }),
       signal,
     });
   } catch (err) {
@@ -1732,7 +1753,7 @@ async function askServer(brain, messages, onDelta, signal, onReason) {
       headers['X-Title'] = 'A2I';
     }
     const body = {
-      messages: toOpenAIMessages(messages), stream: true, max_tokens: 1024,
+      messages: toOpenAIMessages(messages), stream: true, max_tokens: MAX_TOKENS_HOSTED,
       temperature: activeTemperature(),
     };
     if (brain.model) body.model = brain.model;

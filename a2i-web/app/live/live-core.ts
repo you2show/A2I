@@ -81,11 +81,15 @@ async function readSSE(res, onDelta) {
   return answer;
 }
 
+// Voice answers are spoken aloud, so they stay shorter than the chat page's
+// budget — but the old 512 cut normal spoken replies off mid-sentence.
+const LIVE_MAX_TOKENS = 1024;
+
 // ---- Gemini (your own API key, called straight from the browser) --------
 const GEMINI_KEY = () => localStorage.getItem('a2i-gemini-key') || '';
 const GEMINI_MODEL = () => localStorage.getItem('a2i-gemini-model') || 'gemini-2.0-flash';
 
-function toGeminiBody(messages, maxTokens = 512) {
+function toGeminiBody(messages, maxTokens = LIVE_MAX_TOKENS) {
   const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
   const contents = messages.filter((m) => m.role !== 'system')
     .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
@@ -127,7 +131,7 @@ async function askModel(messages, onDelta, signal) {
   try {
     const res = await fetch(CORE_URL.replace(/\/+$/, '') + '/v1/chat/completions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, stream: true, max_tokens: 512, temperature: 0.7 }),
+      body: JSON.stringify({ messages, stream: true, max_tokens: LIVE_MAX_TOKENS, temperature: 0.7 }),
       signal,
     });
     if (res.ok) return await readSSE(res, onDelta);
@@ -135,7 +139,7 @@ async function askModel(messages, onDelta, signal) {
   // 2) A2I Cloud proxy (optional)
   const res = await fetch('/api/chat', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, max_tokens: 512 }), signal,
+    body: JSON.stringify({ messages, max_tokens: LIVE_MAX_TOKENS }), signal,
   }).catch(() => null);
   if (res && res.ok) return await readSSE(res, onDelta);
   throw new Error(T('liveErrBrain'));
