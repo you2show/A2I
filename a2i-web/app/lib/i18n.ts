@@ -110,6 +110,18 @@ const DICT: Record<string, { km: string; en: string }> = {
   presetVllm: { km: 'vLLM (GPU)', en: 'vLLM (GPU)' },
   presetOllama: { km: 'Ollama', en: 'Ollama' },
   presetG4f: { km: 'gpt4free', en: 'gpt4free' },
+  modelStaleTag: { km: '(រកមិនឃើញ)', en: '(not offered)' },
+  modelStaleTitle:
+    {
+      km: 'ម៉ូដែល "{m}" លែងមាននៅ {name} ទៀតហើយ — សូមជ្រើសមួយផ្សេង',
+      en: '"{m}" is no longer offered by {name} — pick another model',
+    },
+  modelTooBigTag: { km: '(ធំពេកសម្រាប់ម៉ាស៊ីននេះ)', en: '(too big for this device)' },
+  toastModelAuto:
+    {
+      km: 'បានជ្រើសម៉ូដែល "{m}" សម្រាប់ {name} ដោយស្វ័យប្រវត្តិ',
+      en: 'Auto-selected "{m}" for {name}',
+    },
   presetGroupFree: { km: 'ឥតគិតថ្លៃ — API', en: 'Free — hosted API' },
   presetGroupLocal: { km: 'ដំណើរការក្នុងម៉ាស៊ីនអ្នក', en: 'Local / self-hosted' },
   zenRefreshBtn: { km: 'ម៉ូដែល Zen', en: 'Zen models' },

@@ -63,7 +63,8 @@ function svgIcon(name, cls = '') {
 const log = $('log'), col = $('col'), form = $('form'), input = $('input');
 const send = $('send'), stopBtn = $('stop'), regenBtn = $('regen');
 const engineSel = $('engine'), modelSel = $('model'), serverUrl = $('server-url');
-const browserModelOptions = modelSel.innerHTML;
+// Replaced once WebLLM has been asked which of these ids really exist.
+let browserModelOptions = modelSel.innerHTML;
 const statusEl = $('status'), dot = $('dot'), progress = $('progress');
 const SYSTEM_PROMPT =
   'You are A2I, a helpful all-in-one AI assistant. Answer clearly and accurately. ' +
@@ -940,13 +941,29 @@ function apiBase(url) {
   return /\/v\d+$/.test(base) ? base : base + '/v1';
 }
 
+// Ask a provider what it actually serves, instead of trusting a hardcoded
+// model name that may have been renamed or retired upstream. Returns [] for
+// endpoints that answer but do not implement /models — that is not an error,
+// it just means we cannot verify and must take the user's model on trust.
+async function fetchModelList(url, apiKey, timeout = 8000) {
+  const headers = apiKey ? { Authorization: 'Bearer ' + apiKey } : {};
+  const res = await fetch(apiBase(url) + '/models',
+    { headers, signal: AbortSignal.timeout(timeout) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json().catch(() => null);
+  const list = (data && (data.data || data)) || [];
+  return (Array.isArray(list) ? list : [])
+    .map((m) => (typeof m === 'string' ? m : m && m.id))
+    .filter((id) => typeof id === 'string' && id);
+}
+
 async function checkBrains() {
   await Promise.all(serverBrains.map(async (brain) => {
     try {
-      const headers = brain.apiKey ? { Authorization: 'Bearer ' + brain.apiKey } : {};
-      const res = await fetch(apiBase(brain.url) + '/models',
-        { headers, signal: AbortSignal.timeout(8000) });
-      brain.online = res.ok;
+      // Same request that used to only set online/offline — now its body is
+      // kept, so every brain knows its own real model list for free.
+      brain.models = await fetchModelList(brain.url, brain.apiKey);
+      brain.online = true;
     } catch {
       brain.online = false;
     }
@@ -1012,6 +1029,7 @@ function syncModelPicker() {
   if (mode === 'browser') {
     modelSel.innerHTML = browserModelOptions;
     modelSel.style.display = navigator.gpu ? 'inline-block' : 'none';
+    validateBrowserModels();
     return;
   }
   if (mode === 'gemini') {
@@ -1044,12 +1062,21 @@ function syncModelPicker() {
     if (zen) {
       (zenModels || []).forEach((m) => { if (!models.includes(m)) models.push(m); });
     }
+    // Everything the provider itself reported (checkBrains caches it), so the
+    // picker offers what is really available rather than one hardcoded guess.
+    (brain.models || []).forEach((m) => { if (!models.includes(m)) models.push(m); });
+    // A saved model missing from a list the provider did return has been
+    // retired or renamed — say so here rather than failing at send time.
+    const stale = brain.model && (brain.models || []).length
+      && !brain.models.includes(brain.model);
     modelSel.innerHTML = models.length
-      ? models.map((m) => '<option value="' + m + '">' + m + '</option>').join('')
+      ? models.map((m) => '<option value="' + escapeHtml(m) + '">'
+        + escapeHtml(m === brain.model && stale ? m + ' ' + T('modelStaleTag') : m) + '</option>').join('')
       : '<option value="">(set model in Settings)</option>';
     if (brain.model) modelSel.value = brain.model;
     modelSel.style.display = 'inline-block';
-    modelSel.title = brain.name + ' model';
+    modelSel.title = stale ? Tf('modelStaleTitle', { m: brain.model, name: brain.name })
+      : brain.name + ' model';
     return;
   }
   modelSel.style.display = 'none';
@@ -1103,11 +1130,64 @@ async function loadWebLLM() {
   ];
   let lastError = null;
   for (const src of sources) {
-    try { return await import(src); } catch (err) { lastError = err; }
+    // webpackIgnore keeps this a native dynamic import. Without it the bundler
+    // rewrites it into its own module resolution, which cannot handle absolute
+    // URLs and fails with "Cannot find module https://…" — silently disabling
+    // every in-browser model.
+    try { return await import(/* webpackIgnore: true */ src); } catch (err) { lastError = err; }
   }
   throw new Error(
     'មិនអាចទាញ AI library បានទេ — សូមពិនិត្យអ៊ីនធឺណិត រួចព្យាយាមម្តងទៀត។ ' +
     '(Could not load the AI library.) ' + lastError.message);
+}
+
+// The in-browser model list is hand-maintained HTML, but WebLLM is the only
+// authority on which ids actually exist. A renamed or retired id used to fail
+// at load time — after the user had already committed to a download — so ask
+// WebLLM up front and drop anything it does not recognise.
+let browserModelsChecked = false;
+
+async function validateBrowserModels() {
+  if (browserModelsChecked || !navigator.gpu) return;
+  browserModelsChecked = true;
+  let known;
+  try {
+    const webllm = await loadWebLLM();
+    known = webllm.prebuiltAppConfig && webllm.prebuiltAppConfig.model_list;
+  } catch {
+    return; // library unreachable — leave the hand-written list alone
+  }
+  if (!Array.isArray(known) || !known.length) return;
+  const byId = new Map(known.map((m) => [m.model_id, m]));
+
+  // navigator.deviceMemory is coarse (Chrome caps it at 8) so it is only used
+  // to flag models that need more than the machine's ENTIRE reported memory —
+  // those cannot run. Anything subtler is left to the user to try.
+  const budgetMB = (navigator.deviceMemory || 0) * 1024;
+  const host = document.createElement('div');
+  host.innerHTML = browserModelOptions;
+  let dropped = 0;
+  host.querySelectorAll('option').forEach((opt) => {
+    const info = byId.get(opt.value);
+    if (!info) { opt.remove(); dropped++; return; }
+    if (budgetMB && info.vram_required_MB && info.vram_required_MB > budgetMB) {
+      opt.textContent += ' ' + T('modelTooBigTag');
+    }
+  });
+  host.querySelectorAll('optgroup').forEach((g) => {
+    if (!g.querySelector('option')) g.remove();
+  });
+  if (!host.querySelector('option')) return; // never leave the picker empty
+
+  const keep = modelSel.value;
+  browserModelOptions = host.innerHTML;
+  if (engineSel.value === 'browser') {
+    modelSel.innerHTML = browserModelOptions;
+    if (keep && host.querySelector('option[value="' + CSS.escape(keep) + '"]')) {
+      modelSel.value = keep;
+    }
+  }
+  if (dropped) console.warn('A2I: dropped ' + dropped + ' in-browser model(s) WebLLM no longer lists');
 }
 
 // 1.5B (not 0.5B): still fits phones/basic laptops (see MODELS.md), but is
@@ -1281,7 +1361,10 @@ refreshLocalModelState();
 
 async function loadCpuEngine(forceCompat = false) {
   setStatus(forceCompat ? T('stCpuCompat') : T('stCpu'));
-  const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
+  // webpackIgnore for the same reason as loadWebLLM: this must stay a native
+  // dynamic import of a URL, not a bundled module reference.
+  const { Wllama } = await import(
+    /* webpackIgnore: true */ new URL('vendor/wllama/index.js', location.href).href);
   const wllama = new Wllama(
     { default: new URL('vendor/wllama/wllama.wasm', location.href).href });
   // On browsers that lack JSPI/Memory64 — or after the default build has aborted
@@ -2410,6 +2493,17 @@ $('set-brain-add').addEventListener('click', () => {
   ['set-brain-name', 'set-brain-url', 'set-brain-model', 'set-brain-key'].forEach((id) => { $(id).value = ''; });
   rebuildEngineSelect('server:' + (serverBrains.length - 1)); refreshBar();
   checkBrains(); renderBrainList();
+  // Added with no model: ask the provider for one instead of leaving the brain
+  // unusable until the user guesses a name that happens to exist.
+  if (!brain.model) {
+    fetchModelList(url, apiKey).then((list) => {
+      if (!list.length || brain.model) return;
+      brain.model = list[0];
+      brain.models = list;
+      saveBrains(); syncModelPicker(); renderBrainList(); refreshBar();
+      toast(Tf('toastModelAuto', { m: brain.model, name: brain.name }));
+    }).catch(() => {});
+  }
 });
 
 // Free-provider quick presets: fill the form, focus the key field. Providers
@@ -2421,6 +2515,28 @@ function fillProvider(name, url, model, keyless = false) {
   $('set-brain-model').value = model || '';
   if (keyless) $('set-brain-key').value = '';
   $(keyless ? 'set-brain-add' : 'set-brain-key').focus();
+}
+
+// Same, for providers whose OpenAI-compatible root is ambiguous: fill the
+// first candidate immediately (so the form is usable even offline), then keep
+// whichever candidate actually answers, and adopt a real model name from it.
+async function fillProviderProbed(name, urls, model, keyless = false) {
+  fillProvider(name, urls[0], model, keyless);
+  for (const url of urls) {
+    let list;
+    try {
+      list = await fetchModelList(url, '', 6000);
+    } catch {
+      continue;
+    }
+    // Only overwrite if the user has not started editing the form meanwhile.
+    if ($('set-brain-name').value !== name) return;
+    $('set-brain-url').value = url;
+    if (list.length && !list.includes($('set-brain-model').value)) {
+      $('set-brain-model').value = list[0];
+    }
+    return;
+  }
 }
 $('preset-groq').addEventListener('click', () =>
   fillProvider('Groq', 'https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile'));
@@ -2438,10 +2554,14 @@ $('preset-hf').addEventListener('click', () =>
 $('preset-airforce').addEventListener('click', () =>
   fillProvider('Api.Airforce', 'https://api.airforce/v1', 'gpt-oss-120b'));
 // Pollinations — a genuinely keyless public OpenAI-compatible endpoint, so it
-// works for a first-time visitor with nothing configured. Its API root is
-// /openai rather than /v1 (see apiBase).
+// works for a first-time visitor with nothing configured. Sources disagree on
+// which root serves the keyless path, so probe both rather than ship a guess:
+// gen.../v1 is the documented OpenAI-compatible base, text.../openai is what
+// gpt4free uses when no key is set.
 $('preset-pollinations').addEventListener('click', () =>
-  fillProvider('Pollinations', 'https://text.pollinations.ai/openai', 'openai-fast', true));
+  fillProviderProbed('Pollinations',
+    ['https://gen.pollinations.ai/v1', 'https://text.pollinations.ai/openai'],
+    'openai-fast', true));
 $('preset-zen').addEventListener('click', () => {
   // One click = done. If a Zen key is already saved, add/activate the brain
   // immediately; otherwise open Settings with the Zen key field focused.
