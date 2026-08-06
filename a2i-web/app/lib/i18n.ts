@@ -103,11 +103,30 @@ const DICT: Record<string, { km: string; en: string }> = {
   presetOpenrouter: { km: 'OpenRouter', en: 'OpenRouter' },
   presetHf: { km: 'Hugging Face', en: 'Hugging Face' },
   presetAirforce: { km: 'Api.Airforce', en: 'Api.Airforce' },
+  presetPollinations: { km: 'Pollinations (គ្មាន key)', en: 'Pollinations (no key)' },
   presetZen: { km: 'OpenCode Zen', en: 'OpenCode Zen' },
   presetOc: { km: 'Opencode Server', en: 'Opencode Server' },
   presetA2icore: { km: 'A2I Core', en: 'A2I Core' },
   presetVllm: { km: 'vLLM (GPU)', en: 'vLLM (GPU)' },
   presetOllama: { km: 'Ollama', en: 'Ollama' },
+  presetG4f: { km: 'gpt4free', en: 'gpt4free' },
+  replyTruncated:
+    {
+      km: '⚠ ចម្លើយត្រូវបានកាត់ ដោយសារដល់ដែនកំណត់ប្រវែង — សូមសួរ "បន្ត" ដើម្បីអានតទៅទៀត។',
+      en: '⚠ Reply cut off at the length limit — ask "continue" to get the rest.',
+    },
+  modelStaleTag: { km: '(រកមិនឃើញ)', en: '(not offered)' },
+  modelStaleTitle:
+    {
+      km: 'ម៉ូដែល "{m}" លែងមាននៅ {name} ទៀតហើយ — សូមជ្រើសមួយផ្សេង',
+      en: '"{m}" is no longer offered by {name} — pick another model',
+    },
+  modelTooBigTag: { km: '(ធំពេកសម្រាប់ម៉ាស៊ីននេះ)', en: '(too big for this device)' },
+  toastModelAuto:
+    {
+      km: 'បានជ្រើសម៉ូដែល "{m}" សម្រាប់ {name} ដោយស្វ័យប្រវត្តិ',
+      en: 'Auto-selected "{m}" for {name}',
+    },
   presetGroupFree: { km: 'ឥតគិតថ្លៃ — API', en: 'Free — hosted API' },
   presetGroupLocal: { km: 'ដំណើរការក្នុងម៉ាស៊ីនអ្នក', en: 'Local / self-hosted' },
   zenRefreshBtn: { km: 'ម៉ូដែល Zen', en: 'Zen models' },
@@ -193,8 +212,8 @@ const DICT: Record<string, { km: string; en: string }> = {
   providersBlockTitle: { km: 'អ្នកផ្ដល់សេវា AI — ក្នុងម៉ាស៊ីន និងឥតគិតថ្លៃ', en: 'AI providers — local & free' },
   providersHint:
     {
-      km: 'API ឥតគិតថ្លៃបន្ថែមទៀត — កូនសោនៅក្នុងកម្មវិធីរុករកអ្នក គ្រាន់តែចុចប៊ូតុងដែលមាន (ទម្រង់បំពេញដោយខ្លួនឯង) រួចបន្ថែមអ្នកផ្ដល់សេវា៖ Groq · Cerebras · OpenRouter · Hugging Face · Api.Airforce · Zen · Opencode Server · A2I Core · vLLM · Ollama។',
-      en: 'More free APIs — keys stay in your browser, just press a preset button (form fills itself) then Add provider: Groq · Cerebras · OpenRouter · Hugging Face · Api.Airforce · Zen · Opencode Server · A2I Core · vLLM · Ollama.',
+      km: 'API ឥតគិតថ្លៃបន្ថែមទៀត — កូនសោនៅក្នុងកម្មវិធីរុករកអ្នក គ្រាន់តែចុចប៊ូតុងដែលមាន (ទម្រង់បំពេញដោយខ្លួនឯង) រួចបន្ថែមអ្នកផ្ដល់សេវា។ Pollinations មិនត្រូវការ key ទេ។ gpt4free ជាកម្មវិធីខាងក្រៅដែលអ្នកដំណើរការដោយខ្លួនឯង (port 1337)។',
+      en: 'More free APIs — keys stay in your browser, just press a preset button (form fills itself) then Add provider. Pollinations needs no key. gpt4free is a third-party server you run yourself (port 1337).',
     },
   addProvider: { km: 'បន្ថែមអ្នកផ្ដល់សេវា', en: 'Add provider' },
   brainNamePh: { km: 'ឈ្មោះ', en: 'Name' },

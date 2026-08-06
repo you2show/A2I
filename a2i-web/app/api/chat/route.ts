@@ -69,7 +69,9 @@ export async function POST(request: Request) {
         model,
         messages: body.messages || [],
         temperature: body.temperature ?? 0.7,
-        max_tokens: body.max_tokens ?? 1024,
+        // Matches MAX_TOKENS_HOSTED in the client; the old 1024 default cut
+        // ordinary answers off mid-sentence for any caller that omitted it.
+        max_tokens: body.max_tokens ?? 4096,
         stream: true,
       }),
     });
