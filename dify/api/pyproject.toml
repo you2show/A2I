@@ -128,7 +128,7 @@ dev = [
     "faker>=40.15.0",
     "lxml-stubs>=0.5.1",
     "ruff>=0.15.12",
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "pytest-benchmark>=5.2.3",
     "pytest-cov>=7.1.0",
     "pytest-env>=1.6.0",
@@ -206,7 +206,7 @@ storage = [
 ############################################################
 # [ Tools ] dependency group
 ############################################################
-tools = ["cloudscraper>=1.2.71,<2.0.0", "nltk>=3.9.1,<4.0.0"]
+tools = ["cloudscraper>=1.2.71,<2.0.0", "nltk>=3.10.0,<4.0.0"]
 
 ############################################################
 # [ VDB ] workspace plugins — hollow packages under providers/vdb/*
