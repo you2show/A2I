@@ -226,6 +226,21 @@ class KnowledgeBase:
     def size(self) -> int:
         return len(self._chunks)
 
+    def status(self, limit: int = 20) -> dict[str, object]:
+        """Return lightweight local index metadata without exposing document text."""
+        counts = Counter(chunk.source for chunk in self._chunks)
+        documents = [
+            {"source": source, "chunks": counts[source]}
+            for source in sorted(counts)
+        ]
+        return {
+            "loaded": True,
+            "chunk_count": self.size,
+            "document_count": len(documents),
+            "documents": documents[:limit],
+            "truncated": len(documents) > limit,
+        }
+
     def _idf(self, term: str) -> float:
         """BM25 inverse document frequency (always positive)."""
         df = self._doc_freq.get(term, 0)

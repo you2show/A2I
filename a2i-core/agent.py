@@ -9,9 +9,9 @@ Ties the other modules together:
 * anything that still fails is fed back with the closest matching region and
   retried — the same graceful-degradation principle used elsewhere in A2I.
 
-The model is reached over the OpenAI-compatible API, so this works against
-A2I Core, vLLM, Ollama, or any other provider. Only the standard library is
-used, and the LLM call is injectable so the loop is testable without a model.
+The model is reached only through the local A2I Core interface at
+``127.0.0.1:8990``. The LLM call remains injectable so the loop is testable
+without a model, but the bundled CLI does not accept a remote provider or key.
 
 Safety: edits are computed in memory and **not written to disk** unless
 ``write=True`` (the CLI requires an explicit ``--write``).
@@ -106,14 +106,12 @@ class AgentResult:
         return f"AgentResult(applied={self.applied}, failed={self.failed}, rounds={self.rounds})"
 
 
-def openai_llm(
-    base_url: str = "http://127.0.0.1:8990/v1",
-    model: str | None = None,
-    api_key: str | None = None,
-    temperature: float = 0.2,
-    timeout: int = 300,
+def local_core_llm(
+    model: str | None = None, temperature: float = 0.2, timeout: int = 300
 ) -> LLM:
-    """An :class:`LLM` backed by any OpenAI-compatible endpoint."""
+    """An :class:`LLM` backed only by the local A2I Core process."""
+
+    base_url = "http://127.0.0.1:8990/v1"
 
     def call(messages: list[dict[str, str]]) -> str:
         payload: dict[str, object] = {
@@ -125,22 +123,17 @@ def openai_llm(
         if model:
             payload["model"] = model
         request = urllib.request.Request(
-            base_url.rstrip("/") + "/chat/completions",
+            base_url + "/chat/completions",
             data=json.dumps(payload).encode(),
-            headers={
-                "Content-Type": "application/json",
-                **({"Authorization": f"Bearer {api_key}"} if api_key else {}),
-            },
+            headers={"Content-Type": "application/json"},
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 body = json.loads(response.read())
-        except urllib.error.HTTPError as exc:  # pragma: no cover - network
-            raise RuntimeError(f"{exc.code} from {base_url}: {exc.read()[:200]!r}") from exc
-        except urllib.error.URLError as exc:  # pragma: no cover - network
-            raise RuntimeError(
-                f"Could not reach {base_url} — is A2I Core running?"
-            ) from exc
+        except urllib.error.HTTPError as exc:  # pragma: no cover - local process
+            raise RuntimeError(f"{exc.code} from local A2I Core: {exc.read()[:200]!r}") from exc
+        except urllib.error.URLError as exc:  # pragma: no cover - local process
+            raise RuntimeError("Could not reach local A2I Core — is it running?") from exc
         return body["choices"][0]["message"]["content"]
 
     return call
@@ -407,9 +400,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="A2I coding agent")
     parser.add_argument("task", help="what to change, in natural language")
     parser.add_argument("--dir", type=Path, default=Path("."), help="project directory")
-    parser.add_argument("--url", default="http://127.0.0.1:8990/v1", help="OpenAI-compatible base URL")
-    parser.add_argument("--model", default=None, help="model id (optional)")
-    parser.add_argument("--api-key", default=None, help="API key (optional)")
+    parser.add_argument("--model", default=None, help="local Core model id (optional)")
     parser.add_argument("--rounds", type=int, default=3, help="max retry rounds")
     parser.add_argument(
         "--write", action="store_true", help="write the changes (default: dry run)"
@@ -460,7 +451,7 @@ def main() -> None:
             ask(
                 args.task,
                 files,
-                openai_llm(args.url, args.model, args.api_key),
+                local_core_llm(args.model),
                 read_urls=args.read_urls,
             )
         )
@@ -477,12 +468,12 @@ def main() -> None:
     result = run_agent(
         task=args.task,
         files=files,
-        llm=openai_llm(args.url, args.model, args.api_key),
+        llm=local_core_llm(args.model),
         max_rounds=args.rounds,
         on_progress=lambda message: print(f"  {message}"),
         verify=verify if args.test else None,
         architect=(
-            openai_llm(args.url, args.architect or args.model, args.api_key)
+            local_core_llm(args.architect or args.model)
             if args.architect is not None
             else None
         ),

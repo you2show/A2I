@@ -2,3 +2,5 @@ models/
 *.gguf
 .venv/
 __pycache__/
+tools.json
+*.log

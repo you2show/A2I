@@ -1,11 +1,13 @@
 # A2I Core — Your Own AI, 100% Local
 
-A2I Core ជា AI ផ្ទាល់ខ្លួនរបស់អ្នក ដែលដំណើរការទាំងស្រុងនៅលើម៉ាស៊ីនរបស់អ្នក —
-**គ្មានការហៅ API ខាងក្រៅទាល់តែសោះ**។ ទិន្នន័យរបស់អ្នកមិនចេញពីម៉ាស៊ីនឡើយ។
+A2I Core ជា AI ផ្ទាល់ខ្លួន **local-only** របស់អ្នក។ វាដំណើរការ model និង
+RAG លើម៉ាស៊ីនរបស់អ្នក ហើយមិនប្រើ cloud inference provider ឬ API key ទេ។
+Network ត្រូវបានប្រើតែពេលអ្នកជ្រើសទាញយក GGUF model ម្តងពីប្រភពដែលបានពិនិត្យ;
+បន្ទាប់មកការជជែក និង knowledge retrieval រត់ក្រៅបណ្ដាញលើ SSD និង RAM របស់អ្នក។
 
-A2I Core is a self-hosted AI engine. It runs an open-weight language model
-locally with [llama.cpp](https://github.com/ggerganov/llama.cpp) — no OpenAI,
-no Anthropic, no cloud. Your data never leaves your machine.
+A2I Core is a self-hosted AI engine. It runs an open-weight GGUF language model
+locally with [llama.cpp](https://github.com/ggerganov/llama.cpp) and exposes a
+local OpenAI-compatible interface only to software on your own machine.
 
 ## Quick start — one command
 
@@ -18,8 +20,15 @@ cd a2i-core
 
 **Windows:** double-click `start.bat` (or run it in a terminal).
 
-That single command sets up Python, downloads an open model on first run, and
-starts the server. Then open <http://127.0.0.1:8990> and chat.
+That single command sets up Python, downloads the recommended Qwen 3B Q4_K_M
+model on first run, starts the local server, and opens
+<http://127.0.0.1:8990> after Core is ready. Keep the launcher window open
+while using A2I.
+
+If the page cannot be reached, read the message left in the launcher window. It
+reports missing Python, a failed package/model download, a port `8990` conflict,
+or a model-load error instead of closing immediately. If another process already
+uses port `8990`, close that process and run `start.bat` again.
 
 ### Why this is the reliable, guaranteed path
 
@@ -31,32 +40,65 @@ external API. Point the A2I web app at it (add a brain → `http://127.0.0.1:899
 or just use the built-in chat UI at that address. For the futuristic **3D
 voice assistant**, open <http://127.0.0.1:8990/live> and talk to it directly.
 
-Pick a bigger model any time with `A2I_MODEL` (see `./download-model.sh list`):
+Use the local model library to select and download a reviewed GGUF asset:
 
 ```bash
-A2I_MODEL=llama-3.1-8b ./run.sh     # Meta Llama 3.1 8B, fully local
+./download-model.sh list
+./download-model.sh qwen-3b     # recommended default for a 12 GB PC
+./download-model.sh activate qwen-3b
 ```
 
-Models — famous open-weight models that run **100% locally, no external API**.
-Run `./download-model.sh list` to see them all; here are the highlights:
+| Command | Local model | Suitability for this PC |
+| ------- | ----------- | ----------------------- |
+| `./download-model.sh qwen-1.5b` | Qwen2.5 1.5B Q4_K_M | Fast fallback. |
+| `./download-model.sh qwen-3b` | Qwen2.5 3B Q4_K_M | **Recommended default**. |
+| `./download-model.sh qwen-7b` | Qwen2.5 7B Q4_K_M | Slower quality mode; the official asset has two parts that A2I joins locally. |
+| `./download-model.sh qwen-coder-7b` | Qwen2.5 Coder 7B Q4_K_M | Local code explanation and repository Q&A. |
+| `./download-model.sh sea-lion-7b` | SEA-LION 7B Q4_0 | Khmer/ASEAN experiment; slower CPU mode. |
 
-| Command | Model | RAM needed | Quality |
-| ------- | ----- | ---------- | ------- |
-| `./download-model.sh small` | Qwen2.5 0.5B | ~1 GB | basic, any machine |
-| `./download-model.sh` | Qwen2.5 1.5B | ~2 GB | good, CPU-friendly |
-| `./download-model.sh qwen-3b` | Qwen2.5 3B | ~4 GB | smart |
-| `./download-model.sh mistral-7b` | Mistral 7B Instruct | ~6 GB | powerful |
-| `./download-model.sh qwen-7b` | Qwen2.5 7B (alias `large`) | ~6 GB | powerful |
-| `./download-model.sh qwen-coder-7b` | Qwen2.5 Coder 7B | ~6 GB | great at code |
-| `./download-model.sh gemma-2-9b` | Google Gemma 2 9B | ~8 GB | powerful |
-| `./download-model.sh llama-3.1-8b` | Meta Llama 3.1 8B | ~7 GB | powerful |
+Before every download, A2I displays its source, model card, and license reminder
+and asks for confirmation. It accepts only a large file with the GGUF magic
+bytes, records a local SHA-256 receipt, and never executes scripts or installer
+files from a model repository. You may import another GGUF manually, but you
+must review its publisher, license, model card, and checksum yourself.
 
-Each download is verified to be a real GGUF file before it is accepted, so a
-dropped connection or proxy error page can never leave you with a broken model
-— you get a clear "please retry" instead.
+## Local-only boundary
 
-Any GGUF model works — even bigger ones like Llama 70B or Qwen 72B: put the
-file at `models/model.gguf`, or pass `--model /path/to/model.gguf` to `run.sh`.
+A2I Core has no cloud provider router. The `/v1/providers` and `/v1/router/plan`
+endpoints do not exist, no provider configuration file is loaded, and the Web
+client accepts only `127.0.0.1:8990` or `localhost:8990` as its Core endpoint.
+The default browser origin policy also permits only local origins. Do not expose
+Core directly to the public internet.
+
+## Tool permissions — disabled by default
+
+A model may propose an action, but it cannot automatically gain permission to
+edit files, run commands, send messages, import data, or schedule jobs. Copy
+`tools.example.json` to `tools.json` and enable only capabilities you want to
+make available on this machine. High-impact tools still require an explicit
+per-request acknowledgement (`a2i_approval: true`) and a concise scope.
+
+```bash
+cp tools.example.json tools.json
+curl http://127.0.0.1:8990/v1/tools
+curl -X POST http://127.0.0.1:8990/v1/tools/plan \
+  -H 'Content-Type: application/json' \
+  -d '{"tool":"coding_agent","scope":"Review only this repository"}'
+```
+
+Write-capable tools remain disabled by default. Keep their workspace and
+command boundary isolated from your personal files, and review any proposed
+change before enabling it locally.
+
+## Review-first local coding agent
+
+In A2I Web, open **Project**, load a small group of source files, and use
+**Review plan** before requesting edits. The agent only receives the files you
+load into that panel. It returns proposals for download and never writes to
+your project folder. To request an edit proposal, you must enable
+`coding_agent` in `tools.json` and confirm the review-first checkbox in the
+Project panel. The Core still requires both `a2i_approval: true` and a scope on
+every edit request.
 
 ## Answer questions from your own documents (local RAG)
 
@@ -65,7 +107,11 @@ retrieval is computed locally with BM25, no embedding API:
 
 ```bash
 ./run.sh --knowledge-dir ~/my-documents
+curl http://127.0.0.1:8990/v1/knowledge
 ```
+
+The knowledge endpoint returns only local index metadata—document names and
+chunk counts—not document text. A2I Web displays the same status in Settings.
 
 Readable formats: text and Markdown, source code, **HTML, XML, CSV/TSV,
 JSON and .docx** — all parsed with the standard library, so nothing extra to
@@ -120,5 +166,6 @@ AI SDK ──────┘            └───────┬────�
                           └────────────────┘   CSV, JSON, .docx)
 ```
 
-Everything above runs in one process on your hardware. The only network
-activity ever needed is the one-time model download.
+The local model, knowledge base, and browser chat run entirely on your
+hardware. Network activity is limited to a one-time user-approved GGUF download
+from the model publisher; inference and local RAG do not require an API.

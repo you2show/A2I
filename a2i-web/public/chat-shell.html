@@ -70,8 +70,10 @@
       <label class="field"><span data-i18n="projectTaskLbl">Question or task</span>
         <input id="project-task" placeholder="e.g. how does retrieval work?  ·  fix the off-by-one in add()" autocomplete="off">
       </label>
+      <label class="field" style="flex-direction:row;align-items:flex-start;gap:.55rem;cursor:pointer"><input id="project-approval" type="checkbox" style="width:auto;margin-top:.2rem"><span>I understand that A2I will generate edit proposals only. I will review downloaded files before applying any change.</span></label>
       <div class="row-btns">
         <button id="project-ask" class="btn primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg> <span data-i18n="askBtn">Ask</span></button>
+        <button id="project-plan" class="btn">Review plan</button>
         <button id="project-edit" class="btn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg> <span data-i18n="editBtn">Request edits</span></button>
         <span id="project-state" class="statetag"></span>
       </div>
@@ -92,18 +94,16 @@
 
       <div class="set-tabs">
         <button type="button" class="set-tab active" data-tab="models"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> <span data-i18n="tabModels">Models</span></button>
-        <button type="button" class="set-tab" data-tab="providers"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> <span data-i18n="tabProviders">Providers</span></button>
+        <button type="button" class="set-tab" data-tab="providers"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> ម៉ូដែលក្នុងម៉ាស៊ីន</button>
         <button type="button" class="set-tab" data-tab="appearance"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg> <span data-i18n="tabAppearance">Appearance</span></button>
+        <button type="button" class="set-tab" data-tab="safety"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg> Safety &amp; routing</button>
       </div>
 
       <div class="tab-pane" data-tab="models">
-      <div id="cloud-status" class="setup-hint" hidden>
-        <div data-i18n-html="cloudStatusBody"></div>
-        <div class="row-btns"><button id="cloud-go" class="btn primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> <span data-i18n="chatCloudBtn">Chat with A2I Cloud</span></button></div>
-      </div>
-      <div class="setup-hint" data-i18n-html="quickStart">Quick start: A2I Cloud is already set up on the server — pick it in the list above and start chatting right away, no setup needed. The sections below are only for adding more AI options.</div>
+      <div id="cloud-status" class="setup-hint" hidden></div>
+      <div class="setup-hint">A2I Local-Only: ទាញយក GGUF model ម្តងពីប្រភពដែលអ្នកទុកចិត្ត រួចរត់លើ SSD និង RAM របស់អ្នក។ A2I មិនប្រើ API key និងមិនផ្ញើសំណើទៅ cloud model ទេ។</div>
 
-      <section class="setblock">
+      <section class="setblock" hidden>
         <div class="setblock-h"><span class="setnum">1</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg> <span data-i18n="zenBlockTitle">OpenCode Zen (free — no card)</span> <span class="badge-rec" data-i18n="recommended">Recommended</span></div>
         <p class="hint" data-i18n="zenHint">Zen is already configured on the server — no key needed here. To use your own key instead (free tier: 100 requests/day), fill in the fields below to override — otherwise skip this.</p>
         <label class="field"><span data-i18n="zenKeyLbl">Zen API key</span>
@@ -120,7 +120,7 @@
         </div>
       </section>
 
-      <section class="setblock">
+      <section class="setblock" hidden>
         <div class="setblock-h"><span class="setnum">2</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z"/></svg> <span data-i18n="geminiBlockTitle">Gemini (Google)</span></div>
         <p class="hint" data-i18n="geminiHint">Paste your own key — free from aistudio.google.com/apikey. Stored only in this browser, sent directly to Google.</p>
         <label class="field"><span data-i18n="apiKeyLbl">API key</span>
@@ -140,7 +140,7 @@
       <div class="tab-pane" data-tab="providers">
       <section class="setblock">
         <div class="setblock-h"><span class="setnum">3</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg> <span data-i18n="localBlockTitle">Local model file — SSD / disk (no download)</span></div>
-        <p class="hint" data-i18n="localHint">Keep a GGUF model on your SSD and load it straight from disk — no download, works offline. Big models fit too. Get GGUF files from Hugging Face (Qwen, Llama, …).</p>
+        <p class="hint">រក្សា GGUF model លើ SSD របស់អ្នក ហើយផ្ទុកដោយផ្ទាល់សម្រាប់ការជជែកក្រៅបណ្ដាញ។ សម្រាប់ PC 12 GB RAM៖ Qwen2.5 3B Q4_K_M ជា default; Qwen2.5 7B Q4_K_M ឬ SEA-LION 7B Q4_0 ជា quality mode ដែលយឺតជាង។ ពិនិត្យ license និង model card មុនទាញយក community asset ណាមួយ។</p>
         <div class="row-btns">
           <button type="button" id="set-local-model" class="btn primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/></svg> <span data-i18n="chooseModel">Choose model (.gguf)</span></button>
           <button type="button" id="set-local-model-clear" class="btn" data-i18n="clear">Clear</button>
@@ -151,11 +151,10 @@
           <div class="model-guide-scroll">
           <table>
             <tr><th data-i18n="guideDevice">Device</th><th data-i18n="guideModel">Model</th><th data-i18n="guideSize">Size</th></tr>
-            <tr><td data-i18n="gPhone">📱 Phone · 2–4 GB</td><td data-i18n="gPhoneM">Qwen2.5 0.5B–1.5B (in browser)</td><td>1–2 GB</td></tr>
-            <tr><td data-i18n="gLaptop">💻 Laptop · 8 GB</td><td data-i18n="gLaptopM">Qwen2.5 7B · Llama 3.1 8B · DavidAU Fable 9B</td><td>5–6 GB</td></tr>
-            <tr><td data-i18n="gPc">🖥️ PC · 16–32 GB</td><td data-i18n="gPcM">14B–32B models</td><td>9–20 GB</td></tr>
-            <tr><td data-i18n="gGpu">🎮 GPU</td><td data-i18n="gGpuM">same models, much faster (WebGPU / vLLM)</td><td>—</td></tr>
-            <tr><td data-i18n="gCloud">☁️ No good hardware</td><td data-i18n="gCloudM">Groq · Hugging Face (70B, free API)</td><td>—</td></tr>
+            <tr><td>PC របស់អ្នក · 12 GB RAM</td><td>Qwen2.5 3B Q4_K_M</td><td>~4 GB</td></tr>
+            <tr><td>PC របស់អ្នក · Quality mode</td><td>Qwen2.5 7B Q4_K_M / SEA-LION 7B Q4_0</td><td>~6 GB</td></tr>
+            <tr><td>PC · 16–32 GB RAM</td><td>14B–32B quantized GGUF</td><td>9–20 GB</td></tr>
+            <tr><td>GPU ដែលមាន VRAM ច្រើន</td><td>model ដដែល លឿនជាងច្រើន</td><td>អាស្រ័យលើ VRAM</td></tr>
           </table>
           </div>
           <p class="hint" data-i18n="guideRule">Rule: biggest model that fits your RAM = best you can run locally. Full list &amp; downloads: MODELS.md</p>
@@ -163,7 +162,14 @@
       </section>
 
       <section class="setblock">
-        <div class="setblock-h"><span class="setnum">4</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> <span data-i18n="providersBlockTitle">AI providers — local &amp; free</span></div>
+        <div class="setblock-h"><span class="setnum">4</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Local model library</div>
+        <p class="hint">Catalog នេះបង្ហាញតែ GGUF assets ដែល A2I បានកំណត់ source និង model card។ ទាញយកតាម <code>a2i-core/download-model.sh</code>; សូមអាន license មុនពេលទាញយក ហើយកុំដំណើរការ script ឬ installer ពី repository របស់ model។</p>
+        <div class="row-btns"><button id="local-catalog-refresh" class="btn">Refresh local catalog</button><span id="local-catalog-state" class="statetag"></span></div>
+        <div id="local-model-catalog" class="brain-list"><div class="hint" style="margin:0">Start A2I Core locally to view the verified model catalog.</div></div>
+      </section>
+
+      <section class="setblock" hidden>
+        <div class="setblock-h"><span class="setnum">5</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> <span data-i18n="providersBlockTitle">AI providers — local &amp; free</span></div>
         <p class="hint" data-i18n="providersHint">More free APIs — keys stay in your browser, just press a preset button (form fills itself) then Add provider: Groq · OpenRouter · Hugging Face · Zen · Opencode Server · A2I Core · vLLM · Ollama.</p>
         <div class="preset-group">
           <div class="preset-group-label" data-i18n="presetGroupFree">Free — hosted API</div>
@@ -199,9 +205,47 @@
       </section>
       </div>
 
+      <div class="tab-pane" data-tab="safety" hidden>
+        <section class="setblock">
+          <div class="setblock-h"><span class="setnum">5</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg> A2I Core — local-only</div>
+          <p class="hint">A2I Core រត់ GGUF model នៅលើ PC របស់អ្នក។ វាមិនប្ដូរទៅ cloud provider និងមិនត្រូវការ API key ទេ។ ជ្រើសប៊ូតុងខាងក្រោម ដើម្បីប្រើ local Core ជា default ហើយ browser model ជា fallback។</p>
+          <label class="field" hidden><span>Task intent / ប្រភេទការងារ</span>
+            <select id="router-intent">
+              <option value="chat">Chat — fast local default</option>
+              <option value="research">Research — source-grounded</option>
+              <option value="coding">Coding — specialist when configured</option>
+              <option value="reasoning">Reasoning — specialist when configured</option>
+              <option value="vision">Vision — specialist when configured</option>
+            </select>
+          </label>
+          <label class="field" hidden><span>Privacy / ឯកជនភាព</span>
+            <select id="router-privacy">
+              <option value="balanced">Balanced — local first, specialist when needed</option>
+              <option value="offline">Offline — do not send this request to a network provider</option>
+            </select>
+          </label>
+          <div class="row-btns">
+            <button id="router-apply" class="btn primary">Use A2I Core (local)</button>
+            <button id="router-refresh" class="btn">Refresh local Core status</button>
+            <span id="router-state" class="statetag"></span>
+          </div>
+        </section>
+        <section class="setblock">
+          <div class="setblock-h"><span class="setnum">6</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> Local knowledge / ឯកសារផ្ទាល់ខ្លួន</div>
+          <p class="hint">សម្រាប់ AI ស្គាល់ data របស់អ្នកដោយគ្មាន API៖ រក្សាទុកឯកសារ <code>.txt</code>, <code>.md</code>, <code>.html</code> ឬកូដក្នុង folder មួយនៅលើ SSD ហើយចាប់ផ្តើម Core ជាមួយ <code>./run.sh --knowledge-dir ~/my-documents</code>។ ទិន្នន័យនៅលើ PC របស់អ្នក ហើយ A2I ដកស្រង់ context ក្នុង RAM ពេលសួរ។</p>
+          <div class="row-btns"><button id="knowledge-refresh" class="btn">Refresh knowledge status</button><span id="knowledge-state" class="statetag"></span></div>
+          <div id="knowledge-status-list" class="brain-list"><div class="hint" style="margin:0">Start A2I Core with <code>--knowledge-dir</code> to index local documents.</div></div>
+        </section>
+        <section class="setblock">
+          <div class="setblock-h"><span class="setnum">7</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> Tool permissions / សិទ្ធិ tools</div>
+          <p class="hint">Tools ដែលអាចកែ file, រត់ command, ផ្ញើសារ ឬបង្កើត scheduled task ត្រូវបិទតាម default។ ត្រូវបើកនៅក្នុង <code>a2i-core/tools.json</code> ហើយសកម្មភាពគ្រប់មុខត្រូវការការយល់ព្រមជាក់លាក់របស់អ្នក។</p>
+          <div id="tool-policy-list" class="brain-list"><div class="hint" style="margin:0">Connect A2I Core to view local tool policy.</div></div>
+        </section>
+      </div>
+
       <div class="tab-pane" data-tab="appearance">
       <section class="setblock">
-        <div class="setblock-h"><span class="setnum">5</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg> <span data-i18n="appearanceBlockTitle">Appearance &amp; voice</span></div>
+        <div class="setblock-h"><span class="setnum">7</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg> <span data-i18n="appearanceBlockTitle">Appearance &amp; voice</span></div>
         <div class="row-btns">
           <button id="set-theme" class="btn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg> <span data-i18n="toggleTheme">Toggle light / dark</span></button>
           <button id="set-autospeak" class="btn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg> <span id="set-autospeak-label" data-i18n="autospeakOff">Auto read answers: Off</span></button>

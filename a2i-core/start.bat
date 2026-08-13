@@ -10,6 +10,24 @@ REM
 REM Usage:  double-click this file, or run  start.bat  in a terminal.
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
+set "A2I_URL=http://127.0.0.1:8990"
+
+echo.
+echo ========================================================
+echo   A2I Local-Only Setup ^& Launcher
+echo ========================================================
+echo.
+
+netstat -ano | findstr ":8990" | findstr "LISTENING" >nul
+if not errorlevel 1 (
+  echo A process is already listening on port 8990.
+  echo Opening %A2I_URL% in your browser...
+  start "" "%A2I_URL%"
+  echo.
+  echo If the page still cannot open, close the other process and run this file again.
+  pause
+  exit /b 0
+)
 
 where python >nul 2>nul
 if errorlevel 1 (
@@ -27,13 +45,20 @@ if not exist .venv (
   if errorlevel 1 (
     echo Prebuilt wheel unavailable - building from source ^(needs Visual C++ Build Tools^) ...
     .venv\Scripts\pip install -r requirements.txt
+    if errorlevel 1 (
+      echo.
+      echo A2I could not install its Python requirements.
+      echo Install Microsoft C++ Build Tools, then run this file again.
+      pause
+      exit /b 1
+    )
   )
 )
 
 if not exist models\model.gguf (
-  echo No model found - downloading one now ^(one-time, ~1 GB^) ...
+  echo No model found - downloading Qwen2.5 3B Q4_K_M ^(one-time, ~2.1 GB^) ...
   if not exist models mkdir models
-  curl -L --fail -o models\model.gguf "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+  curl -L --fail --retry 3 --retry-delay 2 -o models\model.gguf "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf"
   if errorlevel 1 (
     echo Download failed. Check your internet connection and re-run.
     pause
@@ -47,4 +72,13 @@ echo   A2I Core is starting - open  http://127.0.0.1:8990
 echo   ^(native llama.cpp - 100%% local - no external API^)
 echo --------------------------------------------------------
 echo.
-.venv\Scripts\python server.py %*
+.venv\Scripts\python server.py --open-browser %*
+set "A2I_EXIT=%ERRORLEVEL%"
+echo.
+echo ========================================================
+echo   A2I Core stopped with exit code %A2I_EXIT%.
+echo ========================================================
+echo.
+echo Keep this window open and copy the error text if you need help.
+pause
+exit /b %A2I_EXIT%

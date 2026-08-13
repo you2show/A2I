@@ -1,169 +1,142 @@
 #!/usr/bin/env bash
-# Download a famous open-weight model (GGUF) for A2I Core.
+# A2I local-only model library manager.
 #
-# Every model here is a well-known open model that runs 100% locally through
-# llama.cpp — no OpenAI, no Anthropic, no external inference API. The only
-# network activity is this one-time weight download; after it, A2I Core runs
-# fully offline on your own machine.
-#
-# Usage:
-#   ./download-model.sh                 # default: Qwen2.5 1.5B (fast, CPU-friendly)
-#   ./download-model.sh list            # show every available model
-#   ./download-model.sh llama-3.1-8b    # Meta Llama 3.1 8B (famous, powerful)
-#   ./download-model.sh qwen-7b         # Qwen2.5 7B
-#   ./download-model.sh fable-9b        # DavidAU Qwen3.5 9B Fable (uncensored)
-#   ./download-model.sh qwythos-9b      # Qwythos 9B Claude-Mythos (1M context)
-#   ./download-model.sh qwen3.6-27b     # DavidAU Qwen3.6 27B Fable (needs 24 GB+/GPU)
-#   ./download-model.sh ornith-35b      # Ornith 1.0 35B (needs 32 GB+/GPU)
-#
-# Backwards-compatible aliases: small | default | large
+# It downloads published GGUF weights once, stores them on the user's disk, and
+# runs them offline through A2I Core. It never calls an inference API and never
+# executes scripts shipped by a model repository.
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# Catalog of famous open-weight models. Each is a single-file q4_k_m GGUF so a
-# plain `curl` download is reliable (no multi-shard assembly needed), keeping
-# "one-time download" robust. Fields: url|human name|approx RAM.
-#
-# For an even bigger model, download any GGUF yourself and run:
-#   ./run.sh --model /path/to/your-model.gguf
+# Fields: source URL | name | approximate RAM | license reminder | model card
+# Keep this list deliberately small and reviewable. Add a model only after
+# reviewing its publisher model card, licence, GGUF compatibility and hash path.
 declare -A CATALOG=(
-  [qwen-0.5b]="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf|Qwen2.5 0.5B Instruct|~1 GB"
-  [qwen-1.5b]="https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf|Qwen2.5 1.5B Instruct|~2 GB"
-  [qwen-3b]="https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf|Qwen2.5 3B Instruct|~4 GB"
-  [qwen-7b]="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf|Qwen2.5 7B Instruct|~6 GB"
-  [llama-3.2-3b]="https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf|Meta Llama 3.2 3B Instruct|~4 GB"
-  [llama-3.1-8b]="https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|Meta Llama 3.1 8B Instruct|~7 GB"
-  [mistral-7b]="https://huggingface.co/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf|Mistral 7B Instruct v0.3|~6 GB"
-  [gemma-2-2b]="https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf|Google Gemma 2 2B Instruct|~3 GB"
-  [gemma-2-9b]="https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/main/gemma-2-9b-it-Q4_K_M.gguf|Google Gemma 2 9B Instruct|~8 GB"
-  [qwen-coder-7b]="https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf|Qwen2.5 Coder 7B (code)|~6 GB"
-  # Newer / community models. These use hf:<repo> so the exact GGUF filename is
-  # resolved from the repo at download time (the quant naming in these repos is
-  # not something we can hardcode reliably). Optional @QUANT picks a quant.
-  [fable-9b]="hf:DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF@Q4_K_M|DavidAU Qwen3.5 9B Fable (uncensored)|~6 GB"
-  [nanbeige-3b]="hf:Nanbeige/Nanbeige4.2-3B@Q4_K_M|Nanbeige 4.2 3B|~3 GB"
-  [ternary-bonsai]="hf:prism-ml/Ternary-Bonsai-27B-gguf|Ternary Bonsai 27B->4B (compressed)|~4 GB"
-  # Curated picks across device tiers (all GGUF, resolved from the repo).
-  [qwythos-9b]="hf:empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF@Q4_K_M|Qwythos 9B Claude-Mythos (1M ctx)|~6 GB (8 GB PC)"
-  [gemma-4-12b]="hf:yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF@Q4_K_M|Gemma 4 12B agentic|~8 GB (16 GB PC)"
-  [qwen3.6-27b]="hf:DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF@Q4_K_M|DavidAU Qwen3.6 27B Fable (uncensored)|~17 GB (24 GB+ / GPU)"
-  [ornith-35b]="hf:unsloth/Ornith-1.0-35B-GGUF@Q4_K_M|Ornith 1.0 35B|~21 GB (32 GB+ / GPU)"
+  [qwen-1.5b]="https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf|Qwen2.5 1.5B Instruct Q4_K_M|~2 GB|Review Qwen model card and license|https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF"
+  [qwen-3b]="https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf|Qwen2.5 3B Instruct Q4_K_M|~4 GB|Review Qwen model card and license|https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF"
+  [qwen-7b]="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf;https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf|Qwen2.5 7B Instruct Q4_K_M|~6 GB|Review Qwen model card and license; downloader joins two official GGUF parts|https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF"
+  [qwen-coder-7b]="https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf|Qwen2.5 Coder 7B Instruct Q4_K_M|~6 GB|Review Qwen model card and license|https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF"
+  [sea-lion-7b]="https://huggingface.co/aisingapore/sea-lion-7b-instruct-gguf/resolve/main/sea-lion-7b-instruct-Q4_0.gguf|SEA-LION 7B Instruct Q4_0|~6 GB|MIT according to the model card; review safety caveats|https://huggingface.co/aisingapore/SEA-LION-v1-7B-IT-GGUF"
 )
+ORDER=(qwen-1.5b qwen-3b qwen-7b qwen-coder-7b sea-lion-7b)
+LIBRARY="models/library"
+ACTIVE="models/model.gguf"
 
-# Order used when listing, and for the compatibility aliases.
-ORDER=(qwen-0.5b qwen-1.5b qwen-3b llama-3.2-3b mistral-7b qwen-7b qwen-coder-7b gemma-2-2b gemma-2-9b llama-3.1-8b nanbeige-3b ternary-bonsai fable-9b qwythos-9b gemma-4-12b qwen3.6-27b ornith-35b)
+usage() {
+  cat <<'EOF'
+A2I Local Model Library
 
-# Friendly aliases kept for backwards compatibility with older docs/scripts.
-declare -A ALIAS=(
-  [small]=qwen-0.5b
-  [default]=qwen-1.5b
-  [large]=qwen-7b
-)
+Usage:
+  ./download-model.sh list
+  ./download-model.sh [model-key] [--yes]
+  ./download-model.sh activate <model-key>
+
+Default: qwen-3b (the recommended local default for a 12 GB RAM PC).
+
+The first command downloads one GGUF file to your own SSD. After the download,
+A2I runs it offline. Read the displayed source, model card and licence before
+confirming any asset. This utility refuses non-GGUF files and does not run
+repository scripts or Python files.
+EOF
+}
 
 print_catalog() {
-  echo "Available models (all open-weight, run 100% locally, no external API):"
+  echo "A2I curated local-only GGUF models"
   echo
-  printf "  %-16s %-32s %s\n" "KEY" "MODEL" "RAM"
-  printf "  %-16s %-32s %s\n" "---" "-----" "---"
+  printf "  %-16s %-36s %-9s %s\n" "KEY" "MODEL" "RAM" "MODEL CARD"
+  printf "  %-16s %-36s %-9s %s\n" "---" "-----" "---" "----------"
   for key in "${ORDER[@]}"; do
-    IFS='|' read -r _url name ram <<<"${CATALOG[$key]}"
-    printf "  %-16s %-32s %s\n" "$key" "$name" "$ram"
+    IFS='|' read -r _url name ram _license card <<<"${CATALOG[$key]}"
+    printf "  %-16s %-36s %-9s %s\n" "$key" "$name" "$ram" "$card"
   done
   echo
-  echo "Aliases: small=qwen-0.5b  default=qwen-1.5b  large=qwen-7b"
-  echo "Usage:   ./download-model.sh <key>   (e.g. ./download-model.sh llama-3.1-8b)"
+  echo "Recommended for your 12 GB PC: qwen-3b."
+  echo "Optional slower quality mode: qwen-7b or sea-lion-7b (Khmer/ASEAN experiment)."
 }
 
-# Verify the downloaded file is a real GGUF, not an HTML error page or a
-# truncated transfer. This is what makes the "one-time download" trustworthy:
-# a silent failure would otherwise surface much later as a confusing crash.
 verify_gguf() {
-  local path="$1"
-  local size
+  local path="$1" size
   size=$(wc -c <"$path")
-  if [ "$size" -lt 10000000 ]; then
-    echo "Error: downloaded file is only ${size} bytes — the download failed" >&2
-    echo "(often a network/proxy error page). Deleting it; please retry." >&2
-    rm -f "$path"
-    return 1
-  fi
-  # GGUF files begin with the ASCII magic "GGUF".
-  if [ "$(head -c 4 "$path")" != "GGUF" ]; then
-    echo "Error: downloaded file is not a valid GGUF model (bad magic bytes)." >&2
-    echo "Deleting it; please retry." >&2
+  if [ "$size" -lt 10000000 ] || [ "$(head -c 4 "$path")" != "GGUF" ]; then
+    echo "Error: file is not a complete GGUF model. Deleting it." >&2
     rm -f "$path"
     return 1
   fi
 }
 
-# Resolve an `hf:<repo>[@QUANT]` catalog entry to a real download URL by asking
-# the Hugging Face API which files the repo actually contains. This keeps the
-# catalog correct even when we cannot know a repo's exact GGUF filename in
-# advance — it picks a single-file GGUF matching the requested quant (falling
-# back to any single-file GGUF), and never a multi-shard split.
-resolve_hf() {
-  local repo="$1" quant="${2:-Q4_K_M}"
-  local json files pick
-  json=$(curl -sL --fail "https://huggingface.co/api/models/${repo}" 2>/dev/null) || return 1
-  files=$(printf '%s' "$json" \
-    | grep -oE '"rfilename":"[^"]+\.gguf"' \
-    | sed -E 's/.*"rfilename":"([^"]+)".*/\1/' \
-    | grep -viE '\-[0-9]+-of-[0-9]+\.gguf$')   # drop multi-shard parts
-  [ -n "$files" ] || return 1
-  pick=$(printf '%s\n' "$files" | grep -iE "$quant" | head -1)
-  [ -n "$pick" ] || pick=$(printf '%s\n' "$files" | head -1)  # any single-file GGUF
-  [ -n "$pick" ] || return 1
-  printf 'https://huggingface.co/%s/resolve/main/%s' "$repo" "$pick"
+activate() {
+  local key="$1" asset="$LIBRARY/$key.gguf"
+  if [ ! -f "$asset" ]; then
+    echo "No local asset for '$key'. Download it first." >&2
+    exit 1
+  fi
+  verify_gguf "$asset"
+  mkdir -p models
+  rm -f "$ACTIVE"
+  # A hard link avoids duplicating multi-GB files. Copy only if the filesystem
+  # does not support hard links.
+  ln "$asset" "$ACTIVE" 2>/dev/null || cp "$asset" "$ACTIVE"
+  echo "Activated local model: $key"
+  echo "Start A2I Core with: ./run.sh"
 }
 
-# Resolve the requested key (default + aliases + direct keys).
-requested="${1:-default}"
-
-if [ "$requested" = "list" ] || [ "$requested" = "--list" ] || [ "$requested" = "-l" ]; then
+command="${1:-qwen-3b}"
+if [ "$command" = "list" ] || [ "$command" = "--list" ] || [ "$command" = "-l" ]; then
   print_catalog
   exit 0
 fi
+if [ "$command" = "help" ] || [ "$command" = "--help" ] || [ "$command" = "-h" ]; then
+  usage
+  exit 0
+fi
+if [ "$command" = "activate" ]; then
+  [ -n "${2:-}" ] || { echo "Specify a model key to activate." >&2; exit 1; }
+  activate "$2"
+  exit 0
+fi
 
-key="${ALIAS[$requested]:-$requested}"
-
+key="$command"
 if [ -z "${CATALOG[$key]:-}" ]; then
-  echo "Unknown model: $requested" >&2
-  echo >&2
+  echo "Unknown local model: $key" >&2
   print_catalog >&2
   exit 1
 fi
 
-IFS='|' read -r URL NAME RAM <<<"${CATALOG[$key]}"
-
-# Repo-resolved entries: look up the real GGUF filename from the HF API.
-if [[ "$URL" == hf:* ]]; then
-  spec="${URL#hf:}"
-  repo="${spec%@*}"
-  quant="Q4_K_M"
-  [[ "$spec" == *@* ]] && quant="${spec#*@}"
-  echo "Finding a $quant GGUF in $repo ..."
-  URL="$(resolve_hf "$repo" "$quant")" || URL=""
-  if [ -z "$URL" ]; then
-    echo "Error: no single-file GGUF found in $repo." >&2
-    echo "That repo may ship only safetensors or sharded files — look for a" >&2
-    echo "'-GGUF' mirror (e.g. bartowski/… or unsloth/…) and pass its URL to run.sh." >&2
-    exit 1
-  fi
+IFS='|' read -r url name ram license card <<<"${CATALOG[$key]}"
+echo "A2I local-only download"
+echo "Model:      $name"
+echo "RAM tier:   $ram"
+echo "Source:     $url"
+echo "Model card: $card"
+echo "Licence:    $license"
+echo
+if [ "${2:-}" != "--yes" ]; then
+  read -r -p "I reviewed this source and licence. Download this GGUF to my disk? [y/N] " answer
+  case "$answer" in y|Y|yes|YES) ;; *) echo "Cancelled."; exit 0 ;; esac
 fi
 
-mkdir -p models
-OUT="models/model.gguf"
-
-echo "Model:  $NAME"
-echo "RAM:    $RAM"
-echo "Source: $URL"
-echo "Downloading $(basename "$URL") (one-time) ..."
-
-# -C - resumes a partial download; --fail turns HTTP errors into a curl error
-# so we never save a provider error page as "model.gguf".
-curl -L --fail --progress-bar -C - -o "$OUT" "$URL"
-
-verify_gguf "$OUT"
-
-echo "Done — $NAME is ready. Start the server with: ./run.sh"
+mkdir -p "$LIBRARY"
+tmp="$LIBRARY/.${key}.partial"
+asset="$LIBRARY/${key}.gguf"
+echo "Downloading GGUF file data. This may take time; it runs offline afterwards."
+rm -f "$tmp"
+IFS=';' read -r -a parts <<<"$url"
+if [ "${#parts[@]}" -eq 1 ]; then
+  curl -L --fail --progress-bar -C - -o "$tmp" "${parts[0]}"
+else
+  echo "This official asset is split into ${#parts[@]} files; downloading and joining locally."
+  for index in "${!parts[@]}"; do
+    part="$LIBRARY/.${key}.part${index}.partial"
+    curl -L --fail --progress-bar -C - -o "$part" "${parts[$index]}"
+    cat "$part" >> "$tmp"
+    rm -f "$part"
+  done
+fi
+verify_gguf "$tmp"
+mv -f "$tmp" "$asset"
+checksum=$(sha256sum "$asset" | awk '{print $1}')
+created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+printf '{\n  "id": "%s",\n  "name": "%s",\n  "source": "%s",\n  "model_card": "%s",\n  "license_note": "%s",\n  "sha256": "%s",\n  "downloaded_at": "%s"\n}\n' \
+  "$key" "$name" "$url" "$card" "$license" "$checksum" "$created" > "$LIBRARY/${key}.json"
+activate "$key"
+echo "Receipt: $LIBRARY/${key}.json"

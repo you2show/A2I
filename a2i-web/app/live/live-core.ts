@@ -3,7 +3,7 @@
 import { T } from '../lib/i18n';
 
 export function initLive(): void {
-const _elStub = new Proxy({}, {
+const _elStub: any = new Proxy({}, {
   get(_t, p) {
     if (p === 'classList') return { add() {}, remove() {}, toggle() {}, contains() { return false; } };
     if (p === 'style' || p === 'dataset') return {};
@@ -12,7 +12,9 @@ const _elStub = new Proxy({}, {
   },
   set() { return true; },
 });
-const $ = (id) => document.getElementById(id) || _elStub;
+// This page is mounted from static HTML at runtime, so element-specific types are
+// intentionally contained at this DOM boundary instead of disabling global checks.
+const $ = (id: string): any => document.getElementById(id) || _elStub;
 const body: HTMLElement = (document.querySelector('.live-shell') as HTMLElement) || document.body;
 const capUser = $('cap-user'), capAI = $('cap-ai'), statusEl = $('status');
 const micBtn = $('mic'), form = $('form'), input = $('input');

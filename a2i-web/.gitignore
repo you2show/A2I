@@ -1,1 +1,17 @@
+# AI model weights and local runtime data
 *.gguf
+models/
+
+# Dependencies and build output
+node_modules/
+.next/
+out/
+
+# Local configuration and logs
+.env
+.env.local
+.env.*.local
+*.log
+
+# TypeScript incremental cache
+*.tsbuildinfo

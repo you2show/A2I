@@ -8,8 +8,8 @@
 #     http://127.0.0.1:8990
 #
 # Usage:
-#   ./run.sh                        # default model (Qwen2.5 1.5B)
-#   A2I_MODEL=llama-3.1-8b ./run.sh # pick a model (see ./download-model.sh list)
+#   ./run.sh                        # default model (Qwen2.5 3B)
+#   A2I_MODEL=qwen-coder-7b ./run.sh # pick a model (see ./download-model.sh list)
 #   ./run.sh --knowledge-dir ~/docs # extra args pass through to the server
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -43,7 +43,7 @@ fi
 # 3. Download a model on first run (single-file GGUF; verified after download).
 if [ ! -f models/model.gguf ]; then
   echo "No model found — downloading one now (one-time) ..."
-  ./download-model.sh "${A2I_MODEL:-default}"
+  ./download-model.sh "${A2I_MODEL:-qwen-3b}"
 fi
 
 # 4. Start the server. Extra CLI args pass straight through to server.py.

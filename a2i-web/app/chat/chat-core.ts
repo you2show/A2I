@@ -8,7 +8,7 @@ export function initApp(): void {
 // Robust element lookup: if an element is ever missing (typo, markup change),
 // return a harmless no-op stub instead of null so a single bad id can never
 // crash init and take the whole app down with it.
-const _elStub = new Proxy({}, {
+const _elStub: any = new Proxy({}, {
   get(_t, p) {
     if (p === 'classList') return { add() {}, remove() {}, toggle() {}, contains() { return false; } };
     if (p === 'style' || p === 'dataset') return {};
@@ -21,7 +21,10 @@ const _elStub = new Proxy({}, {
   },
   set() { return true; },
 });
-const $ = (id) => document.getElementById(id) || _elStub;
+// This UI mounts static HTML dynamically, so individual element types are only known
+// at the call site. Keep the permissive boundary here rather than disabling TypeScript
+// validation for the entire application.
+const $ = (id: string): any => document.getElementById(id) || _elStub;
 
 // ---- Icon system --------------------------------------------------------
 // A small set of hand-authored outline icons (24x24, Lucide/Feather-style:
@@ -368,15 +371,12 @@ function showWelcome() {
     chip.addEventListener('click', () => { input.value = text; form.requestSubmit(); });
     chips.appendChild(chip);
   }
-  // Feature cards: one-click switch between engines and tools, with live status.
+  // Feature cards expose only local execution paths. No remote provider,
+  // account, key or web-search workflow is offered from the local-only UI.
   const feats = col.querySelector('.w-feats');
-  const zenOK = !!ZEN_KEY();
-  const gemOK = !!GEMINI_KEY();
   const mk = (ico, title, sub, status, st, click) => {
     const b = document.createElement('button');
     b.className = 'w-feat';
-    // The subtitle is hidden by CSS to keep these compact single-row pills —
-    // it (and the status) are still reachable via this hover tooltip.
     b.title = title + (sub ? ' — ' + sub : '') + (status ? ' (' + status + ')' : '');
     b.innerHTML =
       '<span class="wf-ico">' + ico + '</span>' +
@@ -386,34 +386,16 @@ function showWelcome() {
     b.addEventListener('click', click);
     feats.appendChild(b);
   };
-  mk(svgIcon('chip', 'ico-sm'), T('featBrowserT'), T('featBrowserS'), T('featBrowserSt'), 'warn',
+  const localCore = a2iCoreBrain();
+  mk(svgIcon('chip', 'ico-sm'), 'A2I Core', 'Local GGUF model on your PC',
+    localCore?.online === false ? 'offline' : 'local', localCore?.online === false ? 'warn' : 'ok',
+    () => { engineSel.value = 'server:0'; engineSel.dispatchEvent(new Event('change')); });
+  mk(svgIcon('bolt', 'ico-sm'), T('featBrowserT'), T('featBrowserS'), T('featBrowserSt'), 'warn',
     () => { engineSel.value = 'browser'; engineSel.dispatchEvent(new Event('change')); });
-  mk(svgIcon('bolt', 'ico-sm'), T('featZenT'), T('featZenS'),
-    cloudAvailable ? T('featZenStReady') : (zenOK ? T('featZenStActive') : T('featZenStSetup')),
-    cloudAvailable ? 'ok' : (zenOK ? 'ok' : 'warn'),
-    () => {
-      if (cloudAvailable) {
-        engineSel.value = 'cloud'; engineSel.dispatchEvent(new Event('change'));
-      } else {
-        openSettings('brain');
-        $('preset-zen').click();
-      }
-    });
-  mk(svgIcon('sparkles', 'ico-sm'), T('featGemT'), T('featGemS'), gemOK ? T('featZenStActive') : T('featGemSt'), gemOK ? 'ok' : 'warn',
-    () => openSettings('gemini'));
-  // Nudge toward a free, genuinely strong brain (70B+ via Groq/Cerebras) —
-  // the default is a small in-browser model so it works on any device, which
-  // reads as "not smart" until a free key is added. Shown until one is set.
-  const strongBrainOK = serverBrains.some((b) => b.online !== false);
-  mk(svgIcon('bolt', 'ico-sm'), T('featFastT'), T('featFastS'), strongBrainOK ? T('featFastStReady') : T('featFastStSetup'),
-    strongBrainOK ? 'ok' : 'warn',
-    () => { openSettings('brain'); $('preset-cerebras').click(); });
-  mk(svgIcon('globe', 'ico-sm'), T('featWebT'), T('featWebS'), T('featWebSt'), 'ok',
-    () => { const t = $('wiki-toggle'); if (t) { t.checked = !t.checked; t.dispatchEvent(new Event('change')); } });
-  mk(svgIcon('mic', 'ico-sm'), 'Live voice', '3D voice AI — talk to A2I', 'Live page', 'ok',
-    () => { location.href = '/live'; });
-  mk(svgIcon('image', 'ico-sm'), T('featMediaT'), T('featMediaS'), T('featMediaSt'), 'ok',
-    () => { input.focus(); });
+  mk(svgIcon('settings', 'ico-sm'), 'Local model library', 'Review verified GGUF model options', 'Settings', 'ok',
+    () => openSettings());
+  mk(svgIcon('code', 'ico-sm'), 'Project review', 'Ask about files or request review-first edit proposals', 'Local', 'ok',
+    () => $('project-btn').click());
   feats.style.display = 'none';
   requestAnimationFrame(() => { feats.style.display = 'grid'; });
 }
@@ -878,19 +860,54 @@ async function withKnowledge(messages) {
 let webllmEngine = null, loadedModel = null;
 let currentAbort = null;
 
-function loadServerBrains() {
+const LOCAL_ONLY = true;
+
+type ServerBrain = {
+  name: string;
+  url: string;
+  model?: string;
+  online?: boolean;
+};
+
+function loadServerBrains(): ServerBrain[] {
+  // A2I Web accepts only the machine-local Core endpoint in local-only mode.
+  // Old browser entries with cloud URLs or API keys are intentionally ignored.
+  const local = { name: 'A2I Core (local)', url: 'http://127.0.0.1:8990' };
   try {
     const saved = JSON.parse(localStorage.getItem('a2i-brains') || 'null');
-    if (Array.isArray(saved) && saved.length) return saved;
-  } catch { /* fall through to default */ }
-  // Only seed the local A2I Core brain when the page is served locally —
-  // on the hosted site (https) that localhost address can never be reached.
-  const localPage = location.protocol === 'http:' &&
-    /^(localhost|127\.0\.0\.1|\[::1\])/.test(location.hostname);
-  return localPage ? [{ name: 'A2I Core', url: 'http://127.0.0.1:8990' }] : [];
+    if (Array.isArray(saved)) {
+      const core = saved.find((brain) => {
+        const url = String(brain?.url || '');
+        return url.includes('127.0.0.1:8990') || url.includes('localhost:8990');
+      });
+      if (core) return [{ name: 'A2I Core (local)', url: String(core.url).replace(/\/+$/, '') }];
+    }
+  } catch { /* use the safe default */ }
+  return [local];
 }
-let serverBrains = loadServerBrains();
+let serverBrains: ServerBrain[] = loadServerBrains();
 const saveBrains = () => localStorage.setItem('a2i-brains', JSON.stringify(serverBrains));
+
+function isA2ICoreBrain(brain) {
+  const url = brain?.url || '';
+  return url.includes('127.0.0.1:8990') || url.includes('localhost:8990') ||
+    /^A2I Core/i.test(brain?.name || '');
+}
+
+function a2iCoreBrain() {
+  return serverBrains.find((brain) => isA2ICoreBrain(brain));
+}
+
+function ensureA2ICoreLocal() {
+  let brain = a2iCoreBrain();
+  if (!brain) {
+    brain = { name: 'A2I Core (local)', url: 'http://127.0.0.1:8990' };
+    serverBrains = [brain];
+  }
+  delete brain.model;
+  saveBrains();
+  return serverBrains.indexOf(brain);
+}
 
 function brainStatusLabel(brain) {
   if (brain.online === true) return ' (online)';
@@ -901,29 +918,16 @@ function brainStatusLabel(brain) {
 function rebuildEngineSelect(selected) {
   engineSel.innerHTML = '';
   const add = (value, label) => {
-    const o = document.createElement('option');
-    o.value = value; o.textContent = label;
-    engineSel.appendChild(o);
+    const option = document.createElement('option');
+    option.value = value; option.textContent = label;
+    engineSel.appendChild(option);
   };
-  const hasGemini = !!GEMINI_KEY();
-  const hasProviders = hasGemini || serverBrains.length > 0 || cloudAvailable;
-  // <option> text is plain-text only (no icon rendering inside a native
-  // <select>), so these are unprefixed — also keeps them shorter for the
-  // topbar's ellipsis-truncated width.
-  if (hasProviders) add('auto', T('engAuto'));
-  if (cloudAvailable) add('cloud', cloudModel ? 'A2I Cloud — ' + cloudModel + ' (server)' : 'A2I Cloud (fast, no download)');
-  if (hasGemini) add('gemini', 'Gemini (' + GEMINI_MODEL() + ')');
+  add('auto', 'A2I Local — Core first, browser fallback');
+  serverBrains.forEach((brain, index) => add('server:' + index, brain.name + brainStatusLabel(brain)));
   add('browser', T('engBrowser'));
-  serverBrains.forEach((b, i) => add('server:' + i, b.name + brainStatusLabel(b)));
-  add('all', T('engAll'));
-  add('gemini-setup', hasGemini ? T('engGeminiChange') : T('engGeminiAdd'));
-  add('add', T('engAdd'));
-  // Prefer the caller's choice, then the last remembered engine (if still
-  // valid), then a sensible default: Cloud → Gemini → in-browser.
   const saved = localStorage.getItem('a2i-engine');
-  const savedValid = saved && [...engineSel.options].some((o) => o.value === saved);
-  engineSel.value = selected ||
-    (savedValid ? saved : (hasProviders ? 'auto' : 'browser'));
+  const savedValid = saved && [...engineSel.options].some((option) => option.value === saved);
+  engineSel.value = selected || (savedValid ? saved : 'auto');
 }
 
 // Base URLs may or may not already end in /v1 (A2I Core/Ollama use bare host;
@@ -939,34 +943,22 @@ function apiBase(url) {
 async function checkBrains() {
   await Promise.all(serverBrains.map(async (brain) => {
     try {
-      const headers = brain.apiKey ? { Authorization: 'Bearer ' + brain.apiKey } : {};
       const res = await fetch(apiBase(brain.url) + '/models',
-        { headers, signal: AbortSignal.timeout(8000) });
+        { signal: AbortSignal.timeout(8000) });
       brain.online = res.ok;
     } catch {
       brain.online = false;
     }
   }));
   const current = engineSel.value;
-  if (current !== 'add' && current !== 'gemini-setup') rebuildEngineSelect(current);
+  rebuildEngineSelect(current);
   refreshBar();
 }
 setInterval(checkBrains, 30000);
 
 engineSel.addEventListener('change', () => {
-  // The "add / gemini-setup" options now open the polished Settings panel
-  // instead of native prompt() dialogs.
-  if (engineSel.value === 'add' || engineSel.value === 'gemini-setup') {
-    const focus = engineSel.value === 'gemini-setup' ? 'gemini' : 'brain';
-    rebuildEngineSelect(GEMINI_KEY() ? 'gemini' : 'browser');
-    refreshBar();
-    openSettings(focus);
-    return;
-  }
-  // Remember a concrete engine choice so it sticks across reloads.
-  if (!['add', 'gemini-setup'].includes(engineSel.value)) {
-    localStorage.setItem('a2i-engine', engineSel.value);
-  }
+  // Local-only mode has no provider-setup entries in the engine selector.
+  localStorage.setItem('a2i-engine', engineSel.value);
   refreshBar();
 });
 
@@ -987,65 +979,20 @@ serverUrl.addEventListener('change', () => {
 modelSel.addEventListener('change', () => {
   loadedModel = null; webllmEngine = null;
   const mode = engineSel.value;
-  if (mode === 'cloud') {
-    localStorage.setItem('a2i-cloud-model', modelSel.value);
-  } else if (mode.startsWith('server:')) {
+  if (mode.startsWith('server:')) {
     const brain = currentServerBrain();
     if (brain) { brain.model = modelSel.value; saveBrains(); }
-  } else if (mode === 'gemini') {
-    localStorage.setItem('a2i-gemini-model', modelSel.value);
-    $('set-gemini-model').value = modelSel.value;
   }
   refreshBar();
 });
 
-// One model picker for every engine: in-browser list, Gemini models, or the
-// provider's model (Zen brains get the full free list; other servers their
-// saved model). Changes are saved to the right place automatically.
+// The selector intentionally exposes only local inference: the browser model
+// and the GGUF model currently loaded by A2I Core.
 function syncModelPicker() {
   const mode = engineSel.value;
-  const brain = currentServerBrain();
   if (mode === 'browser') {
     modelSel.innerHTML = browserModelOptions;
     modelSel.style.display = navigator.gpu ? 'inline-block' : 'none';
-    return;
-  }
-  if (mode === 'gemini') {
-    const cur = GEMINI_MODEL();
-    const gem = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro', 'gemini-2.0-flash'];
-    if (!gem.includes(cur)) gem.unshift(cur);
-    modelSel.innerHTML = gem.map((m) => '<option value="' + m + '">' + m + '</option>').join('');
-    modelSel.value = cur;
-    modelSel.style.display = 'inline-block';
-    modelSel.title = 'Gemini model';
-    return;
-  }
-  if (mode === 'cloud') {
-    const cur = CLOUD_MODEL();
-    const models = [];
-    (zenModels || []).forEach((m) => { if (!models.includes(m)) models.push(m); });
-    if (cur && !models.includes(cur)) models.unshift(cur);
-    modelSel.innerHTML = models.length
-      ? models.map((m) => '<option value="' + m + '">' + m + '</option>').join('')
-      : '<option value="' + cur + '">' + cur + '</option>';
-    modelSel.value = cur;
-    modelSel.style.display = 'inline-block';
-    modelSel.title = 'A2I Cloud model';
-    return;
-  }
-  if (mode.startsWith('server:') && brain) {
-    const zen = /opencode\.ai\/zen|\/api\/zen/.test(brain.url);
-    const models = [];
-    if (brain.model) models.push(brain.model);
-    if (zen) {
-      (zenModels || []).forEach((m) => { if (!models.includes(m)) models.push(m); });
-    }
-    modelSel.innerHTML = models.length
-      ? models.map((m) => '<option value="' + m + '">' + m + '</option>').join('')
-      : '<option value="">(set model in Settings)</option>';
-    if (brain.model) modelSel.value = brain.model;
-    modelSel.style.display = 'inline-block';
-    modelSel.title = brain.name + ' model';
     return;
   }
   modelSel.style.display = 'none';
@@ -1059,20 +1006,13 @@ function refreshBar() {
   // hover/long-press via the native title tooltip.
   engineSel.title = engineSel.options[engineSel.selectedIndex]?.textContent || '';
   syncModelPicker();
-  serverUrl.style.display = brain ? 'inline-block' : 'none';
-  if (brain) serverUrl.value = brain.url;
+  serverUrl.style.display = 'none';
   if (mode === 'auto') {
-    setStatus(T('stAuto'), true);
-  } else if (mode === 'cloud') {
-    setStatus('A2I Cloud — ' + CLOUD_MODEL(), true);
-  } else if (mode === 'gemini') {
-    setStatus(`Gemini ${GEMINI_MODEL()} — ` + T('stGemini'), true);
+    setStatus('A2I Local — Core first, browser fallback', true);
   } else if (mode === 'browser') {
     setStatus(loadedModel ? `ready: ${loadedModel}`
       : navigator.gpu ? T('stModelLoads')
       : T('stCpuMode'), !!loadedModel);
-  } else if (mode === 'all') {
-    setStatus(Tf('stAll', { n: String(serverBrains.length + (loadedModel ? 1 : 0)) }));
   } else if (brain) {
     setStatus(Tf('stBrain', { name: brain.name }));
   }
@@ -1538,6 +1478,7 @@ async function readGeminiSSE(res, onDelta, signal) {
 }
 
 async function askGemini(messages, onDelta, signal) {
+  if (LOCAL_ONLY) throw new Error('A2I local-only mode does not use Gemini or API keys.');
   const key = GEMINI_KEY();
   if (!key) throw new Error(T('errNoGemKey'));
   const url = `https://generativelanguage.googleapis.com/v1beta/models/` +
@@ -1572,6 +1513,7 @@ let cloudBase = '';
 const CLOUD_MODEL = () => localStorage.getItem('a2i-cloud-model') || cloudModel || 'big-pickle';
 
 async function checkCloud() {
+  if (LOCAL_ONLY) { cloudAvailable = false; return false; }
   try {
     const res = await fetch('/api/chat', { signal: AbortSignal.timeout(4000) });
     if (res.ok) {
@@ -1612,6 +1554,7 @@ function refreshCloudStatusUI() {
 }
 
 async function askCloud(messages, onDelta, signal, onReason) {
+  if (LOCAL_ONLY) throw new Error('A2I local-only mode does not use cloud inference.');
   let res;
   try {
     res = await fetch('/api/chat', {
@@ -1637,20 +1580,13 @@ async function askCloud(messages, onDelta, signal, onReason) {
 async function askServer(brain, messages, onDelta, signal, onReason) {
   let res;
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (brain.apiKey) headers.Authorization = 'Bearer ' + brain.apiKey;
-    // OpenRouter recommends these; harmless elsewhere.
-    if (/openrouter\.ai/.test(brain.url)) {
-      headers['HTTP-Referer'] = location.origin;
-      headers['X-Title'] = 'A2I';
-    }
-    const body = {
+    const body: Record<string, unknown> = {
       messages: toOpenAIMessages(messages), stream: true, max_tokens: 1024,
       temperature: activeTemperature(),
     };
     if (brain.model) body.model = brain.model;
     res = await fetch(apiBase(brain.url) + '/chat/completions', {
-      method: 'POST', headers, body: JSON.stringify(body), signal,
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
     });
   } catch (err) {
     if (signal?.aborted) return '';
@@ -1666,37 +1602,31 @@ async function askServer(brain, messages, onDelta, signal, onReason) {
   return readSSE(res, onDelta, signal, onReason);
 }
 
-// ---- Auto: best available brain, with automatic failover ----------------
-// Tries providers in priority order and falls through on rate-limit/error to
-// the next one, so a single 429 (free-tier limit) never breaks the chat.
+// ---- Auto: local-first failover -----------------------------------------
+// Core uses the GGUF model installed on this PC. If it is unavailable, A2I
+// falls back only to the browser's local model; it never tries an API provider.
 async function askAuto(messages, aiDiv, signal) {
-  const providers = [];
-  if (GEMINI_KEY()) providers.push({ label: 'Gemini', fn: (d, r) => askGemini(messages, d, signal) });
-  serverBrains.forEach((b) => {
-    if (b.online !== false) providers.push({ label: b.name, fn: (d, r) => askServer(b, messages, d, signal, r) });
-  });
-  if (cloudAvailable) providers.push({ label: 'A2I Cloud', fn: (d, r) => askCloud(messages, d, signal) });
-  providers.push({ label: 'In-browser AI', fn: (d, r) => askBrowser(messages, d, signal) });
-
-  let lastErr = null;
-  for (let i = 0; i < providers.length; i++) {
-    const p = providers[i];
-    aiDiv.setLabel(p.label);
+  const localBrains = serverBrains.filter((brain) => brain.online !== false);
+  const choices = [
+    ...localBrains.map((brain) => ({ label: brain.name, fn: (delta, reason) => askServer(brain, messages, delta, signal, reason) })),
+    { label: 'In-browser AI', fn: (delta) => askBrowser(messages, delta, signal) },
+  ];
+  let lastError = null;
+  for (let index = 0; index < choices.length; index++) {
+    const choice = choices[index];
+    aiDiv.setLabel(choice.label);
     try {
-      const ans = await p.fn((t) => aiDiv.update(t), (rt) => aiDiv.setReason(rt));
-      if (ans && ans.trim()) { aiDiv.setLabel(p.label); return ans; }
-    } catch (err) {
+      const answer = await choice.fn((text) => aiDiv.update(text), (reasoning) => aiDiv.setReason(reasoning));
+      if (answer && answer.trim()) { aiDiv.setLabel(choice.label); return answer; }
+    } catch (error) {
       if (signal?.aborted) return '';
-      lastErr = err;
-      if (i < providers.length - 1) {
-        aiDiv.update('↻ ' + p.label + ' មិនអាចប្រើ (' +
-          (err.message || '').slice(0, 60) + ') — ព្យាយាម provider បន្ទាប់…');
+      lastError = error;
+      if (index < choices.length - 1) {
+        aiDiv.update('↻ ' + choice.label + ' មិនអាចប្រើ — កំពុងប្ដូរទៅ local model បន្ទាប់…');
       }
     }
   }
-  throw lastErr || new Error(
-    'គ្មាន provider ណាឆ្លើយបានទេ។ (No provider could answer.) — ' +
-    'ចុច Settings → OpenCode Zen បិទ key រួច Save & Activate។');
+  throw lastError || new Error('A2I local models are unavailable. Start A2I Core or load a local browser model.');
 }
 
 // ---- All brains together -----------------------------------------------
@@ -2238,32 +2168,29 @@ function renderBrainList() {
       serverBrains.splice(i, 1); saveBrains();
       rebuildEngineSelect(engineSel.value); refreshBar(); renderBrainList();
     });
-    row.append(nm, u);
-    if (b.apiKey) {
-      const k = document.createElement('span'); k.className = 'key'; k.title = 'Has API key';
-      k.innerHTML = svgIcon('key', 'ico-sm'); row.append(k);
-    }
-    row.append(rm);
+    row.append(nm, u, rm);
     list.appendChild(row);
   });
 }
 
-function openSettings(focus) {
-  $('set-gemini-key').value = GEMINI_KEY();
-  $('set-gemini-model').value = GEMINI_MODEL();
-  const tag = $('set-gemini-state');
-  tag.textContent = GEMINI_KEY() ? '● active' : '';
-  tag.classList.toggle('on', !!GEMINI_KEY());
-  $('set-zen-key').value = ZEN_KEY();
-  $('set-zen-model').value = ZEN_MODEL();
+function selectSettingsTab(tab = 'providers') {
+  document.querySelectorAll<HTMLElement>('.set-tab').forEach((button) => {
+    const current = button.dataset.tab === tab;
+    button.hidden = button.dataset.tab === 'models';
+    button.classList.toggle('active', current);
+  });
+  document.querySelectorAll<HTMLElement>('.tab-pane').forEach((pane) => {
+    pane.hidden = pane.dataset.tab !== tab;
+  });
+}
+
+function openSettings(_focus = '') {
   renderBrainList();
+  selectSettingsTab('providers');
   overlay.hidden = false;
-  refreshCloudStatusUI();
-  setTimeout(() => {
-    if (focus === 'gemini') $('set-gemini-key').focus();
-    else if (focus === 'zen') $('set-zen-key').focus();
-    else if (focus === 'brain') $('set-brain-name').focus();
-  }, 50);
+  refreshCorePolicy();
+  refreshLocalCatalog();
+  refreshKnowledgeStatus();
 }
 function closeSettings() { overlay.hidden = true; }
 
@@ -2281,13 +2208,178 @@ if (cloudGo) cloudGo.addEventListener('click', () => {
   toast('A2I Cloud — ' + (cloudModel || T('stReady')), 'ok');
 });
 
-// Settings tabs: Models / Providers / Appearance.
-document.querySelectorAll('.set-tab').forEach((b) => {
+// Settings tabs intentionally omit remote provider setup in local-only mode.
+document.querySelectorAll<HTMLElement>('.set-tab').forEach((b) => {
   b.addEventListener('click', () => {
-    document.querySelectorAll('.set-tab').forEach((x) => x.classList.toggle('active', x === b));
-    document.querySelectorAll('.tab-pane').forEach((p) => { p.hidden = p.dataset.tab !== b.dataset.tab; });
+    if (b.dataset.tab === 'models') return;
+    selectSettingsTab(b.dataset.tab || 'providers');
+    if (b.dataset.tab === 'safety') {
+      refreshCorePolicy();
+      refreshKnowledgeStatus();
+    }
   });
 });
+
+function renderToolPolicy(tools) {
+  const list = $('tool-policy-list');
+  list.innerHTML = '';
+  if (!Array.isArray(tools) || !tools.length) {
+    list.innerHTML = '<div class="hint" style="margin:0">No tool policy is available from A2I Core.</div>';
+    return;
+  }
+  tools.forEach((tool) => {
+    const row = document.createElement('div');
+    row.className = 'brain-row';
+    const name = document.createElement('span'); name.className = 'nm';
+    name.textContent = tool.title || tool.id;
+    const detail = document.createElement('span'); detail.className = 'u';
+    detail.textContent = (tool.enabled ? 'enabled' : 'disabled') +
+      (tool.requires_confirmation ? ' · confirmation required' : '');
+    const state = document.createElement('span'); state.className = 'statetag';
+    state.textContent = tool.enabled ? '●' : '○';
+    state.classList.toggle('on', !!tool.enabled);
+    row.append(name, detail, state);
+    list.appendChild(row);
+  });
+}
+
+function renderKnowledgeStatus(payload) {
+  const list = $('knowledge-status-list');
+  list.innerHTML = '';
+  if (!payload.loaded) {
+    list.innerHTML = '<div class="hint" style="margin:0">No local knowledge folder is loaded. Start Core with <code>--knowledge-dir</code>.</div>';
+    return;
+  }
+  const summary = document.createElement('div');
+  summary.className = 'brain-row';
+  const name = document.createElement('strong');
+  name.textContent = `${payload.document_count || 0} local document(s) · ${payload.chunk_count || 0} retrieval chunk(s)`;
+  summary.appendChild(name);
+  list.appendChild(summary);
+  (payload.documents || []).forEach((document) => {
+    const row = document.createElement('div');
+    row.className = 'brain-row';
+    const source = document.createElement('span');
+    source.className = 'nm';
+    source.textContent = document.source;
+    const chunks = document.createElement('span');
+    chunks.className = 'muted';
+    chunks.textContent = `${document.chunks} chunk(s)`;
+    row.append(source, chunks);
+    list.appendChild(row);
+  });
+  if (payload.truncated) {
+    const note = document.createElement('div');
+    note.className = 'hint';
+    note.textContent = 'Only the first local document names are shown.';
+    list.appendChild(note);
+  }
+}
+
+async function refreshKnowledgeStatus() {
+  const tag = $('knowledge-state');
+  const core = a2iCoreBrain();
+  tag.textContent = 'checking local index…'; tag.classList.remove('on');
+  try {
+    const response = await fetch(apiBase(core.url) + '/knowledge', { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const payload = await response.json();
+    renderKnowledgeStatus(payload);
+    tag.textContent = payload.loaded ? '● local index ready' : 'No index loaded';
+    tag.classList.toggle('on', !!payload.loaded);
+  } catch (error) {
+    $('knowledge-status-list').innerHTML = '<div class="hint" style="margin:0">Core unavailable. Start A2I Core locally to inspect knowledge status.</div>';
+    tag.textContent = 'Core unavailable'; tag.classList.remove('on');
+  }
+}
+
+$('knowledge-refresh').addEventListener('click', () => refreshKnowledgeStatus());
+
+function renderLocalCatalog(payload) {
+  const list = $('local-model-catalog');
+  list.innerHTML = '';
+  const active = payload.active_model || {};
+  const summary = document.createElement('div');
+  summary.className = 'brain-row';
+  const summaryName = document.createElement('strong');
+  summaryName.textContent = active.valid_gguf ? 'Active GGUF model verified' : 'No active GGUF model verified';
+  const summaryDetail = document.createElement('span');
+  summaryDetail.className = 'muted';
+  summaryDetail.textContent = active.valid_gguf
+    ? `${Math.round((active.size_bytes || 0) / 1024 / 1024)} MB · SHA-256 ${String(active.sha256 || '').slice(0, 12)}…`
+    : 'Run download-model.sh to install a reviewed local model.';
+  summary.append(summaryName, summaryDetail);
+  list.appendChild(summary);
+  (payload.assets || []).forEach((asset) => {
+    const row = document.createElement('div');
+    row.className = 'brain-row';
+    const name = document.createElement('strong');
+    name.textContent = asset.name;
+    const detail = document.createElement('span');
+    detail.className = 'muted';
+    detail.textContent = `${asset.id} · ${asset.quantization} · ${asset.approx_disk_gb} GB disk · ${asset.min_ram_gb}+ GB RAM`;
+    const note = document.createElement('span');
+    note.className = 'muted';
+    note.textContent = asset.recommended_for;
+    row.append(name, detail, note);
+    list.appendChild(row);
+  });
+}
+
+async function refreshLocalCatalog() {
+  const tag = $('local-catalog-state');
+  const core = a2iCoreBrain();
+  tag.textContent = 'checking local catalog…'; tag.classList.remove('on');
+  try {
+    const response = await fetch(apiBase(core.url) + '/local-models', { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    renderLocalCatalog(await response.json());
+    tag.textContent = '● local-only catalog'; tag.classList.add('on');
+  } catch (error) {
+    $('local-model-catalog').innerHTML = '<div class="hint" style="margin:0">Start A2I Core locally to view the verified model catalog.</div>';
+    tag.textContent = 'Core unavailable'; tag.classList.remove('on');
+  }
+}
+
+$('local-catalog-refresh').addEventListener('click', () => refreshLocalCatalog());
+
+async function refreshCorePolicy() {
+  const tag = $('router-state');
+  const core = a2iCoreBrain();
+  if (!core) {
+    tag.textContent = 'A2I Core local endpoint is unavailable.';
+    tag.classList.remove('on');
+    return;
+  }
+  tag.textContent = 'checking local Core…'; tag.classList.remove('on');
+  try {
+    const base = apiBase(core.url);
+    const [healthRes, toolsRes] = await Promise.all([
+      fetch(core.url.replace(/\/+$/, '') + '/health', { signal: AbortSignal.timeout(8000) }),
+      fetch(base + '/tools', { signal: AbortSignal.timeout(8000) }),
+    ]);
+    if (!healthRes.ok || !toolsRes.ok) throw new Error('Core returned HTTP ' + (!healthRes.ok ? healthRes.status : toolsRes.status));
+    const health = await healthRes.json();
+    const tools = await toolsRes.json();
+    renderToolPolicy(tools.tools);
+    tag.textContent = '● Core local-only online · ' + (health.model || 'model loading');
+    tag.classList.add('on');
+  } catch (error) {
+    $('tool-policy-list').innerHTML = '<div class="hint" style="margin:0">Core policy unavailable. Start A2I Core locally and allow this browser origin.</div>';
+    tag.textContent = 'Core unavailable'; tag.classList.remove('on');
+  }
+}
+
+$('router-apply').addEventListener('click', () => {
+  const index = ensureA2ICoreLocal();
+  rebuildEngineSelect('server:' + index); refreshBar(); checkBrains();
+  $('router-state').textContent = '● A2I Core local-only activated';
+  $('router-state').classList.add('on');
+  refreshCorePolicy();
+  refreshLocalCatalog();
+  refreshKnowledgeStatus();
+});
+$('router-refresh').addEventListener('click', () => { refreshCorePolicy(); refreshLocalCatalog(); refreshKnowledgeStatus(); });
 
 $('set-gemini-save').addEventListener('click', () => {
   const key = $('set-gemini-key').value.trim();
@@ -2339,6 +2431,7 @@ function ensureZenBrain() {
 }
 
 async function testZenKey(key, tag) {
+  if (LOCAL_ONLY) throw new Error('A2I local-only mode does not use Zen or API keys.');
   tag.textContent = T('testing') + '…'; tag.classList.remove('on');
   try {
     const res = await fetch(ZEN_URL + '/chat/completions', {
@@ -2448,6 +2541,7 @@ $('preset-zen').addEventListener('click', () => {
 let zenModels = [];
 let zenModelsTried = false;
 async function refreshZenModels() {
+  if (LOCAL_ONLY) return [];
   const btn = $('preset-zen-refresh');
   btn.textContent = '↻ Loading…';
   btn.disabled = true;
@@ -2487,6 +2581,7 @@ $('preset-zen-refresh').addEventListener('click', () => refreshZenModels());
 // are ready before the user looks. `load` may already have fired by the time
 // ChatShell injects this markup, so fall back to running immediately.
 const warmZen = () => {
+  if (LOCAL_ONLY) return;
   refreshZenModels();
   // Migrate brains saved with the old direct Zen URL (https://opencode.ai/zen/v1)
   // to the same-origin proxy, then recreate a missing Zen brain if a key is saved.
@@ -2673,9 +2768,33 @@ $('project-ask').addEventListener('click', async () => {
   }
 });
 
+$('project-plan').addEventListener('click', async () => {
+  const task = requireProjectInput();
+  if (!task) return;
+  const out = $('project-output');
+  out.hidden = false;
+  out.textContent = 'Creating a local review plan…';
+  projectState('Planning locally…', true);
+  try {
+    const data = await callAgent('/v1/agent/plan', { task, files: Object.fromEntries(projectFiles) });
+    out.innerHTML = '';
+    const plan = document.createElement('pre');
+    plan.textContent = data.plan || 'No plan returned.';
+    out.appendChild(plan);
+    projectState('✓ Review plan ready');
+  } catch (err) {
+    out.textContent = '⚠ ' + err.message + '\n\n' + T('projStartCore');
+    projectState(T('projFailed'));
+  }
+});
+
 $('project-edit').addEventListener('click', async () => {
   const task = requireProjectInput();
   if (!task) return;
+  if (!$('project-approval').checked) {
+    projectState('Confirm review-first approval before requesting edits.');
+    return;
+  }
   const out = $('project-output');
   out.hidden = false;
   out.textContent = T('projWorking');
@@ -2683,6 +2802,8 @@ $('project-edit').addEventListener('click', async () => {
   try {
     const data = await callAgent('/v1/agent/edit', {
       task, files: Object.fromEntries(projectFiles),
+      a2i_approval: true,
+      scope: 'Generate reviewable edit proposals for the files loaded in this Project panel.',
     });
     const changed = Object.entries(data.files || {});
     out.innerHTML = '';
@@ -2715,8 +2836,8 @@ $('project-edit').addEventListener('click', async () => {
       });
       row.append(name, dl);
       out.appendChild(row);
-      // Keep the panel's copy in sync so follow-up edits build on this one.
-      projectFiles.set(path, content);
+      // The proposal is not applied to the loaded project. The user must review
+      // the downloaded file and decide whether to replace anything outside A2I.
     }
     projectState(changed.length ? '✓ ' + T('projDone') : T('projNoChanges'));
   } catch (err) {
@@ -2949,13 +3070,8 @@ renderChat();
 renderChatList();
 loadKnowledge();
 checkBrains();
-// Detect A2I Cloud; if configured, make it the default engine.
-checkCloud().then(() => {
-  if (cloudAvailable && engineSel.value === 'browser') {
-    rebuildEngineSelect('cloud');
-    refreshBar();
-  } else {
-    rebuildEngineSelect(engineSel.value);
-  }
-});
+// Local-only mode never probes or selects a hosted provider.
+if (!LOCAL_ONLY) {
+  checkCloud().then(() => rebuildEngineSelect(engineSel.value));
+}
 }

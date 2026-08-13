@@ -1,0 +1,12 @@
+{
+  "tools": {
+    "web_fetch": {"enabled": true},
+    "knowledge_search": {"enabled": true},
+    "coding_agent": {"enabled": false},
+    "file_write": {"enabled": false},
+    "shell": {"enabled": false},
+    "messaging": {"enabled": false},
+    "data_ingest": {"enabled": false},
+    "scheduled_task": {"enabled": false}
+  }
+}

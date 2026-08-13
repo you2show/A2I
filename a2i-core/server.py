@@ -16,23 +16,35 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 import uuid
+import webbrowser
+from threading import Timer
 from pathlib import Path
 from typing import Callable, Iterator, TypedDict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from llama_cpp import Llama
+
+try:
+    from llama_cpp import Llama
+except ModuleNotFoundError:  # Keep routing/policy APIs testable before native install.
+    Llama = None  # type: ignore[assignment,misc]
 
 from agent import ask, run_agent
+
 from browse import browse
+from community_assets import research_assets_payload
+
 from fim import RepoFile, build_repo_fim_prompt
+
 from knowledge import KnowledgeBase
-from opencode_bridge import chat as oc_chat, is_oc_model, oc_models, oc_url
+from local_catalog import catalog_payload
+from profiles import model_profiles, recommend_profile
 from repomap import build_repo_map, extract_refs, rank_files
-from zen import chat as zen_chat, is_zen_model, zen_key, zen_models
+from tool_policy import capabilities as tool_capabilities, decide as decide_tool, require_allowed
 
 DEFAULT_MODEL_PATH = Path(__file__).parent / "models" / "model.gguf"
 DEFAULT_SYSTEM_PROMPT = (
@@ -59,15 +71,33 @@ class AppState:
 
 
 state = AppState()
-app = FastAPI(title="A2I Core", version="1.0.0")
+app = FastAPI(title="A2I Core", version="1.1.0")
 
-# Allow browser front ends (e.g. the a2i-web page hosted on Vercel) to call
-# this server directly from the user's browser.
+def _allowed_origins() -> list[str]:
+    """Return explicit browser origins allowed to call a local Core server.
+
+    A public wildcard is unsafe for a machine-local assistant that can expose
+    private knowledge and later invoke user-approved tools. Set
+    ``A2I_ALLOWED_ORIGINS`` to a comma-separated list when hosting A2I Web on a
+    trusted domain; use exact origins rather than a wildcard.
+    """
+    configured = os.environ.get("A2I_ALLOWED_ORIGINS", "").strip()
+    if configured:
+        return [origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()]
+    return [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8990",
+        "http://127.0.0.1:8990",
+    ]
+
+
+# Allow only explicit, trusted browser front ends to reach the local server.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins(),
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -96,49 +126,84 @@ def build_messages(messages: list[ChatMessage]) -> list[ChatMessage]:
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    model = Path(state.llm.model_path).name if hasattr(state, "llm") else "not-loaded"
+    return {"status": "ok", "mode": "local-only", "model": model}
+
+
+@app.get("/v1/local-models")
+def list_local_models() -> dict[str, object]:
+    """List curated local GGUF assets and inspect the active model file."""
+    return catalog_payload()
+
+
+@app.get("/v1/knowledge")
+def knowledge_status() -> dict[str, object]:
+    """Show local RAG index metadata without returning private document text."""
+    if state.knowledge is None:
+        return {"object": "a2i.knowledge_status", "loaded": False, "chunk_count": 0, "document_count": 0, "documents": []}
+    return {"object": "a2i.knowledge_status", **state.knowledge.status()}
+
+
+@app.get("/v1/community-assets")
+def community_assets() -> dict[str, object]:
+    """List reviewed frontier assets without downloading or serving them."""
+    return research_assets_payload()
+
+
+@app.get("/v1/model-profiles")
+def list_model_profiles(ram_gb: float | None = None) -> dict[str, object]:
+    """Expose local model tiers for the A2I settings UI.
+
+    ``ram_gb`` is optional because browser hardware detection is not reliable.
+    When supplied, every local tier reports whether it is merely possible or
+    genuinely recommended for that amount of system memory.
+    """
+
+    recommendation = recommend_profile(ram_gb)
     return {
-        "status": "ok",
-        "model": Path(state.llm.model_path).name,
-        "zen": bool(zen_key()),
-        "opencode": oc_url(),
+        "object": "a2i.model_profile_list",
+        "ram_gb": ram_gb,
+        "recommended_profile": recommendation.id,
+        "profiles": model_profiles(ram_gb),
     }
+
+
+@app.get("/v1/tools", response_model=None)
+def list_tools() -> dict[str, object] | JSONResponse:
+    """List tool capabilities and their local enablement state."""
+    try:
+        tools = tool_capabilities()
+    except ValueError as err:
+        return JSONResponse({"error": "invalid_tool_policy", "message": str(err)}, status_code=503)
+    return {"object": "a2i.tool_list", "tools": tools}
+
+
+@app.post("/v1/tools/plan", response_model=None)
+def tool_plan(body: dict) -> dict[str, object] | JSONResponse:
+    """Return an authorization decision; this endpoint never executes a tool."""
+    try:
+        decision = decide_tool(body)
+    except ValueError as err:
+        return JSONResponse({"error": "tool_policy_error", "message": str(err)}, status_code=400)
+    return {"object": "a2i.tool_decision", "decision": decision.public()}
 
 
 @app.get("/v1/models")
 def list_models() -> dict[str, object]:
-    name = Path(state.llm.model_path).stem
-    data = [{"id": name, "object": "model", "owned_by": "a2i"}]
-    for mid in zen_models():
-        data.append({"id": mid, "object": "model", "owned_by": "opencode-zen"})
-    for info in oc_models():
-        data.append({"id": "oc/" + info["id"], "object": "model", "owned_by": "opencode-server"})
-    return {"object": "list", "data": data}
+    name = Path(state.llm.model_path).stem if hasattr(state, "llm") else "not-loaded"
+    return {"object": "list", "data": [{"id": name, "object": "model", "owned_by": "a2i-local"}]}
 
 
 @app.post("/v1/chat/completions", response_model=None)
+
 def chat_completions(body: dict) -> JSONResponse | StreamingResponse:
     messages: list[ChatMessage] = body.get("messages", [])
     max_tokens: int = body.get("max_tokens") or 512
     temperature: float = body.get("temperature", 0.7)
     stream: bool = body.get("stream", False)
-    model_name = Path(state.llm.model_path).stem
-
-    # Zen bridge: when the caller asks for a Zen model (big-pickle,
-    # deepseek-v4-flash-free, ...) and a key is available (auto-read from
-    # OpenCode's auth.json or A2I_ZEN_KEY), proxy to opencode.ai/zen/v1.
-    if is_zen_model(str(body.get("model") or "")):
-        status, content_type, text = zen_chat(str(body.get("model")), body)
-        if content_type == "text/event-stream":
-            return StreamingResponse(iter([text]), media_type=content_type)
-        return JSONResponse(json.loads(text), status_code=status)
-
-    # OpenCode bridge: oc/<model> runs a full agent loop on the local
-    # `opencode serve` server instead of a local completion.
-    if is_oc_model(str(body.get("model") or "")):
-        status, content_type, text = oc_chat(str(body.get("model")), body)
-        if content_type == "text/event-stream":
-            return StreamingResponse(iter([text]), media_type=content_type)
-        return JSONResponse(json.loads(text), status_code=status)
+    # Agent/provider routes below may be rejected before a local GGUF model is
+    # loaded. Keeping this fallback also makes control-plane APIs testable.
+    model_name = Path(state.llm.model_path).stem if hasattr(state, "llm") else "local"
 
     full_messages = build_messages(messages)
 
@@ -276,18 +341,37 @@ def agent_ask(body: dict) -> JSONResponse:
     return JSONResponse({"answer": answer})
 
 
+@app.post("/v1/agent/plan")
+def agent_plan(body: dict) -> JSONResponse:
+    """Produce a local review plan without generating or applying edits."""
+    task: str = body.get("task") or ""
+    files: dict[str, str] = body.get("files") or {}
+    if not task or not files:
+        return JSONResponse({"error": "task and files are required"}, status_code=400)
+    plan = ask(
+        "Create a review-first implementation plan for this task. Do not edit files. " + task,
+        files,
+        _local_llm(temperature=0.3, max_tokens=1536),
+        read_urls=False,
+    )
+    return JSONResponse({"plan": plan})
+
+
 @app.post("/v1/agent/edit")
 def agent_edit(body: dict) -> JSONResponse:
-    """Edit the supplied files to accomplish a task.
+    """Generate reviewable edits only after an explicit local approval.
 
-    Returns the updated contents; nothing is written to disk here — the
-    caller decides what to do with them, which keeps the dangerous half of
-    the operation on the client side where the user can see it.
+    The returned contents are never written to disk by Core. The caller must
+    download and review them before applying any change outside A2I.
     """
     task: str = body.get("task") or ""
     files: dict[str, str] = body.get("files") or {}
     if not task or not files:
         return JSONResponse({"error": "task and files are required"}, status_code=400)
+    try:
+        require_allowed(body, "coding_agent")
+    except (PermissionError, ValueError) as err:
+        return JSONResponse({"error": "tool_not_authorized", "message": str(err)}, status_code=403)
     result = run_agent(
         task=task,
         files=files,
@@ -335,6 +419,10 @@ def browse_url(body: dict) -> JSONResponse:
     urls = body.get("urls") or ([body["url"]] if body.get("url") else [])
     if not urls:
         return JSONResponse({"error": "url or urls is required"}, status_code=400)
+    try:
+        require_allowed({"scope": "Read public web pages for this request", **body}, "web_fetch")
+    except (PermissionError, ValueError) as err:
+        return JSONResponse({"error": "tool_not_authorized", "message": str(err)}, status_code=403)
     pages = browse(urls, limit=int(body.get("limit") or 3))
     return JSONResponse(
         {"pages": [{"url": p.url, "title": p.title, "text": p.text} for p in pages]}
@@ -365,6 +453,11 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8990)
     parser.add_argument("--ctx", type=int, default=4096, help="context window size")
     parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="open the local browser UI after Core starts (used by the Windows launcher)",
+    )
+    parser.add_argument(
         "--knowledge-dir",
         type=Path,
         default=None,
@@ -372,6 +465,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if Llama is None:
+        raise SystemExit(
+            "llama-cpp-python is not installed. Run: python -m pip install -r requirements.txt"
+        )
     if not args.model.exists():
         raise SystemExit(
             f"Model not found: {args.model}\n"
@@ -391,7 +488,11 @@ def main() -> None:
 
     import uvicorn
 
-    print(f"A2I Core ready: http://{args.host}:{args.port}")
+    local_url = f"http://{args.host}:{args.port}"
+    print(f"A2I Core ready: {local_url}")
+    if args.open_browser:
+        # Delay the browser handoff slightly so uvicorn has bound its local port.
+        Timer(1.0, lambda: webbrowser.open(local_url)).start()
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 

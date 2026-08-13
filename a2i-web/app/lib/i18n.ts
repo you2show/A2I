@@ -203,9 +203,6 @@ const DICT: Record<string, { km: string; en: string }> = {
   brainKeyPh: { km: 'កូនសោ API (ស្រេចចិត្ត)', en: 'API key (optional)' },
   appearanceBlockTitle: { km: 'រូបរាង និងសំឡេង', en: 'Appearance & voice' },
   toggleTheme: { km: 'ប្ដូរភ្លឺ/ងងឹត', en: 'Toggle light / dark' },
-  autospeakOff: { km: 'អានចម្លើយដោយសំឡេង៖ បិទ', en: 'Auto read answers: Off' },
-  autospeakOn: { km: 'អានចម្លើយដោយសំឡេង៖ បើក', en: 'Auto read answers: On' },
-
   // ---- Topbar ----
   serverUrlPh: { km: 'អាសយដ្ឋានម៉ាស៊ីនមេ (OpenAI-compatible URL)', en: 'http://127.0.0.1:8990 (OpenAI-compatible URL)' },
   coderBtn: { km: 'កូឌឺ', en: 'Coder' },
@@ -309,15 +306,12 @@ const DICT: Record<string, { km: string; en: string }> = {
   stGemini: { km: 'កំពុងប្រើកូនសោរបស់អ្នក', en: 'using your API key' },
   stWillCombine: { km: 'នឹងសួរ {n} ខួរក្បាល រួចបញ្ចូលគ្នា', en: 'will ask {n} brains and combine' },
   stWillCall: { km: 'នឹងហៅ {name}', en: 'will call {name}' },
-  stLoadingLib: { km: 'កំពុងផ្ទុកបណ្ណាល័យ AI…', en: 'loading AI library…' },
   stDownloading: { km: 'កំពុងទាញយកម៉ូដែល (ម្ដងគត់)…', en: 'downloading model (one time)…' },
   stModelPct: { km: 'កំពុងផ្ទុក AI ម៉ូដែល {pct}% (កំពុងទាញយក {pct}% ម្ដងគត់)', en: 'loading AI model {pct}% (downloading {pct}% — one-time)' },
-  stReady: { km: 'ត្រៀមរួច៖ {model}', en: 'ready: {model}' },
   stWarmup: { km: 'កំពុងកម្ដៅ AI…', en: 'warming up…' },
   stCpuReady: { km: 'ត្រៀមរួច៖ {model} — របៀប CPU យឺតជាង', en: 'ready: {model} — CPU mode, slower' },
   stCompat: { km: 'កំពុងប្ដូរទៅកម្មវិធីបញ្ចូលគ្នាត្រូវគ្នា…', en: 'switching to compatibility engine…' },
   stLocalSet: { km: 'ឯកសារម៉ូដែលបានកំណត់៖ {name} — គ្មានទាញយក', en: 'Model file set: {name} — no download' },
-  stLocalCleared: { km: 'សម្អាតម៉ូដែលក្នុងម៉ាស៊ីន — នឹងទាញយកពេលប្រើបន្ទាប់', en: 'Local model cleared — will download on next use' },
   stFirstMsg: { km: 'ម៉ូដែលផ្ទុកពេលផ្ញើសារដំបូង', en: 'model loads on first message' },
   stNoGpu: { km: 'គ្មាន GPU — របៀប CPU នឹងផ្ទុកពេលផ្ញើសារដំបូង', en: 'no GPU — CPU mode will load on first message' },
 
@@ -340,7 +334,6 @@ const DICT: Record<string, { km: string; en: string }> = {
   errBrainReach: { km: 'មិនអាចភ្ជាប់ទៅ {name} ({url}) បានទេ', en: 'Could not reach {name} ({url}).' },
   errBrainQuota: { km: '{name}៖ ដល់ដែនកំណត់ (429)', en: '{name}: quota/rate-limit reached (429' },
   errNotAudio: { km: 'មិនមែនជាសំឡេងទេ', en: 'not audio' },
-  keyRejected: { km: 'កូនសោត្រូវបានបដិសេធ', en: 'key rejected' },
   noteModel:
     {
       km: 'ម៉ូដែល ({model}) មិនទាន់មានក្នុងម៉ាស៊ីនទេ — ឥឡូវកំពុងទាញយក និងផ្ទុក។ ម្ដងនេះអាចចំណាយពេលយូរ ហើយប្រើអ៊ីនធឺណិត។ ម៉ូដែលធំគួរតែជ្រើសរើសក្នុងបញ្ជីខាងលើ (Qwen2.5 7B ឡើងទៅ)។',
