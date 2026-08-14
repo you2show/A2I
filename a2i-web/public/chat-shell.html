@@ -176,7 +176,7 @@
 
       <section class="setblock">
         <div class="setblock-h"><span class="setnum">4</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Local model library</div>
-        <p class="hint">Catalog នេះបង្ហាញតែ GGUF assets ដែល A2I បានកំណត់ source និង model card។ ទាញយកតាម <code>a2i-core/download-model.sh</code>; សូមអាន license មុនពេលទាញយក ហើយកុំដំណើរការ script ឬ installer ពី repository របស់ model។</p>
+        <p class="hint">A2I ពិនិត្យ GGUF model ក្នុង SSD ជាមុន។ បើមានរួច អ្នកអាចជ្រើសវាសម្រាប់ Core restart ដោយមិនទាញយកម្ដងទៀត។ បើមិនមាន អ្នកអាចចុច <strong>Download once</strong> បន្ទាប់ពីអាន source និង license រួច; A2I ទាញយកតែ asset ក្នុង verified catalog ទៅ SSD របស់អ្នក ហើយរក្សាទុក receipt/checksum ក្នុង local library។</p>
         <div class="row-btns"><button id="local-catalog-refresh" class="btn">Refresh local catalog</button><span id="local-catalog-state" class="statetag"></span></div>
         <div id="local-model-catalog" class="brain-list"><div class="hint" style="margin:0">Start A2I Core locally to view the verified model catalog.</div></div>
       </section>

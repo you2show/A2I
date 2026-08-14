@@ -76,6 +76,10 @@ activate() {
   # A hard link avoids duplicating multi-GB files. Copy only if the filesystem
   # does not support hard links.
   ln "$asset" "$ACTIVE" 2>/dev/null || cp "$asset" "$ACTIVE"
+  # The web library stores a future selection in this file. A direct shell
+  # activation is an explicit choice too, so clear any older selection that
+  # would otherwise replace this model on the next Core restart.
+  rm -f models/selected-model.json
   echo "Activated local model: $key"
   echo "Start A2I Core with: ./run.sh"
 }

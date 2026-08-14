@@ -40,13 +40,17 @@ external API. Point the A2I web app at it (add a brain → `http://127.0.0.1:899
 or just use the built-in chat UI at that address. For the futuristic **3D
 voice assistant**, open <http://127.0.0.1:8990/live> and talk to it directly.
 
-Use the local model library to select and download a reviewed GGUF asset:
+Use the **Local model library** in the A2I web Settings to inspect each reviewed GGUF asset. The library checks your SSD first: a model already stored in `models/library/` can be selected for the next Core restart without another download. A missing model shows **Download once** only after you review its source, model card, disk/RAM tier, and licence reminder. Downloads are stored in your own library; A2I then uses the selected GGUF through Core without cloud inference.
+
+The command-line workflow remains available:
 
 ```bash
 ./download-model.sh list
 ./download-model.sh qwen-3b     # recommended default for a 12 GB PC
 ./download-model.sh activate qwen-3b
 ```
+
+After selecting a different model in the web library, close and start A2I Core again. The next startup links the selected file into `models/model.gguf` when possible, so it does not duplicate a multi-GB model.
 
 | Command | Local model | Suitability for this PC |
 | ------- | ----------- | ----------------------- |

@@ -2327,33 +2327,154 @@ async function refreshKnowledgeStatus() {
 
 $('knowledge-refresh').addEventListener('click', () => refreshKnowledgeStatus());
 
+let localCatalogPollTimer = null;
+
+function formatLocalBytes(value) {
+  if (!value) return '0 MB';
+  const mb = value / 1024 / 1024;
+  return mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${Math.round(mb)} MB`;
+}
+
+function startLocalCatalogPolling() {
+  clearTimeout(localCatalogPollTimer);
+  localCatalogPollTimer = setTimeout(() => refreshLocalCatalog(), 1500);
+}
+
+function localModelCore() {
+  const core = a2iCoreBrain();
+  if (!core) throw new Error('A2I Core local endpoint is unavailable.');
+  return core;
+}
+
+async function requestLocalModel(path, body) {
+  const core = localModelCore();
+  const response = await fetch(apiBase(core.url) + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(12000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
+  return payload;
+}
+
 function renderLocalCatalog(payload) {
   const list = $('local-model-catalog');
   list.innerHTML = '';
   const active = payload.active_model || {};
+  const selectedId = payload.selected_asset_id || null;
+  const downloads = payload.downloads || {};
   const summary = document.createElement('div');
-  summary.className = 'brain-row';
+  summary.className = 'brain-row model-library-summary';
   const summaryName = document.createElement('strong');
   summaryName.textContent = active.valid_gguf ? 'Active GGUF model verified' : 'No active GGUF model verified';
   const summaryDetail = document.createElement('span');
   summaryDetail.className = 'muted';
   summaryDetail.textContent = active.valid_gguf
-    ? `${Math.round((active.size_bytes || 0) / 1024 / 1024)} MB · SHA-256 ${String(active.sha256 || '').slice(0, 12)}…`
-    : 'Run download-model.sh to install a reviewed local model.';
+    ? `${formatLocalBytes(active.size_bytes)} · loaded locally · SHA-256 ${String(active.sha256 || '').slice(0, 12)}…`
+    : 'Choose Download once to store a verified model on this PC.';
   summary.append(summaryName, summaryDetail);
+  if (selectedId && payload.restart_required) {
+    const selection = document.createElement('span');
+    selection.className = 'model-library-state pending';
+    selection.textContent = `${selectedId} selected — restart A2I Core to load it`;
+    summary.appendChild(selection);
+  }
   list.appendChild(summary);
+
   (payload.assets || []).forEach((asset) => {
     const row = document.createElement('div');
-    row.className = 'brain-row';
+    row.className = 'brain-row model-library-row';
     const name = document.createElement('strong');
     name.textContent = asset.name;
     const detail = document.createElement('span');
     detail.className = 'muted';
-    detail.textContent = `${asset.id} · ${asset.quantization} · ${asset.approx_disk_gb} GB disk · ${asset.min_ram_gb}+ GB RAM`;
+    detail.textContent = `${asset.quantization} · ${asset.approx_disk_gb} GB disk · ${asset.min_ram_gb}+ GB RAM · best with ${asset.recommended_ram_gb}+ GB RAM`;
     const note = document.createElement('span');
     note.className = 'muted';
     note.textContent = asset.recommended_for;
-    row.append(name, detail, note);
+    const source = document.createElement('a');
+    source.href = asset.model_card_url;
+    source.target = '_blank';
+    source.rel = 'noopener noreferrer';
+    source.className = 'model-card-link';
+    source.textContent = 'Read model card & license';
+
+    const actions = document.createElement('div');
+    actions.className = 'row-btns model-library-actions';
+    const state = document.createElement('span');
+    state.className = 'model-library-state';
+    const job = downloads[asset.id];
+    const installed = asset.installed === true;
+    const activeNow = asset.active === true;
+    const selected = selectedId === asset.id;
+
+    if (installed) {
+      state.textContent = activeNow ? '● Active on this PC' : (selected ? '● Selected for next restart' : '● Stored on this PC — no download needed');
+      state.classList.add(activeNow ? 'active' : 'installed');
+      const activate = document.createElement('button');
+      activate.type = 'button';
+      activate.className = 'btn primary';
+      activate.textContent = activeNow ? 'Active model' : (selected ? 'Selected — restart Core' : 'Use on next Core restart');
+      activate.disabled = activeNow || selected;
+      activate.addEventListener('click', async () => {
+        const confirmed = window.confirm(
+          `Use ${asset.name} from this PC after the next A2I Core restart?\n\nNo model will be downloaded. The currently loaded model keeps running until you restart Core.`);
+        if (!confirmed) return;
+        activate.disabled = true;
+        state.textContent = 'Selecting local model…';
+        try {
+          const result = await requestLocalModel('/local-models/select', { asset_id: asset.id, confirm: true });
+          state.textContent = result.message || 'Selected — restart A2I Core to load it.';
+          state.className = 'model-library-state pending';
+          refreshLocalCatalog();
+        } catch (error) {
+          state.textContent = 'Could not select: ' + error.message;
+          state.className = 'model-library-state error';
+          activate.disabled = false;
+        }
+      });
+      actions.append(activate, state);
+    } else if (job && ['queued', 'downloading'].includes(job.status)) {
+      state.textContent = job.total_bytes
+        ? `${job.message} · ${formatLocalBytes(job.bytes_downloaded)} / ${formatLocalBytes(job.total_bytes)}`
+        : job.message;
+      state.classList.add('pending');
+      const progress = document.createElement('progress');
+      progress.max = job.total_bytes || 1;
+      progress.value = job.bytes_downloaded || 0;
+      progress.className = 'model-download-progress';
+      actions.append(progress, state);
+      startLocalCatalogPolling();
+    } else {
+      state.textContent = job?.status === 'failed'
+        ? `Download failed: ${job.error || 'retry available'}`
+        : 'Not stored on this PC';
+      state.classList.add(job?.status === 'failed' ? 'error' : 'missing');
+      const download = document.createElement('button');
+      download.type = 'button';
+      download.className = 'btn primary';
+      download.textContent = 'Download once';
+      download.addEventListener('click', async () => {
+        const confirmed = window.confirm(
+          `Download ${asset.name} once to this PC?\n\nSize: about ${asset.approx_disk_gb} GB\nMinimum RAM: ${asset.min_ram_gb} GB; recommended: ${asset.recommended_ram_gb}+ GB\n\nSource: ${asset.model_card_url}\nLicense: ${asset.license_note}\n\nA2I will save this verified GGUF to your SSD, not use it for cloud inference, and select it for the next Core restart.`);
+        if (!confirmed) return;
+        download.disabled = true;
+        state.textContent = 'Starting verified local download…';
+        state.className = 'model-library-state pending';
+        try {
+          await requestLocalModel('/local-models/download', { asset_id: asset.id, activate: true, confirm: true });
+          startLocalCatalogPolling();
+        } catch (error) {
+          state.textContent = 'Download could not start: ' + error.message;
+          state.className = 'model-library-state error';
+          download.disabled = false;
+        }
+      });
+      actions.append(download, state);
+    }
+    row.append(name, detail, note, source, actions);
     list.appendChild(row);
   });
 }
@@ -2366,9 +2487,10 @@ async function refreshLocalCatalog() {
     const response = await fetch(apiBase(core.url) + '/local-models', { signal: AbortSignal.timeout(8000) });
     if (!response.ok) throw new Error('HTTP ' + response.status);
     renderLocalCatalog(await response.json());
-    tag.textContent = '● local-only catalog'; tag.classList.add('on');
+    tag.textContent = '● local model library'; tag.classList.add('on');
   } catch (error) {
-    $('local-model-catalog').innerHTML = '<div class="hint" style="margin:0">Start A2I Core locally to view the verified model catalog.</div>';
+    clearTimeout(localCatalogPollTimer);
+    $('local-model-catalog').innerHTML = '<div class="hint" style="margin:0">Start A2I Core locally to view, download once, or activate verified local models.</div>';
     tag.textContent = 'Core unavailable'; tag.classList.remove('on');
   }
 }

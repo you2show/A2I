@@ -42,6 +42,7 @@ from fim import RepoFile, build_repo_fim_prompt
 
 from knowledge import KnowledgeBase
 from local_catalog import catalog_payload
+from model_manager import apply_selected_model, download_status, select_installed_asset, selection_payload, start_download
 from profiles import model_profiles, recommend_profile
 from repomap import build_repo_map, extract_refs, rank_files
 from tool_policy import capabilities as tool_capabilities, decide as decide_tool, require_allowed
@@ -132,8 +133,52 @@ def health() -> dict[str, str]:
 
 @app.get("/v1/local-models")
 def list_local_models() -> dict[str, object]:
-    """List curated local GGUF assets and inspect the active model file."""
-    return catalog_payload()
+    """List curated local GGUF assets, SSD state and active download progress."""
+    jobs = download_status().get("jobs", [])
+    downloads = {job["asset_id"]: job for job in jobs if isinstance(job, dict) and job.get("asset_id")}
+    return {**catalog_payload(), **selection_payload(), "downloads": downloads}
+
+
+@app.get("/v1/local-models/download/{asset_id}")
+def local_model_download_status(asset_id: str) -> dict[str, object]:
+    """Return local download progress; no remote inference is involved."""
+    return {"object": "a2i.local_model_download", **download_status(asset_id)}
+
+
+@app.post("/v1/local-models/download", response_model=None)
+def download_local_model(body: dict) -> dict[str, object] | JSONResponse:
+    """Begin one confirmed, allow-listed GGUF download to the local SSD.
+
+    The browser must explicitly send ``confirm: true`` after showing the asset's
+    source and licence. URLs, filenames and destination paths are never taken
+    from the browser request.
+    """
+    asset_id = str(body.get("asset_id") or "")
+    if body.get("confirm") is not True:
+        return JSONResponse(
+            {"error": "confirmation_required", "message": "Review the source and licence, then confirm this one-time local download."},
+            status_code=400,
+        )
+    try:
+        result = start_download(asset_id, activate=bool(body.get("activate", True)))
+    except (KeyError, ValueError) as error:
+        return JSONResponse({"error": "invalid_local_model", "message": str(error)}, status_code=400)
+    return {"object": "a2i.local_model_download", **result}
+
+
+@app.post("/v1/local-models/select", response_model=None)
+def select_local_model(body: dict) -> dict[str, object] | JSONResponse:
+    """Select an installed verified asset for the next A2I Core restart."""
+    asset_id = str(body.get("asset_id") or "")
+    if body.get("confirm") is not True:
+        return JSONResponse(
+            {"error": "confirmation_required", "message": "Confirm model selection before changing the next Core startup model."},
+            status_code=400,
+        )
+    try:
+        return {"object": "a2i.local_model_selection", **select_installed_asset(asset_id)}
+    except (KeyError, ValueError) as error:
+        return JSONResponse({"error": "invalid_local_model", "message": str(error)}, status_code=400)
 
 
 @app.get("/v1/knowledge")
@@ -469,6 +514,16 @@ def main() -> None:
         raise SystemExit(
             "llama-cpp-python is not installed. Run: python -m pip install -r requirements.txt"
         )
+    # When the user selected an installed catalog asset in the web library,
+    # materialize it as models/model.gguf before llama.cpp opens the file. This
+    # is a hard link where possible, so a multi-GB model is not downloaded or
+    # duplicated. A custom --model path always remains under the user's control.
+    if args.model == DEFAULT_MODEL_PATH:
+        selection = apply_selected_model()
+        if selection.get("applied"):
+            print(f"Selected local model applied: {selection.get('asset_id')}")
+        elif selection.get("reason") not in {None, "no selection"}:
+            print(f"Warning: selected local model was not applied: {selection.get('reason')}")
     if not args.model.exists():
         raise SystemExit(
             f"Model not found: {args.model}\n"

@@ -1145,3 +1145,52 @@ main { background: radial-gradient(circle at 52% -40%, color-mix(in srgb, var(--
   #composer { gap: .22rem; padding-left: .45rem; }
   #composer .icon-btn.ghost:not(#attach-btn):not(#mic-btn) { display: none; }
 }
+
+
+/* Local Model Library: SSD-first catalog and explicit one-time downloads. */
+.model-library-summary,
+.model-library-row {
+  gap: .42rem;
+  align-items: flex-start;
+}
+.model-library-summary {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 44%, var(--panel));
+}
+.model-library-row { padding: .8rem .85rem; }
+.model-library-row > strong { font-size: .82rem; }
+.model-library-row .muted { line-height: 1.45; }
+.model-card-link {
+  width: fit-content;
+  color: var(--accent);
+  font-size: .7rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+.model-card-link:hover { text-decoration: underline; }
+.model-library-actions {
+  width: 100%;
+  min-height: 30px;
+  margin-top: .12rem;
+  align-items: center;
+}
+.model-library-actions .btn { font-size: .72rem; }
+.model-library-state {
+  color: var(--muted);
+  font-size: .68rem;
+  line-height: 1.35;
+}
+.model-library-state.active { color: var(--ok); font-weight: 700; }
+.model-library-state.installed { color: var(--accent); font-weight: 650; }
+.model-library-state.pending { color: var(--warn); font-weight: 650; }
+.model-library-state.error { color: var(--danger); }
+.model-library-state.missing { color: var(--muted); }
+.model-download-progress {
+  width: min(190px, 40vw);
+  height: 6px;
+  accent-color: var(--accent);
+}
+@media (max-width: 560px) {
+  .model-library-actions { align-items: flex-start; flex-direction: column; }
+  .model-download-progress { width: 100%; }
+}

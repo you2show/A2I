@@ -56,11 +56,12 @@ if not exist .venv (
 )
 
 if not exist models\model.gguf (
-  echo No model found - downloading Qwen2.5 3B Q4_K_M ^(one-time, ~2.1 GB^) ...
-  if not exist models mkdir models
-  curl -L --fail --retry 3 --retry-delay 2 -o models\model.gguf "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf"
+  echo No active local model found.
+  echo Installing the verified Qwen2.5 3B default once to A2I Model Library ^(~2.1 GB^) ...
+  echo Future models are stored in models\library and are not downloaded again.
+  .venv\Scripts\python model_manager.py install-default
   if errorlevel 1 (
-    echo Download failed. Check your internet connection and re-run.
+    echo Local model download or activation failed. Check your internet connection and re-run.
     pause
     exit /b 1
   )
