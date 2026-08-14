@@ -151,7 +151,7 @@
       </div>
 
       <div class="tab-pane" data-tab="providers">
-      <section class="setblock">
+      <section class="setblock" hidden>
         <div class="setblock-h"><span class="setnum">3</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg> <span data-i18n="localBlockTitle">Local model file — SSD / disk (no download)</span></div>
         <p class="hint">រក្សា GGUF model លើ SSD របស់អ្នក ហើយផ្ទុកដោយផ្ទាល់សម្រាប់ការជជែកក្រៅបណ្ដាញ។ សម្រាប់ PC 12 GB RAM៖ Qwen2.5 3B Q4_K_M ជា default; Qwen2.5 7B Q4_K_M ឬ SEA-LION 7B Q4_0 ជា quality mode ដែលយឺតជាង។ ពិនិត្យ license និង model card មុនទាញយក community asset ណាមួយ។</p>
         <div class="row-btns">
@@ -174,10 +174,10 @@
         </details>
       </section>
 
-      <section class="setblock">
-        <div class="setblock-h"><span class="setnum">4</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Local model library</div>
+      <section class="setblock model-library-section">
+        <div class="setblock-h"><span class="library-mark"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></span> Local model library <span class="library-badge">LOCAL · SSD</span></div>
         <p class="hint">A2I ពិនិត្យ GGUF model ក្នុង SSD ជាមុន។ បើមានរួច អ្នកអាចជ្រើសវាសម្រាប់ Core restart ដោយមិនទាញយកម្ដងទៀត។ បើមិនមាន អ្នកអាចចុច <strong>Download once</strong> បន្ទាប់ពីអាន source និង license រួច; A2I ទាញយកតែ asset ក្នុង verified catalog ទៅ SSD របស់អ្នក ហើយរក្សាទុក receipt/checksum ក្នុង local library។</p>
-        <div class="row-btns"><button id="local-catalog-refresh" class="btn">Refresh local catalog</button><span id="local-catalog-state" class="statetag"></span></div>
+        <div class="row-btns library-toolbar"><button id="local-catalog-refresh" class="btn">Refresh library</button><span id="local-catalog-state" class="statetag"></span></div>
         <div id="local-model-catalog" class="brain-list"><div class="hint" style="margin:0">Start A2I Core locally to view the verified model catalog.</div></div>
       </section>
 
