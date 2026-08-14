@@ -387,14 +387,16 @@ function showWelcome() {
     feats.appendChild(b);
   };
   const localCore = a2iCoreBrain();
-  mk(svgIcon('chip', 'ico-sm'), 'A2I Core', 'Local GGUF model on your PC',
-    localCore?.online === false ? 'offline' : 'local', localCore?.online === false ? 'warn' : 'ok',
+  mk(svgIcon('chip', 'ico-sm'), 'A2I Core', 'Chat with the GGUF model running on your PC',
+    localCore?.online === true ? 'ready' : 'offline', localCore?.online === true ? 'ok' : 'warn',
     () => { engineSel.value = 'server:0'; engineSel.dispatchEvent(new Event('change')); });
-  mk(svgIcon('bolt', 'ico-sm'), T('featBrowserT'), T('featBrowserS'), T('featBrowserSt'), 'warn',
+  mk(svgIcon('bolt', 'ico-sm'), 'Offline fallback', 'Run a smaller local browser model when Core is unavailable', 'local', 'ok',
     () => { engineSel.value = 'browser'; engineSel.dispatchEvent(new Event('change')); });
-  mk(svgIcon('settings', 'ico-sm'), 'Local model library', 'Review verified GGUF model options', 'Settings', 'ok',
-    () => openSettings());
-  mk(svgIcon('code', 'ico-sm'), 'Project review', 'Ask about files or request review-first edit proposals', 'Local', 'ok',
+  mk(svgIcon('settings', 'ico-sm'), 'Model library', 'Review verified GGUF options for your hardware', 'GGUF', 'ok',
+    () => openSettings('providers'));
+  mk(svgIcon('globe', 'ico-sm'), 'Private knowledge', 'Inspect the local document index and permissions', 'local', 'ok',
+    () => openSettings('safety'));
+  mk(svgIcon('code', 'ico-sm'), 'Project review', 'Ask about files or request review-first edit proposals', 'review', 'ok',
     () => $('project-btn').click());
   feats.style.display = 'none';
   requestAnimationFrame(() => { feats.style.display = 'grid'; });
@@ -1008,13 +1010,15 @@ function refreshBar() {
   syncModelPicker();
   serverUrl.style.display = 'none';
   if (mode === 'auto') {
-    setStatus('A2I Local — Core first, browser fallback', true);
+    const core = a2iCoreBrain();
+    const coreReady = core?.online === true;
+    setStatus(coreReady ? 'A2I Core online · local-only' : 'Core unavailable · browser fallback', coreReady);
   } else if (mode === 'browser') {
     setStatus(loadedModel ? `ready: ${loadedModel}`
       : navigator.gpu ? T('stModelLoads')
       : T('stCpuMode'), !!loadedModel);
   } else if (brain) {
-    setStatus(Tf('stBrain', { name: brain.name }));
+    setStatus(Tf('stBrain', { name: brain.name }), brain.online === true);
   }
 }
 
@@ -1022,10 +1026,20 @@ function refreshBar() {
 // progress into the visible chat bubble so it never looks frozen.
 let loadingReporter = null;
 
+function syncSidebarRuntime(text, ready) {
+  const label = $('sidebar-runtime-state');
+  const runtimeDot = $('sidebar-runtime-dot');
+  label.textContent = text;
+  label.title = text;
+  runtimeDot.classList.toggle('ready', !!ready);
+  runtimeDot.classList.toggle('error', /unavailable|offline|error|failed/i.test(text));
+}
+
 function setStatus(text, ready = false) {
   statusEl.textContent = text;
   statusEl.title = text; // truncated with an ellipsis in the topbar; full text on hover
   dot.classList.toggle('ready', ready);
+  syncSidebarRuntime(text, ready);
   if (loadingReporter) loadingReporter(text);
 }
 
@@ -2184,9 +2198,9 @@ function selectSettingsTab(tab = 'providers') {
   });
 }
 
-function openSettings(_focus = '') {
+function openSettings(tab = 'providers') {
   renderBrainList();
-  selectSettingsTab('providers');
+  selectSettingsTab(tab);
   overlay.hidden = false;
   refreshCorePolicy();
   refreshLocalCatalog();
@@ -2195,6 +2209,15 @@ function openSettings(_focus = '') {
 function closeSettings() { overlay.hidden = true; }
 
 $('settings-btn').addEventListener('click', () => openSettings());
+$('quick-settings').addEventListener('click', () => openSettings());
+$('workspace-library').addEventListener('click', () => openSettings('providers'));
+$('workspace-knowledge').addEventListener('click', () => openSettings('safety'));
+$('runtime-refresh').addEventListener('click', () => {
+  checkBrains();
+  refreshCorePolicy();
+  refreshLocalCatalog();
+  refreshKnowledgeStatus();
+});
 $('settings-close').addEventListener('click', closeSettings);
 overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSettings(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) closeSettings(); });
