@@ -27,10 +27,11 @@ class LocalOnlyApiTests(unittest.TestCase):
             os.environ["A2I_TOOLS_FILE"] = self.old_tools
         self.tempdir.cleanup()
 
-    def test_health_advertises_local_only_mode(self) -> None:
+    def test_health_advertises_local_default_with_explicit_api_mode(self) -> None:
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["mode"], "local-only")
+        self.assertEqual(response.json()["mode"], "local-default")
+        self.assertEqual(response.json()["api_mode"], "optional_explicit_consent")
 
     def test_model_list_is_owned_by_local_runtime(self) -> None:
         response = self.client.get("/v1/models")
@@ -39,12 +40,30 @@ class LocalOnlyApiTests(unittest.TestCase):
         self.assertEqual(len(models), 1)
         self.assertEqual(models[0]["owned_by"], "a2i-local")
 
-    def test_remote_provider_routes_are_absent(self) -> None:
+    def test_legacy_remote_provider_routes_are_absent(self) -> None:
         self.assertEqual(self.client.get("/v1/providers").status_code, 404)
         self.assertEqual(
             self.client.post("/v1/router/plan", json={"intent": "research"}).status_code,
             404,
         )
+
+    def test_api_provider_catalog_is_metadata_only_and_configuration_needs_consent(self) -> None:
+        catalog = self.client.get("/v1/api-providers")
+        self.assertEqual(catalog.status_code, 200)
+        self.assertIn("openrouter", {item["id"] for item in catalog.json()["chat_providers"]})
+        self.assertNotIn("api_key", str(catalog.json()).lower())
+        blocked = self.client.post(
+            "/v1/api-providers/configure",
+            json={"provider_id": "openrouter", "api_key": "sk-test-key"},
+        )
+        self.assertEqual(blocked.status_code, 400)
+        self.assertEqual(blocked.json()["error"], "confirmation_required")
+        unconfigured_chat = self.client.post(
+            "/v1/api/chat/completions",
+            json={"provider_id": "openrouter", "messages": [{"role": "user", "content": "hello"}]},
+        )
+        self.assertEqual(unconfigured_chat.status_code, 400)
+        self.assertEqual(unconfigured_chat.json()["error"], "api_provider_unavailable")
 
     def test_local_model_catalog_exposes_only_local_assets(self) -> None:
         response = self.client.get("/v1/local-models")

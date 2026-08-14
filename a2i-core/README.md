@@ -1,6 +1,6 @@
 # A2I Core — Your Own AI, 100% Local
 
-A2I Core ជា AI ផ្ទាល់ខ្លួន **local-only** របស់អ្នក។ វាដំណើរការ model និង
+A2I Core ជា AI ផ្ទាល់ខ្លួន **Local GGUF default** របស់អ្នក។ វាដំណើរការ model និង
 RAG លើម៉ាស៊ីនរបស់អ្នក ហើយមិនប្រើ cloud inference provider ឬ API key ទេ។
 Network ត្រូវបានប្រើតែពេលអ្នកជ្រើសទាញយក GGUF model ម្តងពីប្រភពដែលបានពិនិត្យ;
 បន្ទាប់មកការជជែក និង knowledge retrieval រត់ក្រៅបណ្ដាញលើ SSD និង RAM របស់អ្នក។
@@ -8,6 +8,8 @@ Network ត្រូវបានប្រើតែពេលអ្នកជ្រ
 A2I Core is a self-hosted AI engine. It runs an open-weight GGUF language model
 locally with [llama.cpp](https://github.com/ggerganov/llama.cpp) and exposes a
 local OpenAI-compatible interface only to software on your own machine.
+
+Local GGUF inference is the default. Optional API and web-search modes are available only after you explicitly configure a provider in the local A2I Core settings; their keys remain in the user configuration on your PC, not in browser storage or this repository.
 
 ## Quick start — one command
 
@@ -35,8 +37,8 @@ uses port `8990`, close that process and run `start.bat` again.
 In-browser AI (WebGPU / WebAssembly) depends on features a given browser may
 not support — some devices load a model but then abort mid-generation. A2I
 Core sidesteps all of that: it runs the model on **native llama.cpp** on your
-own machine, so it works the same everywhere, needs no GPU, and never calls an
-external API. Point the A2I web app at it (add a brain → `http://127.0.0.1:8990`)
+own machine, so it works the same everywhere, needs no GPU, and does not call an
+external API unless you explicitly configure and select API mode. Point the A2I web app at it (add a brain → `http://127.0.0.1:8990`)
 or just use the built-in chat UI at that address. For the futuristic **3D
 voice assistant**, open <http://127.0.0.1:8990/live> and talk to it directly.
 
@@ -66,13 +68,17 @@ bytes, records a local SHA-256 receipt, and never executes scripts or installer
 files from a model repository. You may import another GGUF manually, but you
 must review its publisher, license, model card, and checksum yourself.
 
-## Local-only boundary
+## Local-default and API boundary
 
-A2I Core has no cloud provider router. The `/v1/providers` and `/v1/router/plan`
-endpoints do not exist, no provider configuration file is loaded, and the Web
-client accepts only `127.0.0.1:8990` or `localhost:8990` as its Core endpoint.
-The default browser origin policy also permits only local origins. Do not expose
-Core directly to the public internet.
+The legacy `/v1/providers` and `/v1/router/plan` endpoints do not exist. Optional API providers are managed only through `/v1/api-providers` on local Core: the browser never receives a saved API key, and Core stores it in the current user's operating-system configuration directory outside the repository. You must confirm before saving a key, selecting an API engine, or sending a web-search query.
+
+The Web client accepts only `127.0.0.1:8990` or `localhost:8990` as its Core endpoint by default; the browser origin policy permits local origins only. Do not expose Core directly to the public internet.
+
+## Optional API models and web search
+
+In **Settings → ម៉ូដែលក្នុងម៉ាស៊ីន**, the **API Provider Library** lists OpenRouter, Groq, Hugging Face Inference Providers, and Google Gemini. Each provider card links to its official documentation and shows its network/privacy note. Paste a key only after reviewing those terms. The key is sent once to local Core and is not stored in browser `localStorage`, GitHub, or an A2I deployment. Select **Use this API** to add it to the engine selector; selecting **A2I Local** again returns immediately to the installed GGUF model.
+
+The **Web search connectors** section supports Tavily and Brave Search after you configure one of their keys. A2I asks for confirmation before every query, labels results with the provider, and shows result URLs/snippets rather than silently adding web data to local knowledge. Free tiers are quota-limited and can change; consult each provider's current documentation before relying on one for routine work. A research summary with official links is in [`../docs/API_PROVIDER_RESEARCH_NOTES.md`](../docs/API_PROVIDER_RESEARCH_NOTES.md).
 
 ## Tool permissions — disabled by default
 

@@ -888,6 +888,8 @@ function loadServerBrains(): ServerBrain[] {
   return [local];
 }
 let serverBrains: ServerBrain[] = loadServerBrains();
+// API metadata is fetched from the local A2I Core. It never contains keys.
+let apiChatProviders = [];
 const saveBrains = () => localStorage.setItem('a2i-brains', JSON.stringify(serverBrains));
 
 function isA2ICoreBrain(brain) {
@@ -926,7 +928,11 @@ function rebuildEngineSelect(selected) {
   };
   add('auto', 'A2I Local — installed GGUF only');
   serverBrains.forEach((brain, index) => add('server:' + index, brain.name + brainStatusLabel(brain)));
-  // Local-only workspace deliberately exposes no browser or cloud engine.
+  apiChatProviders.filter((provider) => provider.configured).forEach((provider) => {
+    add('api:' + provider.id, `API · ${provider.name} · ${provider.model || provider.default_model}`);
+  });
+  // Browser engines stay unavailable. Optional API engines always route through
+  // the local Core, where the user's key is stored outside browser storage.
   // The only supported runtime is the GGUF model served by A2I Core on this PC.
   const saved = localStorage.getItem('a2i-engine');
   const savedValid = saved && [...engineSel.options].some((option) => option.value === saved);
@@ -970,6 +976,11 @@ function currentServerBrain() {
   return m ? serverBrains[+m[1]] : null;
 }
 
+function currentApiProvider() {
+  const match = engineSel.value.match(/^api:(.+)$/);
+  return match ? apiChatProviders.find((provider) => provider.id === match[1]) : null;
+}
+
 serverUrl.addEventListener('change', () => {
   const brain = currentServerBrain();
   if (brain) {
@@ -1011,6 +1022,9 @@ function refreshBar() {
     setStatus(coreReady ? 'A2I Core online · local GGUF' : 'Core unavailable · start A2I Core', coreReady);
   } else if (brain) {
     setStatus(Tf('stBrain', { name: brain.name }), brain.online === true);
+  } else if (mode.startsWith('api:')) {
+    const provider = currentApiProvider();
+    setStatus(provider ? `API mode · ${provider.name} · external network` : 'API provider unavailable', !!provider);
   }
 }
 
@@ -1608,6 +1622,36 @@ async function askServer(brain, messages, onDelta, signal, onReason) {
   return readSSE(res, onDelta, signal, onReason);
 }
 
+// ---- Optional API providers (always proxied by local A2I Core) --------
+async function askApiProvider(provider, messages, onDelta, signal, onReason) {
+  const core = a2iCoreBrain();
+  if (!core?.online) {
+    throw new Error('A2I Core is not running. Start Core locally before using an API provider.');
+  }
+  let res;
+  try {
+    res = await fetch(apiBase(core.url) + '/api/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider_id: provider.id,
+        messages: toOpenAIMessages(messages),
+        max_tokens: 1024,
+        temperature: activeTemperature(),
+      }),
+      signal,
+    });
+  } catch (error) {
+    if (signal?.aborted) return '';
+    throw new Error(`Could not reach local A2I Core for ${provider.name}.`);
+  }
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.message || `${provider.name} API returned HTTP ${res.status}.`);
+  }
+  return readSSE(res, onDelta, signal, onReason);
+}
+
 // ---- Auto: installed-GGUF-only routing ---------------------------------
 // The normal web experience talks to A2I Core, which serves the GGUF already
 // stored on this PC. It deliberately does not invoke WebLLM: a browser model
@@ -1787,6 +1831,12 @@ async function generate() {
       aiDiv = addMsg('ai', '…', 'Auto');
       answer = await askAuto(messages, aiDiv, signal);
       askFn = (msgs, onDelta, sig) => askAuto(msgs, aiDiv, sig);
+    } else if (mode.startsWith('api:')) {
+      const provider = currentApiProvider();
+      if (!provider?.configured) throw new Error('This API provider is not configured in local A2I Core.');
+      aiDiv = addMsg('ai', '…', `API · ${provider.name}`);
+      answer = await askApiProvider(provider, messages, (t) => aiDiv.update(t), signal, (rt) => aiDiv.setReason(rt));
+      askFn = (msgs, onDelta, sig) => askApiProvider(provider, msgs, onDelta, sig);
     } else if (mode === 'cloud') {
       aiDiv = addMsg('ai', '…', 'A2I Cloud');
       answer = await askCloud(messages, (t) => aiDiv.update(t), signal, (rt) => aiDiv.setReason(rt));
@@ -2179,6 +2229,7 @@ function openSettings(tab = 'providers') {
   overlay.hidden = false;
   refreshCorePolicy();
   refreshLocalCatalog();
+  refreshApiProviders();
   refreshKnowledgeStatus();
 }
 function closeSettings() { overlay.hidden = true; }
@@ -2191,6 +2242,7 @@ $('runtime-refresh').addEventListener('click', () => {
   checkBrains();
   refreshCorePolicy();
   refreshLocalCatalog();
+  refreshApiProviders();
   refreshKnowledgeStatus();
 });
 $('settings-close').addEventListener('click', closeSettings);
@@ -2462,6 +2514,124 @@ async function refreshLocalCatalog() {
 }
 
 $('local-catalog-refresh').addEventListener('click', () => refreshLocalCatalog());
+
+async function requestApiProvider(path, body = {}) {
+  const core = localModelCore();
+  const isCatalog = path === '/api-providers';
+  const response = await fetch(apiBase(core.url) + path, {
+    method: isCatalog ? 'GET' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: isCatalog ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
+  return payload;
+}
+
+function renderApiSearchResults(container, payload) {
+  container.innerHTML = '';
+  const results = payload.results || [];
+  if (!results.length) { container.textContent = 'No web results returned.'; return; }
+  results.forEach((result) => {
+    const item = document.createElement('a');
+    item.className = 'api-search-result'; item.href = result.url; item.target = '_blank'; item.rel = 'noopener noreferrer';
+    const title = document.createElement('strong'); title.textContent = result.title || result.url;
+    const snippet = document.createElement('span'); snippet.textContent = result.snippet || result.url;
+    item.append(title, snippet); container.appendChild(item);
+  });
+}
+
+function renderApiProviderCard(provider, list) {
+  const card = document.createElement('div');
+  card.className = 'brain-row api-provider-card';
+  const heading = document.createElement('div'); heading.className = 'api-provider-heading';
+  const name = document.createElement('strong'); name.textContent = provider.name;
+  const status = document.createElement('span');
+  status.className = 'model-library-state ' + (provider.configured ? 'installed' : 'missing');
+  status.textContent = provider.configured ? '● Key saved in local Core' : '○ Not configured';
+  heading.append(name, status);
+  const note = document.createElement('span'); note.className = 'muted';
+  note.textContent = `${provider.free_note} ${provider.privacy_note}`;
+  const docs = document.createElement('a'); docs.className = 'model-card-link';
+  docs.href = provider.docs_url; docs.target = '_blank'; docs.rel = 'noopener noreferrer'; docs.textContent = 'Read provider docs & limits';
+  const key = document.createElement('input'); key.type = 'password'; key.autocomplete = 'off'; key.className = 'api-provider-key';
+  key.placeholder = provider.configured ? 'Paste a replacement API key (optional)' : 'Paste API key';
+  let model = null;
+  if (['openai', 'gemini'].includes(provider.kind)) {
+    model = document.createElement('input'); model.type = 'text'; model.autocomplete = 'off'; model.className = 'api-provider-model';
+    model.value = provider.model || provider.default_model || ''; model.placeholder = 'Model ID';
+  }
+  const controls = document.createElement('div'); controls.className = 'row-btns model-library-actions';
+  const save = document.createElement('button'); save.type = 'button'; save.className = 'btn primary'; save.textContent = 'Save key in local Core';
+  save.addEventListener('click', async () => {
+    const apiKey = key.value.trim();
+    if (!apiKey) { status.textContent = 'Paste an API key first.'; status.className = 'model-library-state error'; return; }
+    if (!window.confirm(`Save the ${provider.name} key in A2I Core on this PC?\n\nFuture chats selected for ${provider.name} will send their prompt to that external provider. The key is not stored in browser storage or GitHub.`)) return;
+    save.disabled = true; status.textContent = 'Saving local key…'; status.className = 'model-library-state pending';
+    try {
+      await requestApiProvider('/api-providers/configure', { provider_id: provider.id, api_key: apiKey, model: model?.value || '', confirm: true });
+      key.value = ''; await refreshApiProviders(); toast(`${provider.name} saved in local Core.`, 'ok');
+    } catch (error) { status.textContent = error.message; status.className = 'model-library-state error'; save.disabled = false; }
+  });
+  const clear = document.createElement('button'); clear.type = 'button'; clear.className = 'btn'; clear.textContent = 'Remove key'; clear.disabled = !provider.configured;
+  clear.addEventListener('click', async () => {
+    if (!window.confirm(`Remove the ${provider.name} key from local A2I Core?`)) return;
+    try { await requestApiProvider('/api-providers/clear', { provider_id: provider.id }); await refreshApiProviders(); }
+    catch (error) { status.textContent = error.message; status.className = 'model-library-state error'; }
+  });
+  controls.append(save, clear);
+  if (['openai', 'gemini'].includes(provider.kind) && provider.configured) {
+    const use = document.createElement('button'); use.type = 'button'; use.className = 'btn'; use.textContent = 'Use this API';
+    use.addEventListener('click', () => {
+      rebuildEngineSelect('api:' + provider.id); localStorage.setItem('a2i-engine', 'api:' + provider.id); refreshBar(); closeSettings();
+      toast(`${provider.name} API mode selected.`, 'ok');
+    });
+    controls.appendChild(use);
+  }
+  card.append(heading, note, docs, key);
+  if (model) card.appendChild(model);
+  card.appendChild(controls);
+  if (provider.kind === 'search' && provider.configured) {
+    const searchRow = document.createElement('div'); searchRow.className = 'api-search-row';
+    const query = document.createElement('input'); query.type = 'search'; query.placeholder = 'Search the current web…';
+    const search = document.createElement('button'); search.type = 'button'; search.className = 'btn'; search.textContent = 'Search web';
+    const results = document.createElement('div'); results.className = 'api-search-results';
+    search.addEventListener('click', async () => {
+      const text = query.value.trim(); if (!text) return;
+      if (!window.confirm(`Send this query to ${provider.name}?\n\n${text}`)) return;
+      search.disabled = true; results.textContent = 'Searching…';
+      try { renderApiSearchResults(results, await requestApiProvider('/api/search', { provider_id: provider.id, query: text, confirm: true })); }
+      catch (error) { results.textContent = error.message; }
+      finally { search.disabled = false; }
+    });
+    searchRow.append(query, search); card.append(searchRow, results);
+  }
+  list.appendChild(card);
+}
+
+async function refreshApiProviders() {
+  const state = $('api-provider-state');
+  const chatList = $('api-provider-catalog');
+  const searchList = $('api-search-catalog');
+  state.textContent = 'checking local API library…'; state.classList.remove('on');
+  try {
+    const payload = await requestApiProvider('/api-providers');
+    apiChatProviders = payload.chat_providers || [];
+    chatList.innerHTML = ''; searchList.innerHTML = '';
+    apiChatProviders.forEach((provider) => renderApiProviderCard(provider, chatList));
+    (payload.search_providers || []).forEach((provider) => renderApiProviderCard(provider, searchList));
+    state.textContent = '● API keys stay in local Core'; state.classList.add('on');
+  } catch (error) {
+    apiChatProviders = [];
+    chatList.innerHTML = '<div class="hint" style="margin:0">Start A2I Core locally to configure API providers without exposing keys to the browser.</div>';
+    searchList.innerHTML = '<div class="hint" style="margin:0">Start A2I Core locally to configure optional web-search providers.</div>';
+    state.textContent = 'Core unavailable'; state.classList.remove('on');
+  }
+  rebuildEngineSelect(engineSel.value); refreshBar();
+}
+
+$('api-provider-refresh').addEventListener('click', () => refreshApiProviders());
 
 async function refreshCorePolicy() {
   const tag = $('router-state');

@@ -1353,3 +1353,56 @@ main { background: radial-gradient(720px 360px at 50% -170px, color-mix(in srgb,
   .model-library-state { margin-left: 0; max-width: none; text-align: left; }
   .model-download-progress { width: 100%; max-width: none; }
 }
+
+/* Optional API Provider Library ------------------------------------------------ */
+.api-badge {
+  color: #8b5cf6;
+  border-color: color-mix(in srgb, #8b5cf6 26%, var(--line));
+  background: color-mix(in srgb, #8b5cf6 8%, var(--surface));
+}
+.api-provider-section,
+.api-search-section { border-color: color-mix(in srgb, #8b5cf6 20%, var(--line)); }
+.api-provider-card {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--line) 88%, #8b5cf6);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 96%, #8b5cf6 4%);
+}
+.api-provider-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.api-provider-key,
+.api-provider-model,
+.api-search-row input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.api-provider-key:focus,
+.api-provider-model:focus,
+.api-search-row input:focus { outline: 2px solid color-mix(in srgb, #8b5cf6 42%, transparent); outline-offset: 1px; }
+.api-search-row { display: flex; gap: 8px; align-items: center; }
+.api-search-row input { flex: 1; }
+.api-search-results { display: grid; gap: 7px; }
+.api-search-result {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: inherit;
+  text-decoration: none;
+  background: var(--surface);
+}
+.api-search-result:hover { border-color: #8b5cf6; background: color-mix(in srgb, var(--surface) 95%, #8b5cf6 5%); }
+.api-search-result strong { color: var(--ink); font-size: .9rem; }
+.api-search-result span { color: var(--muted); font-size: .82rem; line-height: 1.42; }
+@media (max-width: 620px) {
+  .api-provider-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .api-search-row { align-items: stretch; flex-direction: column; }
+}

@@ -34,6 +34,8 @@ except ModuleNotFoundError:  # Keep routing/policy APIs testable before native i
     Llama = None  # type: ignore[assignment,misc]
 
 from agent import ask, run_agent
+from api_providers import catalog as api_provider_catalog, clear as clear_api_provider, configure as configure_api_provider
+from api_providers import search as api_search, stream_chat as stream_api_chat, validate_chat_provider
 
 from browse import browse
 from community_assets import research_assets_payload
@@ -128,7 +130,12 @@ def build_messages(messages: list[ChatMessage]) -> list[ChatMessage]:
 @app.get("/health")
 def health() -> dict[str, str]:
     model = Path(state.llm.model_path).name if hasattr(state, "llm") else "not-loaded"
-    return {"status": "ok", "mode": "local-only", "model": model}
+    return {
+        "status": "ok",
+        "mode": "local-default",
+        "api_mode": "optional_explicit_consent",
+        "model": model,
+    }
 
 
 @app.get("/v1/local-models")
@@ -179,6 +186,85 @@ def select_local_model(body: dict) -> dict[str, object] | JSONResponse:
         return {"object": "a2i.local_model_selection", **select_installed_asset(asset_id)}
     except (KeyError, ValueError) as error:
         return JSONResponse({"error": "invalid_local_model", "message": str(error)}, status_code=400)
+
+
+@app.get("/v1/api-providers")
+def list_api_providers() -> dict[str, object]:
+    """Safe local API-provider catalog; secrets are never returned to the browser."""
+    return api_provider_catalog()
+
+
+@app.post("/v1/api-providers/configure", response_model=None)
+def configure_api_provider_endpoint(body: dict) -> dict[str, object] | JSONResponse:
+    """Save one user-approved API key inside local A2I Core configuration."""
+    if body.get("confirm") is not True:
+        return JSONResponse(
+            {"error": "confirmation_required", "message": "Confirm that this provider will receive future prompts before saving its API key."},
+            status_code=400,
+        )
+    try:
+        return configure_api_provider(
+            str(body.get("provider_id") or ""),
+            str(body.get("api_key") or ""),
+            str(body.get("model") or ""),
+        )
+    except ValueError as error:
+        return JSONResponse({"error": "api_provider_configuration", "message": str(error)}, status_code=400)
+
+
+@app.post("/v1/api-providers/clear", response_model=None)
+def clear_api_provider_endpoint(body: dict) -> dict[str, object] | JSONResponse:
+    try:
+        return clear_api_provider(str(body.get("provider_id") or ""))
+    except ValueError as error:
+        return JSONResponse({"error": "api_provider_configuration", "message": str(error)}, status_code=400)
+
+
+@app.post("/v1/api/chat/completions", response_model=None)
+def api_chat_completions(body: dict) -> StreamingResponse | JSONResponse:
+    """Stream a user-selected hosted model through local A2I Core.
+
+    The browser only supplies a provider id and messages; the corresponding key
+    remains in the local Core configuration and is never sent back in a response.
+    """
+    provider_id = str(body.get("provider_id") or "")
+    try:
+        profile = validate_chat_provider(provider_id)
+    except ValueError as error:
+        return JSONResponse({"error": "api_provider_unavailable", "message": str(error)}, status_code=400)
+    messages = body.get("messages") or []
+    if not isinstance(messages, list):
+        return JSONResponse({"error": "invalid_messages", "message": "messages must be a list"}, status_code=400)
+    try:
+        max_tokens = int(body.get("max_tokens") or 1024)
+        temperature = float(body.get("temperature") or 0.7)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "invalid_generation_parameters"}, status_code=400)
+    response = StreamingResponse(
+        stream_api_chat(provider_id, messages, max_tokens=max_tokens, temperature=temperature),
+        media_type="text/event-stream",
+    )
+    response.headers["X-A2I-Provider"] = profile["id"]
+    response.headers["X-A2I-Model"] = profile["model"]
+    return response
+
+
+@app.post("/v1/api/search", response_model=None)
+def api_web_search(body: dict) -> dict[str, object] | JSONResponse:
+    """Run one explicitly confirmed external web search through local Core."""
+    if body.get("confirm") is not True:
+        return JSONResponse(
+            {"error": "confirmation_required", "message": "Confirm that this query may be sent to the selected web-search provider."},
+            status_code=400,
+        )
+    try:
+        return api_search(
+            str(body.get("provider_id") or ""),
+            str(body.get("query") or ""),
+            int(body.get("max_results") or 5),
+        )
+    except (TypeError, ValueError) as error:
+        return JSONResponse({"error": "web_search_unavailable", "message": str(error)}, status_code=400)
 
 
 @app.get("/v1/knowledge")
