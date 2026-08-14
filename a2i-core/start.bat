@@ -29,29 +29,46 @@ if not errorlevel 1 (
   exit /b 0
 )
 
+REM Prefer `python` when it is available, but the official Windows installer
+REM also provides the `py` launcher. This works when Python is installed but
+REM `python.exe` was not added to PATH.
+set "PYTHON_CMD="
 where python >nul 2>nul
-if errorlevel 1 (
-  echo Error: Python 3 is not installed.
-  echo Install it from https://python.org ^(tick "Add python.exe to PATH"^), then re-run.
+if not errorlevel 1 (
+  python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
+  if not errorlevel 1 set "PYTHON_CMD=python"
+)
+if not defined PYTHON_CMD (
+  py -3.11 -c "import sys" >nul 2>nul
+  if not errorlevel 1 set "PYTHON_CMD=py -3.11"
+)
+if not defined PYTHON_CMD (
+  echo Error: Python 3.10 or newer was not found.
+  echo Install Python 3.11 from https://python.org, then run this file again.
   pause
   exit /b 1
 )
+echo Using %PYTHON_CMD%
 
-if not exist .venv (
+if not exist .venv\Scripts\python.exe (
   echo Setting up Python environment ^(first run only^) ...
-  python -m venv .venv
+  %PYTHON_CMD% -m venv .venv
+)
+
+REM A previous interrupted setup can leave a .venv folder without llama.cpp.
+REM Verify the runtime on every launch; install a prebuilt CPU wheel when needed.
+.venv\Scripts\python -c "import llama_cpp, fastapi, uvicorn" >nul 2>nul
+if errorlevel 1 (
+  echo Installing A2I local runtime ^(first run only^) ...
   .venv\Scripts\python -m pip install --quiet --upgrade pip
-  .venv\Scripts\pip install -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+  .venv\Scripts\pip install --prefer-binary -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
   if errorlevel 1 (
-    echo Prebuilt wheel unavailable - building from source ^(needs Visual C++ Build Tools^) ...
-    .venv\Scripts\pip install -r requirements.txt
-    if errorlevel 1 (
-      echo.
-      echo A2I could not install its Python requirements.
-      echo Install Microsoft C++ Build Tools, then run this file again.
-      pause
-      exit /b 1
-    )
+    echo.
+    echo A2I could not install its prebuilt local runtime.
+    echo Check your internet connection, then run this file again.
+    echo If the error says no matching wheel, send the full error text to A2I support.
+    pause
+    exit /b 1
   )
 )
 

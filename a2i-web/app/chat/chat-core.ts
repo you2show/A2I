@@ -926,9 +926,8 @@ function rebuildEngineSelect(selected) {
   };
   add('auto', 'A2I Local — installed GGUF only');
   serverBrains.forEach((brain, index) => add('server:' + index, brain.name + brainStatusLabel(brain)));
-  // Browser mode stays available as an explicit, separate choice. It may need
-  // its own WebLLM-compatible model download and is never an automatic fallback.
-  add('browser', 'Browser AI (optional model download)');
+  // Local-only workspace deliberately exposes no browser or cloud engine.
+  // The only supported runtime is the GGUF model served by A2I Core on this PC.
   const saved = localStorage.getItem('a2i-engine');
   const savedValid = saved && [...engineSel.options].some((option) => option.value === saved);
   engineSel.value = selected || (savedValid ? saved : 'auto');
@@ -990,15 +989,10 @@ modelSel.addEventListener('change', () => {
   refreshBar();
 });
 
-// The selector intentionally exposes only local inference: the browser model
-// and the GGUF model currently loaded by A2I Core.
+// Browser model selection is intentionally unavailable in local-only mode.
+// A2I Core owns GGUF loading from the local SSD, so this browser picker remains
+// hidden rather than initiating a separate WebGPU/WebAssembly download.
 function syncModelPicker() {
-  const mode = engineSel.value;
-  if (mode === 'browser') {
-    modelSel.innerHTML = browserModelOptions;
-    modelSel.style.display = navigator.gpu ? 'inline-block' : 'none';
-    return;
-  }
   modelSel.style.display = 'none';
 }
 
@@ -1015,10 +1009,6 @@ function refreshBar() {
     const core = a2iCoreBrain();
     const coreReady = core?.online === true;
     setStatus(coreReady ? 'A2I Core online · local GGUF' : 'Core unavailable · start A2I Core', coreReady);
-  } else if (mode === 'browser') {
-    setStatus(loadedModel ? `ready: ${loadedModel}`
-      : navigator.gpu ? T('stModelLoads')
-      : T('stCpuMode'), !!loadedModel);
   } else if (brain) {
     setStatus(Tf('stBrain', { name: brain.name }), brain.online === true);
   }
@@ -1383,9 +1373,9 @@ async function ensureBrowserEngine() {
     errors.join(' | '));
 }
 
-async function askBrowser(messages, onDelta, signal) {
-  const engine = await ensureBrowserEngine();
-  return engine.ask(messages, onDelta, signal);
+async function askBrowser(_messages, _onDelta, _signal) {
+  throw new Error(
+    'Browser AI is disabled in A2I local-only mode. Start A2I Core to use the GGUF model stored on this PC.');
 }
 
 // ---- Streaming helpers -------------------------------------------------
@@ -1807,26 +1797,12 @@ async function generate() {
       askFn = (msgs, onDelta, sig) => askGemini(msgs, onDelta, sig);
     } else if (mode === 'all') {
       answer = await askAllBrains(question, messages, signal);
-    } else if (mode === 'browser') {
-      aiDiv = addMsg('ai', '…', 'In-browser AI');
-      // Browser AI is an explicit opt-in. It uses a separate browser cache and
-      // does not reuse the GGUF that A2I Core loads from this PC's SSD.
-      if (!(webllmEngine && loadedModel)) {
-        aiDiv.update('⬇ Browser AI was selected manually. It uses a separate browser model download; use A2I Local to reuse the GGUF already on this PC.');
-        loadingReporter = (t) => aiDiv.update(t);
-      } else if (webllmEngine.compat) {
-        // Single-thread prefill has no incremental progress to show, so the
-        // wait before the first token can otherwise look identical to a
-        // frozen page. Say plainly that it is working.
-        aiDiv.update('កំពុងគិត (យឺត ព្រោះ browser នេះប្រើ CPU តែ១ core)… ' +
-          'thinking… (slow — this browser runs single-core CPU inference)');
-      }
-      try {
-        answer = await askBrowser(messages, (t) => aiDiv.update(t), signal);
-      } finally {
-        loadingReporter = null;
-      }
-      askFn = (msgs, onDelta, sig) => askBrowser(msgs, onDelta, sig);
+      } else if (mode === 'browser') {
+      // Covers a stale browser selection saved by an older A2I build. New local
+      // workspaces never expose this mode, but this message prevents a silent
+      // WebLLM/wllama download if an old setting survives a refresh.
+      aiDiv = addMsg('ai', '…', 'A2I Local');
+      throw new Error('Browser AI is disabled. Select A2I Local and start A2I Core to use the GGUF model already on this PC.');
     } else {
       const brain = currentServerBrain();
       aiDiv = addMsg('ai', '…', brain?.name || 'server');
@@ -2074,23 +2050,13 @@ form.addEventListener('submit', async (e) => {
   const text = input.value.trim();
   if (currentAbort) return;
 
-  // Image generation: via the image toggle or a /image · /imagine command.
-  const cmd = /^\/(image|imagine)\s+/i.exec(text);
-  if ((imageMode && text) || cmd) {
-    const prompt = cmd ? text.slice(cmd[0].length).trim() : text;
-    if (!prompt) return;
-    input.value = ''; input.style.height = 'auto';
-    await generateImage(prompt);
-    return;
-  }
-
-  // Audio / voice generation: via the audio toggle or a /audio · /speak · /voice command.
-  const audCmd = /^\/(audio|speak|voice)\s+/i.exec(text);
-  if ((audioMode && text) || audCmd) {
-    const prompt = audCmd ? text.slice(audCmd[0].length).trim() : text;
-    if (!prompt) return;
-    input.value = ''; input.style.height = 'auto';
-    await generateAudio(prompt);
+  // Image and generated-audio services are intentionally unavailable in
+  // local-only mode: their former implementation sent prompts to external
+  // services. Give an explicit local policy message rather than failing later.
+  const imageCmd = /^\/(image|imagine)\s+/i.exec(text);
+  const audioCmd = /^\/(audio|speak|voice)\s+/i.exec(text);
+  if (imageCmd || audioCmd) {
+    addMsg('note', 'Image and generated-audio commands are disabled in A2I local-only mode. A2I currently keeps chat, coding review, knowledge, and GGUF model work on this PC.');
     return;
   }
 

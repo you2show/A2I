@@ -24,10 +24,9 @@ const SYSTEM_PROMPT =
   'You are A2I, a friendly, futuristic voice AI assistant. Keep answers concise, ' +
   'natural and easy to speak aloud. Reply in the language of the user (Khmer or English).';
 
-// ---- Which brain to talk to (native A2I Core by default) ----------------
-// A2I Core is the robust, fully-local backend (native llama.cpp). We also try
-// the A2I Cloud proxy (/api/chat) if the local server is not reachable.
-// When this page is served BY A2I Core (http://127.0.0.1:8990/live) we call it
+// ---- Local brain only ----------------------------------------------------
+// A2I Live uses the native A2I Core (local llama.cpp) exclusively. When this
+// page is served BY A2I Core (http://127.0.0.1:8990/live) we call it
 // same-origin — no mixed-content or CORS concerns. When served from the hosted
 // (https) site, we call the local server directly (browsers allow localhost).
 const onLocalServer = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(location.origin);
@@ -123,9 +122,6 @@ async function askGemini(messages, onDelta, signal) {
 }
 
 async function askModel(messages, onDelta, signal) {
-  // 0) Gemini, if you've pasted a key — works anywhere, no local server needed.
-  if (GEMINI_KEY()) return askGemini(messages, onDelta, signal);
-  // 1) local A2I Core (or any OpenAI-compatible URL)
   try {
     const res = await fetch(CORE_URL.replace(/\/+$/, '') + '/v1/chat/completions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -133,14 +129,12 @@ async function askModel(messages, onDelta, signal) {
       signal,
     });
     if (res.ok) return await readSSE(res, onDelta);
-  } catch { /* fall through to cloud */ }
-  // 2) A2I Cloud proxy (optional)
-  const res = await fetch('/api/chat', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, max_tokens: 512 }), signal,
-  }).catch(() => null);
-  if (res && res.ok) return await readSSE(res, onDelta);
-  throw new Error(T('liveErrBrain'));
+    throw new Error('A2I Core returned HTTP ' + res.status);
+  } catch (error) {
+    if (signal?.aborted) return '';
+    const detail = error && error.message ? ': ' + error.message : '';
+    throw new Error('A2I Core is not running. Start A2I Core to use the GGUF model on this PC' + detail);
+  }
 }
 
 // ---- Voice output (the robot speaks) -----------------------------------

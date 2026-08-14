@@ -1,249 +1,69 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>A2I — ការពិនិត្យ / Self-check</title>
-<style>
-  body { font-family: system-ui, "Noto Sans Khmer", sans-serif; max-width: 780px;
-    margin: 0 auto; padding: 1.2rem; background: #0f1117; color: #e8eaf0; line-height: 1.5; }
-  h1 { font-size: 1.2rem; }
-  .row { display: flex; gap: .6rem; padding: .55rem 0; border-bottom: 1px solid #2a2d38; align-items: flex-start; }
-  .ic { flex-shrink: 0; width: 1.4rem; font-size: 1.1rem; }
-  .name { font-weight: 600; }
-  .detail { color: #9aa0b0; font-size: .85rem; word-break: break-word; }
-  .run { color: #f0b429; } .ok { color: #3ecf8e; } .bad { color: #ff6b6b; }
-  #summary { margin: 1rem 0; padding: 1rem; border-radius: 12px; background: #1a1d27; font-size: .95rem; }
-  button { background: #6c8cff; color: #fff; border: 0; border-radius: 10px;
-    padding: .6rem 1.2rem; font-size: 1rem; cursor: pointer; margin-top: 1rem; }
-  code { background: #1a1d27; padding: .1em .4em; border-radius: 5px; font-size: .85em; }
-  a { color: #6c8cff; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A2I Local Runtime Check</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f7f8fb; --panel:#fff; --text:#182235; --muted:#68758a; --border:#e5eaf2; --accent:#365edc; --ok:#16845b; --bad:#c34255; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#0e141e; --panel:#151e2b; --text:#edf2f8; --muted:#9aa8bc; --border:#28364a; --accent:#83a5ff; --ok:#55d59a; --bad:#f28a98; } }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px; font:15px/1.55 system-ui,-apple-system,"Segoe UI","Noto Sans Khmer",sans-serif; background:var(--bg); color:var(--text); }
+    main { width:min(680px,100%); background:var(--panel); border:1px solid var(--border); border-radius:18px; padding:28px; box-shadow:0 22px 56px rgba(19,32,54,.12); }
+    .eyebrow { margin:0 0 6px; color:var(--accent); font-size:12px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
+    h1 { margin:0; font-size:24px; letter-spacing:-.025em; }
+    .lead { color:var(--muted); margin:9px 0 22px; }
+    .row { display:flex; gap:12px; align-items:flex-start; padding:14px 0; border-top:1px solid var(--border); }
+    .dot { width:10px; height:10px; border-radius:50%; margin-top:7px; background:var(--muted); flex:0 0 auto; }
+    .dot.ok { background:var(--ok); box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 14%,transparent); }
+    .dot.bad { background:var(--bad); box-shadow:0 0 0 4px color-mix(in srgb,var(--bad) 14%,transparent); }
+    .copy { min-width:0; }
+    strong { display:block; }
+    small { display:block; color:var(--muted); overflow-wrap:anywhere; }
+    .notice { margin-top:18px; padding:13px 14px; border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border)); border-radius:12px; background:color-mix(in srgb,var(--accent) 7%,var(--panel)); color:var(--muted); }
+    button,a { font:inherit; }
+    button { margin-top:18px; min-height:38px; padding:8px 13px; border:0; border-radius:9px; cursor:pointer; color:#fff; background:var(--accent); font-weight:650; }
+    a { color:var(--accent); font-weight:650; text-decoration:none; }
+  </style>
 </head>
 <body>
-<h1>🩺 A2I — ការពិនិត្យឧបករណ៍ / Device self-check</h1>
-<p class="detail">Page នេះពិនិត្យថាហេតុអ្វី A2I មិនដំណើរការលើឧបករណ៍អ្នក។ សូមរង់ចាំឱ្យចប់
-រួចថតរូប (screenshot) ផ្ញើមក។ · This checks why A2I may not work on your device.
-Wait for it to finish, then screenshot the results.</p>
-<div id="list"></div>
-<div id="summary">កំពុងពិនិត្យ… / Running checks…</div>
-<button id="copy">📋 Copy results</button>
-
-<script type="module">
-const list = document.getElementById('list');
-const lines = [];
-function row(name) {
-  const el = document.createElement('div');
-  el.className = 'row';
-  el.innerHTML = `<div class="ic run">⏳</div><div><div class="name"></div><div class="detail"></div></div>`;
-  el.querySelector('.name').textContent = name;
-  list.appendChild(el);
-  return {
-    set(state, detail) {
-      const ic = el.querySelector('.ic');
-      ic.textContent = state === 'ok' ? '✅' : state === 'bad' ? '❌' : state === 'warn' ? '⚠️' : '⏳';
-      ic.className = 'ic ' + (state === 'ok' ? 'ok' : state === 'bad' ? 'bad' : 'run');
-      el.querySelector('.detail').textContent = detail || '';
-      lines.push(`${ic.textContent} ${name}: ${detail || ''}`);
-    },
-  };
-}
-
-// Kept in sync with chat-core.ts's CPU_MODEL_URL so this diagnostic tests the
-// actual model the app will download, not a stale default.
-const MODEL_URL =
-  'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf';
-
-let bad = 0, warn = 0;
-// Which fast paths this device has — the compat CPU engine is only a fallback,
-// so test 9 uses these to decide whether a compat failure is actually blocking.
-let webgpuOk = false, fastCpu = false;
-const mark = (r, state, detail) => { if (state === 'bad') bad++; if (state === 'warn') warn++; r.set(state, detail); };
-
-// 1. Environment
-(() => {
-  const r = row('1. Browser & device');
-  const dm = navigator.deviceMemory ? navigator.deviceMemory + 'GB RAM' : 'RAM unknown';
-  const cores = navigator.hardwareConcurrency || '?';
-  const mobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'MOBILE' : 'desktop';
-  mark(r, navigator.deviceMemory && navigator.deviceMemory < 2 ? 'warn' : 'ok',
-    `${mobile}, ${cores} cores, ${dm} — ${navigator.userAgent.slice(0, 80)}`);
-})();
-
-// 2. Secure context / crossOriginIsolated
-(() => {
-  const r = row('2. Secure context & isolation');
-  mark(r, window.isSecureContext ? 'ok' : 'bad',
-    `secureContext=${window.isSecureContext}, crossOriginIsolated=${window.crossOriginIsolated}`);
-})();
-
-// 3. WebGPU
-await (async () => {
-  const r = row('3. WebGPU (fast path)');
-  if (!navigator.gpu) { mark(r, 'warn', 'navigator.gpu absent — will use CPU mode (slower but works)'); return; }
-  try {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) { mark(r, 'warn', 'adapter null — will use CPU mode'); return; }
-    const dev = await adapter.requestDevice();
-    webgpuOk = true;
-    mark(r, 'ok', 'WebGPU works (device created) — fast path available');
-    dev.destroy?.();
-  } catch (e) {
-    mark(r, 'warn', 'GPU device FAILED (' + e.message.slice(0, 70) + ') — CPU fallback will be used');
-  }
-})();
-
-// 4. Same-origin app assets
-for (const [label, path, type] of [
-  ['wllama JS', 'vendor/wllama/index.js', 'text'],
-  ['wllama WASM', 'vendor/wllama/wllama.wasm', 'bin'],
-  ['wllama compat JS', 'vendor/wllama/compat/wllama.js', 'text'],
-  ['wllama compat WASM', 'vendor/wllama/compat/wllama.wasm', 'bin'],
-  ['WebLLM JS', 'vendor/web-llm.mjs', 'text'],
-]) {
-  const r = row('4. App asset: ' + label);
-  try {
-    const res = await fetch(path, { method: 'GET', headers: { Range: 'bytes=0-1023' } });
-    mark(r, res.ok ? 'ok' : 'bad', `HTTP ${res.status}, type ${res.headers.get('content-type')}`);
-  } catch (e) { mark(r, 'bad', e.message.slice(0, 90)); }
-}
-
-// 5. Storage quota
-await (async () => {
-  const r = row('5. Storage for the model');
-  try {
-    const est = await navigator.storage.estimate();
-    const quotaMB = Math.round((est.quota || 0) / 1048576);
-    const usedMB = Math.round((est.usage || 0) / 1048576);
-    mark(r, quotaMB < 600 ? 'warn' : 'ok',
-      `quota ~${quotaMB}MB, used ~${usedMB}MB (model needs ~470MB free)`);
-  } catch (e) { mark(r, 'warn', 'storage.estimate unavailable: ' + e.message.slice(0, 60)); }
-})();
-
-// 6. THE KEY TEST — can THIS device download the model from HuggingFace?
-await (async () => {
-  const r = row('6. Model download from HuggingFace (THE key test)');
-  r.set('run', 'downloading first 3MB to measure your connection…');
-  try {
-    const t0 = performance.now();
-    const res = await fetch(MODEL_URL, { headers: { Range: 'bytes=0-3145727' } });
-    if (!res.ok && res.status !== 206) { mark(r, 'bad', `HTTP ${res.status} — model host blocked or unreachable`); return; }
-    const buf = await res.arrayBuffer();
-    const secs = (performance.now() - t0) / 1000;
-    const mbps = (buf.byteLength / 1048576) / secs;
-    const total = 470;
-    const eta = Math.round(total / mbps);
-    mark(r, mbps < 0.3 ? 'warn' : 'ok',
-      `got ${(buf.byteLength / 1048576).toFixed(1)}MB in ${secs.toFixed(1)}s = ${mbps.toFixed(2)} MB/s → ` +
-      `full model (~${total}MB) ≈ ${eta}s (${Math.round(eta / 60)} min)`);
-  } catch (e) {
-    mark(r, 'bad', 'DOWNLOAD FAILED: ' + e.message.slice(0, 90) +
-      ' — network blocks HuggingFace, or offline');
-  }
-})();
-
-// 7. Can we actually instantiate the CPU engine (WASM + worker)?
-await (async () => {
-  const r = row('7. CPU engine (WASM) starts');
-  try {
-    const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
-    new Wllama({ default: new URL('vendor/wllama/wllama.wasm', location.href).href });
-    mark(r, 'ok', 'wllama module + WASM initialise fine');
-  } catch (e) { mark(r, 'bad', 'wllama init failed: ' + e.message.slice(0, 90)); }
-})();
-
-// 8. WASM inference features — the cause of "(ABORT)" mid-generation.
-// wllama's default build needs JSPI + Memory64; without them A2I now uses the
-// vendored compat build instead of aborting. This reports which path applies.
-(() => {
-  const r = row('8. CPU inference features (JSPI / Memory64)');
-  const hasJSPI = typeof WebAssembly.Suspending === 'function';
-  let hasMem64 = false;
-  try { new WebAssembly.Memory({ address: 'i64', initial: 1n }); hasMem64 = true; } catch { /* no */ }
-  fastCpu = hasJSPI && hasMem64;
-  if (hasJSPI && hasMem64) {
-    mark(r, 'ok', 'JSPI + Memory64 supported — fast native wllama build used');
-  } else {
-    mark(r, 'warn',
-      `JSPI=${hasJSPI}, Memory64=${hasMem64} — A2I will use the compatibility ` +
-      'CPU engine (slower, single-thread) so generation still works');
-  }
-})();
-
-// 9. THE real test — actually run a token through the compat CPU engine,
-// using the same model the app uses (already cached, so this is fast). This is
-// what proves whether generation aborts or works.
-await (async () => {
-  const r = row('9. CPU generation actually runs (compat engine)');
-  // Capture wllama's own logs — on "(ABORT)" it logs a decoded stack trace that
-  // reveals the real cause (which "(ABORT)" alone hides). Surface it here.
-  const logs = [];
-  const cap = (lvl) => (...a) => logs.push(lvl + ': ' +
-    a.map((x) => typeof x === 'string' ? x : (() => { try { return JSON.stringify(x); } catch { return String(x); } })()).join(' '));
-  const logger = { debug: cap('D'), log: cap('L'), info: cap('I'), warn: cap('W'), error: cap('E') };
-  try {
-    const { Wllama } = await import(new URL('vendor/wllama/index.js', location.href).href);
-    const wllama = new Wllama(
-      { default: new URL('vendor/wllama/wllama.wasm', location.href).href },
-      { logger });
-    wllama.setCompat({
-      worker: new URL('vendor/wllama/compat/wllama.js', location.href).href,
-      wasm: new URL('vendor/wllama/compat/wllama.wasm', location.href).href,
-    }, 'firefox_safari');
-    r.set('run', 'loading model (from cache) with compat engine…');
-    await Promise.race([
-      wllama.loadModelFromUrl(MODEL_URL, {
-        n_ctx: 512, n_threads: 1, n_batch: 128, n_gpu_layers: 0,
-      }),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('load timed out (model not cached?)')), 120000)),
-    ]);
-    r.set('run', 'generating a token…');
-    let got = '';
-    await Promise.race([
-      wllama.createChatCompletion({
-        messages: [{ role: 'user', content: 'Hi' }],
-        stream: true, max_tokens: 4,
-        onData: (c) => { got = c?.currentText ?? (got + (c?.choices?.[0]?.delta?.content || '')); },
-      }),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('generation timed out')), 60000)),
-    ]);
-    mark(r, 'ok', `compat engine generated "${(got || '').trim().slice(0, 40)}" — chat works ✅`);
-  } catch (e) {
-    // Pull the most informative wllama log lines (the abort stack trace tells us
-    // which wasm op crashed — the real cause behind a bare "(ABORT)").
-    const trace = logs.filter((l) => l.startsWith('E:') || /trace|abort|assert|ggml|wasm|Aborted/i.test(l))
-      .slice(-4).join(' ⏎ ').slice(0, 600);
-    const why = String(e.message || e).slice(0, 100) + (trace ? ' — LOG: ' + trace : '');
-    // The compat engine is only a FALLBACK for devices lacking a fast path. If
-    // this device has WebGPU or native CPU (JSPI+Memory64), A2I uses that
-    // instead, so a compat failure here does NOT block chat — report a warning.
-    if (webgpuOk || fastCpu) {
-      mark(r, 'warn', 'compat (fallback) engine did not run, but this device has a fast path (' +
-        (webgpuOk ? 'WebGPU' : 'native CPU') + ') which A2I uses — chat still works. (' + why + ')');
-    } else {
-      mark(r, 'bad', 'compat generation FAILED: ' + why +
-        (trace ? '' : ' — (no extra log captured; open DevTools console)'));
+  <main>
+    <p class="eyebrow">A2I local-only</p>
+    <h1>Local Runtime Check</h1>
+    <p class="lead">This page checks only the A2I Core and GGUF models on this PC. It does not load WebLLM, wllama, Ollama, Gemini, cloud APIs, or browser models.</p>
+    <div class="row"><span class="dot" id="health-dot"></span><div class="copy"><strong>A2I Core service</strong><small id="health">Checking <code>http://127.0.0.1:8990</code>…</small></div></div>
+    <div class="row"><span class="dot" id="model-dot"></span><div class="copy"><strong>Active GGUF model</strong><small id="model">Waiting for A2I Core…</small></div></div>
+    <div class="row"><span class="dot" id="library-dot"></span><div class="copy"><strong>Local Model Library</strong><small id="library">Waiting for A2I Core…</small></div></div>
+    <div class="notice" id="notice">If A2I Core is offline, open <code>Documents\A2I-main\a2i-core\start.bat</code> on this PC and keep its black window open. Then refresh this page.</div>
+    <button id="retry">Check again</button>
+    <p style="margin:16px 0 0"><a href="http://127.0.0.1:8990">Open A2I Core local page</a></p>
+  </main>
+  <script>
+    const base = 'http://127.0.0.1:8990';
+    const el = (id) => document.getElementById(id);
+    const set = (name, ok, text) => { el(name + '-dot').className = 'dot ' + (ok ? 'ok' : 'bad'); el(name).textContent = text; };
+    async function run() {
+      set('health', false, 'Checking ' + base + '…');
+      set('model', false, 'Waiting for A2I Core…');
+      set('library', false, 'Waiting for A2I Core…');
+      try {
+        const health = await fetch(base + '/health', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)));
+        set('health', true, 'Online · ' + (health.mode || 'local-only'));
+        set('model', health.model && health.model !== 'not-loaded', 'Model: ' + (health.model || 'not loaded'));
+        const catalog = await fetch(base + '/v1/local-models', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)));
+        const stored = (catalog.assets || []).filter(a => a.installed).length;
+        set('library', true, stored + ' verified model' + (stored === 1 ? '' : 's') + ' stored on this PC');
+        el('notice').textContent = 'A2I Core is ready. Use the local page above, or the A2I web workspace running on this same PC.';
+      } catch (error) {
+        const message = error && error.message ? error.message : 'connection failed';
+        set('health', false, 'Offline · ' + message);
+        set('model', false, 'Start A2I Core before sending a chat.');
+        set('library', false, 'The library is available after A2I Core starts.');
+        el('notice').textContent = 'A2I Core is not running. Double-click Documents\\A2I-main\\a2i-core\\start.bat and keep its black window open. Do not select Browser AI or any cloud engine.';
+      }
     }
-  }
-})();
-
-// Summary
-const s = document.getElementById('summary');
-if (bad > 0) {
-  s.innerHTML = `<b class="bad">❌ រកឃើញបញ្ហា ${bad} — នេះជាមូលហេតុ A2I មិនដំណើរការ។</b><br>` +
-    `សូមថតរូបលទ្ធផលទាំងអស់ ផ្ញើមក ខ្ញុំនឹងដោះស្រាយឱ្យត្រង់ចំណុច។ (Found ${bad} blocking problem(s) — screenshot this and send it.)`;
-} else if (warn > 0) {
-  s.innerHTML = `<b class="ok">✅ គ្មានបញ្ហាបិទផ្លូវ។</b> មាន ${warn} ចំណុចយឺត (ដូចជា CPU mode ឬ net យឺត)។ ` +
-    `A2I គួរដំណើរការ ប៉ុន្តែការទាញ model លើកដំបូងអាចយូរ — សូមរង់ចាំ progress bar ឱ្យចប់។`;
-} else {
-  s.innerHTML = `<b class="ok">✅ គ្រប់យ៉ាងល្អ!</b> A2I គួរដំណើរការពេញលេញ។ ត្រឡប់ទៅ ` +
-    `<a href="./">ទំព័រ A2I</a> ផ្ញើសារ។`;
-}
-
-document.getElementById('copy').addEventListener('click', () => {
-  navigator.clipboard?.writeText(lines.join('\n'));
-  document.getElementById('copy').textContent = '✓ Copied';
-});
-</script>
+    el('retry').addEventListener('click', run);
+    run();
+  </script>
 </body>
 </html>
