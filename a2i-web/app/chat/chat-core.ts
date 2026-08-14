@@ -390,8 +390,8 @@ function showWelcome() {
   mk(svgIcon('chip', 'ico-sm'), 'A2I Core', 'Chat with the GGUF model running on your PC',
     localCore?.online === true ? 'ready' : 'offline', localCore?.online === true ? 'ok' : 'warn',
     () => { engineSel.value = 'server:0'; engineSel.dispatchEvent(new Event('change')); });
-  mk(svgIcon('bolt', 'ico-sm'), 'Offline fallback', 'Run a smaller local browser model when Core is unavailable', 'local', 'ok',
-    () => { engineSel.value = 'browser'; engineSel.dispatchEvent(new Event('change')); });
+  mk(svgIcon('bolt', 'ico-sm'), 'Installed GGUF', 'Use A2I Core and the model already on this PC', 'local', 'ok',
+    () => { engineSel.value = 'auto'; engineSel.dispatchEvent(new Event('change')); });
   mk(svgIcon('settings', 'ico-sm'), 'Model library', 'Review verified GGUF options for your hardware', 'GGUF', 'ok',
     () => openSettings('providers'));
   mk(svgIcon('globe', 'ico-sm'), 'Private knowledge', 'Inspect the local document index and permissions', 'local', 'ok',
@@ -924,9 +924,11 @@ function rebuildEngineSelect(selected) {
     option.value = value; option.textContent = label;
     engineSel.appendChild(option);
   };
-  add('auto', 'A2I Local — Core first, browser fallback');
+  add('auto', 'A2I Local — installed GGUF only');
   serverBrains.forEach((brain, index) => add('server:' + index, brain.name + brainStatusLabel(brain)));
-  add('browser', T('engBrowser'));
+  // Browser mode stays available as an explicit, separate choice. It may need
+  // its own WebLLM-compatible model download and is never an automatic fallback.
+  add('browser', 'Browser AI (optional model download)');
   const saved = localStorage.getItem('a2i-engine');
   const savedValid = saved && [...engineSel.options].some((option) => option.value === saved);
   engineSel.value = selected || (savedValid ? saved : 'auto');
@@ -1012,7 +1014,7 @@ function refreshBar() {
   if (mode === 'auto') {
     const core = a2iCoreBrain();
     const coreReady = core?.online === true;
-    setStatus(coreReady ? 'A2I Core online · local-only' : 'Core unavailable · browser fallback', coreReady);
+    setStatus(coreReady ? 'A2I Core online · local GGUF' : 'Core unavailable · start A2I Core', coreReady);
   } else if (mode === 'browser') {
     setStatus(loadedModel ? `ready: ${loadedModel}`
       : navigator.gpu ? T('stModelLoads')
@@ -1616,31 +1618,36 @@ async function askServer(brain, messages, onDelta, signal, onReason) {
   return readSSE(res, onDelta, signal, onReason);
 }
 
-// ---- Auto: local-first failover -----------------------------------------
-// Core uses the GGUF model installed on this PC. If it is unavailable, A2I
-// falls back only to the browser's local model; it never tries an API provider.
+// ---- Auto: installed-GGUF-only routing ---------------------------------
+// The normal web experience talks to A2I Core, which serves the GGUF already
+// stored on this PC. It deliberately does not invoke WebLLM: a browser model
+// uses a separate format/cache and could trigger a second download. Browser AI
+// remains an explicit mode for people who knowingly choose that trade-off.
 async function askAuto(messages, aiDiv, signal) {
   const localBrains = serverBrains.filter((brain) => brain.online !== false);
-  const choices = [
-    ...localBrains.map((brain) => ({ label: brain.name, fn: (delta, reason) => askServer(brain, messages, delta, signal, reason) })),
-    { label: 'In-browser AI', fn: (delta) => askBrowser(messages, delta, signal) },
-  ];
+  if (!localBrains.length) {
+    throw new Error(
+      'A2I Core is not running. Start A2I Core to use the GGUF model already on this PC. ' +
+      'A2I will not download a separate browser model automatically.');
+  }
   let lastError = null;
-  for (let index = 0; index < choices.length; index++) {
-    const choice = choices[index];
-    aiDiv.setLabel(choice.label);
+  for (let index = 0; index < localBrains.length; index++) {
+    const brain = localBrains[index];
+    aiDiv.setLabel(brain.name);
     try {
-      const answer = await choice.fn((text) => aiDiv.update(text), (reasoning) => aiDiv.setReason(reasoning));
-      if (answer && answer.trim()) { aiDiv.setLabel(choice.label); return answer; }
+      const answer = await askServer(
+        brain, messages, (text) => aiDiv.update(text), signal,
+        (reasoning) => aiDiv.setReason(reasoning));
+      if (answer && answer.trim()) { aiDiv.setLabel(brain.name); return answer; }
     } catch (error) {
       if (signal?.aborted) return '';
       lastError = error;
-      if (index < choices.length - 1) {
-        aiDiv.update('↻ ' + choice.label + ' មិនអាចប្រើ — កំពុងប្ដូរទៅ local model បន្ទាប់…');
+      if (index < localBrains.length - 1) {
+        aiDiv.update('↻ ' + brain.name + ' មិនអាចប្រើ — កំពុងសាក local runtime បន្ទាប់…');
       }
     }
   }
-  throw lastError || new Error('A2I local models are unavailable. Start A2I Core or load a local browser model.');
+  throw lastError || new Error('No installed local GGUF runtime is available. Start A2I Core and try again.');
 }
 
 // ---- All brains together -----------------------------------------------
@@ -1678,8 +1685,9 @@ async function askAllBrains(question, messages, signal) {
   await Promise.allSettled(tasks);
 
   if (results.length === 0) {
-    const div = addMsg('ai', '…', 'In-browser AI');
-    return askBrowser(messages, (t) => div.update(t), signal);
+    throw new Error(
+      'No local A2I Core runtime is available. Start A2I Core to use the GGUF model on this PC. ' +
+      'Browser AI is optional and is never downloaded automatically.');
   }
   if (results.length === 1) return results[0].answer;
 
@@ -1771,11 +1779,11 @@ async function generate() {
 
   const chosenBrain = currentServerBrain();
   if (chosenBrain && chosenBrain.online === false) {
+    // Do not silently switch to WebLLM here. The regular server request below
+    // preserves the selected local runtime and surfaces its normal error path.
     addMsg('note',
-      Tf('noteBrainOffline', { name: chosenBrain.name }));
-    mode = 'browser';
-    rebuildEngineSelect('browser');
-    refreshBar();
+      Tf('noteBrainOffline', { name: chosenBrain.name }) +
+      ' Start A2I Core to use the GGUF model already on this PC.');
   }
 
   try {
@@ -1801,9 +1809,10 @@ async function generate() {
       answer = await askAllBrains(question, messages, signal);
     } else if (mode === 'browser') {
       aiDiv = addMsg('ai', '…', 'In-browser AI');
-      // Until the engine is ready, mirror download progress into the bubble.
+      // Browser AI is an explicit opt-in. It uses a separate browser cache and
+      // does not reuse the GGUF that A2I Core loads from this PC's SSD.
       if (!(webllmEngine && loadedModel)) {
-        aiDiv.update('⬇ កំពុងរៀបចំ AI ជាលើកដំបូង… (setting up the AI for the first time — this downloads a model once, then works instantly)');
+        aiDiv.update('⬇ Browser AI was selected manually. It uses a separate browser model download; use A2I Local to reuse the GGUF already on this PC.');
         loadingReporter = (t) => aiDiv.update(t);
       } else if (webllmEngine.compat) {
         // Single-thread prefill has no incremental progress to show, so the

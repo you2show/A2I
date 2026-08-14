@@ -221,7 +221,7 @@
       <div class="tab-pane" data-tab="safety" hidden>
         <section class="setblock">
           <div class="setblock-h"><span class="setnum">5</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg> A2I Core — local-only</div>
-          <p class="hint">A2I Core រត់ GGUF model នៅលើ PC របស់អ្នក។ វាមិនប្ដូរទៅ cloud provider និងមិនត្រូវការ API key ទេ។ ជ្រើសប៊ូតុងខាងក្រោម ដើម្បីប្រើ local Core ជា default ហើយ browser model ជា fallback។</p>
+          <p class="hint">A2I Core រត់ GGUF model ដែលមាននៅលើ PC របស់អ្នក។ វាមិនប្ដូរទៅ cloud provider និងមិនត្រូវការ API key ទេ។ Local Core គឺជា default ដូច្នេះ A2I មិនទាញយក browser model ម្តងទៀតឡើយ។ Browser AI ជាជម្រើសដាច់ដោយឡែកប៉ុណ្ណោះ។</p>
           <label class="field" hidden><span>Task intent / ប្រភេទការងារ</span>
             <select id="router-intent">
               <option value="chat">Chat — fast local default</option>
@@ -283,8 +283,8 @@
         <select id="engine" aria-label="Select local runtime"></select>
       </label>
       <label class="topbar-select model-select">
-        <span>Browser fallback</span>
-        <select id="model" aria-label="Select browser fallback model">
+        <span>Browser mode (optional)</span>
+        <select id="model" aria-label="Select optional browser model">
           <optgroup label="Fast — any GPU">
             <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Qwen2.5 0.5B (fast, ~400MB)</option>
             <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (~800MB)</option>
